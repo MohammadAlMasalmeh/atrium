@@ -159,7 +159,10 @@ of operating-system renderer processes. Use a process-tree measurement for RAM.
 Every script that calls the API uses `tools/aside_api.py`, which sends the
 `x-aside-token` header. Pass the instance's `--data-dir` (its `api-token` file is
 read) or `--token-file PATH`, or set `ASIDE_API_TOKEN`; that is the order of
-precedence. The file is re-read per request, so restarts are handled. Scripts
+precedence. The file is re-read per request, so restarts are handled. It is
+removed before Chromium shuts down, because Chromium's teardown watchdog
+terminates a slow shutdown (seen on a heavily loaded machine) before later
+cleanup would run. Scripts
 that start their own instance (`test_profile_persistence.py`) read the token
 from the profile they create and launch with `ASIDE_MOCK_KEYCHAIN=1` and
 `ASIDE_BACKGROUND_WINDOW=1`.
