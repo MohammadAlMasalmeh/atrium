@@ -122,6 +122,30 @@ popup closes, or the app restarts, the relationship is gone. Checked with
 `tools/test_popups.py` against a local fixture pair; real identity providers
 (Google, GitHub, Apple) have not been tested.
 
+### Site permissions
+
+Camera, microphone, screen capture, geolocation, notifications, and every other
+Chromium permission prompt are denied unless the user allowed that origin for
+every permission in the request. There is no prompt UI yet; decisions are made
+through the API and stored in `<data dir>/site-permissions.json`:
+
+- `GET /api/browser/permissions` lists `decisions` (origin to permission to
+  `allow`/`deny`), the 50 most recent requests with what was granted, and the
+  permission names.
+- `POST /api/browser/permissions` with `{"origin": "https://meet.example",
+  "permission": "camera", "decision": "allow"}` records a decision;
+  `"decision": null` forgets it. Only canonical HTTP(S) origins and known
+  permission names are accepted. The shell is never granted anything.
+
+Chromium remembers a denied prompt as a per-origin content setting and stops
+asking, so decisions are also written to Chromium's content settings at startup
+and on every change (allow, block, or back to default). Requests answered by
+those settings are not listed as recent. Granting camera, microphone, or
+location still requires the macOS permission for the app. Checked with
+`tools/test_permissions.py`, which only grants window management (no macOS
+permission involved) and checks that notifications stay denied; camera,
+microphone, and geolocation grants have not been exercised.
+
 Session metadata is written with a temporary file and rename. Restart restores
 logical tabs and loads only the active page. Assistant scratch pages are omitted
 and bounded to three simultaneous pages, with cancellation cleanup.
@@ -155,6 +179,8 @@ python3 tools/test_tab_lifecycle.py --api http://127.0.0.1:7791 \
 python3 tools/test_crash_recovery.py --api http://127.0.0.1:7791 \
   --data-dir /private/tmp/aside-smoke --fixture http://127.0.0.1:7799
 python3 tools/test_popups.py --api http://127.0.0.1:7791 \
+  --data-dir /private/tmp/aside-smoke --fixture http://127.0.0.1:7799
+python3 tools/test_permissions.py --api http://127.0.0.1:7791 \
   --data-dir /private/tmp/aside-smoke --fixture http://127.0.0.1:7799
 python3 tools/test_profile_persistence.py --port 7792 --fixture http://127.0.0.1:7799
 ```
@@ -290,8 +316,8 @@ Chrome Sync have not been validated or implemented here.
 - Signed/notarized releases, engine security updates, default-browser registration,
   and update/rollback infrastructure.
 - Extension permission management and tests against real required extensions.
-- A visible crashed-page state in the shell, OAuth tests against real identity providers, permission
-  prompts, downloads, printing, accessibility, and broader website compatibility.
+- A visible crashed-page state in the shell, OAuth tests against real identity providers, a site
+  permission prompt UI, downloads, printing, accessibility, and broader website compatibility.
 - Password management, passkeys, account migration, and local API isolation
   beyond the same-user token.
 - Per-tab history/scroll restoration and better media-aware eviction coverage.
