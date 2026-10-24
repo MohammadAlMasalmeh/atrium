@@ -104,6 +104,8 @@ pub enum Op {
     /// Setup checks sign-in without marking a tab as agent-controlled.
     InspectGoogle { tab: u64, reply: Reply<Result<Value, String>> },
     Screenshot { tab: Option<u64>, reply: Reply<Result<String, String>> },
+    Cdp { tab: Option<u64>, method: String, params: Value, reply: Reply<Result<Value, String>> },
+    Accessibility { assistive: Option<bool>, tree: bool, reply: Reply<Value> },
 }
 
 pub enum TabEv {
@@ -545,13 +547,15 @@ impl Browser {
     fn handle_op(&mut self, op: Op) {
         // Tell the shell which tab the agent is touching so it can show it.
         let touched = match &op {
-            Op::Tabs(_) | Op::InspectGoogle { .. } | Op::Shell { .. } | Op::Memory(_) => None,
+            Op::Tabs(_) | Op::InspectGoogle { .. } | Op::Shell { .. } | Op::Memory(_) | Op::Cdp { .. } | Op::Accessibility { .. } => None,
             Op::Eval { tab, .. } | Op::Navigate { tab, .. } | Op::History { tab, .. } | Op::Screenshot { tab, .. } => Some(tab.or(self.active)),
             _ => Some(None),
         };
         match op {
             Op::Shell { body, reply } => { self.handle_shell(&body.to_string()); let _ = reply.send(()); }
             Op::Memory(reply) => { let _ = reply.send(json!({"engine":"WebKit","tabs":self.tabs.len()})); }
+            Op::Cdp { reply, .. } => { let _ = reply.send(Err("DevTools methods need the Chromium engine".into())); }
+            Op::Accessibility { reply, .. } => { let _ = reply.send(json!({"error":"Accessibility state needs the Chromium engine"})); }
             Op::Tabs(r) => {
                 let _ = r.send(self.state());
             }
