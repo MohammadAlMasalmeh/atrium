@@ -88,6 +88,22 @@ scroll position are not restored after eviction. Media protection is conservativ
 but does not guarantee detection inside every cross-origin frame. Protected tabs
 can exceed the target; the app does not discard unsaved forms to meet a RAM claim.
 
+### Renderer crashes
+
+Every tab's request handler reports `on_render_process_terminated`. The app
+stays running, pending evaluations and screenshots for that tab fail, and the
+tab is marked `crashed: true` in `/api/browser/tabs` at its last committed URL.
+A crashed background tab releases its view immediately and becomes a normal
+sleeping tab. A crashed visible tab keeps its (blank) view until it is selected
+again, reloaded, or navigated; it is not reloaded automatically, which avoids
+crash loops. Agent evaluation on a crashed tab returns an error asking for a
+reload instead of silently waking it. A crashed shell reloads immediately.
+There is no "page crashed" UI in the shell yet. `tools/test_crash_recovery.py`
+kills visible and background renderers with `chrome://kill` and checks recovery;
+renderer crashes with other causes (out of memory, real faults) follow the same
+callback but were not separately reproduced. One renderer can host several
+same-site tabs, so a single crash can mark several tabs.
+
 Session metadata is written with a temporary file and rename. Restart restores
 logical tabs and loads only the active page. Assistant scratch pages are omitted
 and bounded to three simultaneous pages, with cancellation cleanup.
@@ -117,6 +133,8 @@ ASIDE_MOCK_KEYCHAIN=1 ASIDE_BACKGROUND_WINDOW=1 \
 python3 tools/smoke_chromium.py --api http://127.0.0.1:7791 \
   --data-dir /private/tmp/aside-smoke --fixture http://127.0.0.1:7799
 python3 tools/test_tab_lifecycle.py --api http://127.0.0.1:7791 \
+  --data-dir /private/tmp/aside-smoke --fixture http://127.0.0.1:7799
+python3 tools/test_crash_recovery.py --api http://127.0.0.1:7791 \
   --data-dir /private/tmp/aside-smoke --fixture http://127.0.0.1:7799
 python3 tools/test_profile_persistence.py --port 7792 --fixture http://127.0.0.1:7799
 ```
@@ -252,7 +270,7 @@ Chrome Sync have not been validated or implemented here.
 - Signed/notarized releases, engine security updates, default-browser registration,
   and update/rollback infrastructure.
 - Extension permission management and tests against real required extensions.
-- Renderer-crash recovery, complete popup/opener and OAuth behavior, permission
+- A visible crashed-page state in the shell, complete popup/opener and OAuth behavior, permission
   prompts, downloads, printing, accessibility, and broader website compatibility.
 - Password management, passkeys, account migration, and local API isolation
   beyond the same-user token.
