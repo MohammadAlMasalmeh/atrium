@@ -9,7 +9,7 @@ fn main() -> anyhow::Result<()> {
             .unwrap_or_else(|| root.join("target"));
         let profile = if release { "release" } else { "debug" };
         let info = cef::build_util::mac::BundleInfo::new(
-            "atrium",
+            "Atrium",
             "dev.atrium-rs.browser",
             "Atrium",
             "en",

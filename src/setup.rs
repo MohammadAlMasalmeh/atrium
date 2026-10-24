@@ -18,6 +18,8 @@ pub fn routes(_app: Arc<App>) -> Router<Arc<App>> {
         .route("/api/setup/import", post(import))
         .route("/api/setup/opencode/connect", post(connect))
         .route("/api/setup/opencode/start", post(start))
+        .route("/api/setup/opencode", get(opencode_status))
+        .route("/api/setup/opencode/install", post(install))
         .route("/api/setup/google", get(google))
 }
 
@@ -37,7 +39,7 @@ pub(crate) async fn shell_only(State(app): State<Arc<App>>, req: Request, next: 
 /// Host/Origin checks stop websites; the per-launch token also stops other local processes.
 pub(crate) async fn require_token(req: Request, next: Next) -> Response {
     let provided = req.headers().get(crate::TOKEN_HEADER).map(|h| h.as_bytes());
-    if req.uri().path() != "/shell" && !token_matches(crate::API_TOKEN.get().map(String::as_bytes), provided) {
+    if !matches!(req.uri().path(), "/shell" | "/onboarding.js" | "/onboarding.css") && !token_matches(crate::API_TOKEN.get().map(String::as_bytes), provided) {
         return (StatusCode::UNAUTHORIZED, "A valid Atrium API token is required.").into_response();
     }
     next.run(req).await
@@ -119,6 +121,27 @@ async fn connect(State(app): State<Arc<App>>, Json(req): Json<ConnectRequest>) -
         app.oc.use_connection(&candidate);
         let _ = app.events.send(json!({ "type": "atrium.connection.ready" }));
         Ok(json!({ "ok": true, "models": models.len() }))
+    }.await)
+}
+
+async fn opencode_status(State(app): State<Arc<App>>) -> Json<Value> {
+    let healthy = app.oc.healthy().await;
+    let browser_tools = healthy && app.oc.browser_tools_ready().await;
+    let version = crate::opencode::opencode_version().await;
+    Json(json!({
+        "installed": crate::opencode::find_opencode().is_some(),
+        "version": version,
+        "healthy": healthy,
+        "browser_tools": browser_tools,
+        "endpoint": app.oc.base(),
+    }))
+}
+
+async fn install(State(app): State<Arc<App>>) -> Json<Value> {
+    response(async {
+        let _lock = app.setup_lock.lock().await;
+        let version = crate::opencode::install_opencode().await?;
+        Ok(json!({ "ok": true, "version": version }))
     }.await)
 }
 

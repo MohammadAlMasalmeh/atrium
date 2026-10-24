@@ -1,6 +1,6 @@
-# atrium-rs
+# Atrium
 
-A macOS browser written in Rust, using Chromium Embedded Framework (CEF) for
+Atrium is a macOS browser written in Rust, using Chromium Embedded Framework (CEF) for
 websites and a local OpenCode server for the assistant. Chromium is the default
 engine. The original shell is retained; this work focuses on browser infrastructure.
 
@@ -53,8 +53,9 @@ with arbitrary extensions are unfinished.
 - Browser automation through CEF's DevTools protocol: navigation, page reading,
   element actions, JavaScript evaluation, and screenshots.
 - Loopback API with Host/Origin checks; shell evaluation is disabled in release builds.
-- Backend APIs for explicit Chrome bookmark/history import, extension inventory,
-  and OpenCode connection. These have no new onboarding UI.
+- First-run setup (assets/onboarding.js): welcome, Chrome bookmark/history
+  import, and assistant setup that installs OpenCode if needed, starts it, and
+  connects the browser tools. Reopen it from the command bar with "Set Up Atrium".
 
 See [Chromium implementation and limitations](docs/chromium.md) for details,
 verification commands, and the RAM benchmark methodology. This remains a

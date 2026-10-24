@@ -1,4 +1,4 @@
-//! atrium — a Rust re-creation of the Aside AI browser.
+//! Atrium — a Rust AI browser, modeled on the Aside browser.
 //!
 //! `atrium` opens a native browser window with Chromium tabs. Its built-in
 //! assistant is an `opencode serve` session that drives the

@@ -146,6 +146,7 @@ enum Event {
     Quit,
     DevResult(i32, bool, Json),
     Maintenance,
+    DragRegions(Vec<DraggableRegion>),
 }
 struct Tab {
     id: u64,
@@ -759,6 +760,9 @@ impl Manager {
     }
     fn event(&mut self, event: Event) {
         match event {
+            Event::DragRegions(regions) => {
+                if let Some(w) = &self.window { w.set_draggable_regions(Some(&regions)); }
+            }
             Event::Init => {
                 let mut delegate = HostWindow::new(self.bridge.clone(), self.closing.clone());
                 window_create_top_level(Some(&mut delegate));
@@ -928,8 +932,11 @@ fn rect(v: &Json) -> Option<Rect> {
 wrap_app! { struct HostApp { bridge: Bridge } impl App {
 fn on_before_command_line_processing(&self, process_type:Option<&CefString>,command_line:Option<&mut CommandLine>) {
     if process_type.is_none_or(|p|p.to_string().is_empty()) {
-        // Throwaway test profiles must not prompt for the login keychain on every ad hoc build.
-        if let (Some(command), true) = (command_line.as_deref(), std::env::var_os("ATRIUM_MOCK_KEYCHAIN").is_some()) {
+        // Ad hoc signatures change with every build, so the login keychain would ask
+        // again each time. Dev builds and isolated test profiles skip it.
+        let mock = cfg!(debug_assertions) || std::env::var_os("ATRIUM_MOCK_KEYCHAIN").is_some()
+            || std::env::args().any(|a| a == "--data-dir" || a.starts_with("--data-dir="));
+        if let (Some(command), true) = (command_line.as_deref(), mock) {
             command.append_switch(Some(&CefString::from("use-mock-keychain")));
         }
         if let (Some(paths),Some(command))=(crate::CHROME_EXTENSIONS.get(),command_line) {
@@ -957,7 +964,11 @@ wrap_window_delegate! {
         fn on_window_created(&self,window:Option<&mut Window>){if let Some(w)=window{self.bridge.send(Event::Window(w.clone()));}}
         fn on_window_bounds_changed(&self, _unused3:Option<&mut Window>, _unused4:Option<&Rect>){self.bridge.send(Event::Resize);}
         fn can_close(&self, _unused5:Option<&mut Window>)->i32{if self.closing.load(Ordering::Relaxed){1}else{self.bridge.send(Event::Quit);0}}
-        fn window_runtime_style(&self)->RuntimeStyle{RuntimeStyle::CHROME}
+        fn window_runtime_style(&self)->RuntimeStyle{RuntimeStyle::ALLOY}
+        // Frameless with the standard traffic lights, centred in the shell's 40px top bar.
+        fn is_frameless(&self, _unused62:Option<&mut Window>)->i32{1}
+        fn with_standard_window_buttons(&self, _unused63:Option<&mut Window>)->i32{1}
+        fn titlebar_height(&self, _unused64:Option<&mut Window>, height:Option<&mut f32>)->i32{if let Some(h)=height{*h=40.0;} 1}
     }
 }
 // Only the shell's own browser carries the local API token; website tabs never see it.
@@ -974,8 +985,15 @@ wrap_resource_request_handler! {struct ShellResources {base:String} impl Resourc
         ReturnValue::CONTINUE
     }
 }}
+// The window is frameless; the shell's -webkit-app-region areas move it.
+wrap_drag_handler! {struct ShellDrag {bridge:Bridge} impl DragHandler {
+    fn on_draggable_regions_changed(&self, _unused60:Option<&mut Browser>, _unused61:Option<&mut Frame>, regions:Option<&[DraggableRegion]>){
+        self.bridge.send(Event::DragRegions(regions.map(<[DraggableRegion]>::to_vec).unwrap_or_default()));
+    }
+}}
 wrap_client! {struct HostClient {bridge:Bridge,id:u64,base:String} impl Client {
     fn request_handler(&self)->Option<RequestHandler>{(self.id==SHELL).then(|| ShellRequests::new(self.base.clone()))}
+    fn drag_handler(&self)->Option<DragHandler>{(self.id==SHELL).then(|| ShellDrag::new(self.bridge.clone()))}
     fn life_span_handler(&self)->Option<LifeSpanHandler>{Some(HostLife::new(self.bridge.clone(),self.id))}
     fn display_handler(&self)->Option<DisplayHandler>{Some(HostDisplay::new(self.bridge.clone(),self.id))}
     fn load_handler(&self)->Option<LoadHandler>{Some(HostLoad::new(self.bridge.clone(),self.id))}
@@ -1015,7 +1033,7 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
     );
     assert!(
         loader.load(),
-        "Run the bundled Atrium.app; the Chromium framework must be next to the application"
+        "Run the bundled app; the Chromium framework must be next to the application"
     );
     let _ = api_hash(sys::CEF_API_VERSION_LAST, 0);
     mac::setup();

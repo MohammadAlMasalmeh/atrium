@@ -18,6 +18,8 @@ use tokio_stream::wrappers::BroadcastStream;
 use crate::{agent::Agent, app::Op, opencode::OpenCode};
 
 const SHELL_HTML: &str = include_str!("../assets/shell.html");
+const ONBOARDING_JS: &str = include_str!("../assets/onboarding.js");
+const ONBOARDING_CSS: &str = include_str!("../assets/onboarding.css");
 
 pub struct App {
     pub agent: Agent,
@@ -35,6 +37,8 @@ type Shared = State<Arc<App>>;
 pub fn router(app: Arc<App>) -> Router {
     Router::new()
         .route("/shell", get(|| async { Html(SHELL_HTML) }))
+        .route("/onboarding.js", get(|| async { ([(axum::http::header::CONTENT_TYPE, "text/javascript")], ONBOARDING_JS) }))
+        .route("/onboarding.css", get(|| async { ([(axum::http::header::CONTENT_TYPE, "text/css")], ONBOARDING_CSS) }))
         .route("/frozen/:slot", get(frozen))
         .route("/api/state", get(state))
         .route("/api/browser/command", post(browser_command))

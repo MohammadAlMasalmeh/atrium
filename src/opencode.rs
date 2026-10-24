@@ -261,12 +261,41 @@ where
     tokio_stream::wrappers::ReceiverStream::new(rx)
 }
 
+/// Where `opencode` lives, if installed. Apps launched from Finder don't get the
+/// login shell's PATH, so check the installer's and package managers' locations too.
+pub fn find_opencode() -> Option<std::path::PathBuf> {
+    let home = dirs::home_dir().unwrap_or_default();
+    let mut dirs = vec![home.join(".opencode/bin"), "/opt/homebrew/bin".into(), "/usr/local/bin".into(),
+        home.join(".bun/bin"), home.join(".npm-global/bin"), home.join(".local/bin")];
+    dirs.extend(std::env::var_os("PATH").iter().flat_map(std::env::split_paths));
+    dirs.into_iter().map(|d| d.join("opencode")).find(|p| p.is_file())
+}
+
 fn which_opencode() -> String {
-    if let Some(home) = dirs::home_dir() {
-        let p = home.join(".opencode/bin/opencode");
-        if p.exists() {
-            return p.to_string_lossy().into_owned();
-        }
+    find_opencode().map_or_else(|| "opencode".into(), |p| p.to_string_lossy().into_owned())
+}
+
+pub async fn opencode_version() -> Option<String> {
+    let bin = find_opencode()?;
+    let out = Command::new(bin).arg("--version").output();
+    let out = tokio::time::timeout(Duration::from_secs(5), out).await.ok()?.ok()?;
+    Some(String::from_utf8_lossy(&out.stdout).trim().to_string()).filter(|v| !v.is_empty())
+}
+
+/// Run OpenCode's official installer (installs to ~/.opencode/bin).
+pub async fn install_opencode() -> Result<String> {
+    let out = Command::new("/bin/bash")
+        .args(["-c", "curl -fsSL https://opencode.ai/install | bash"])
+        .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin")
+        .stdin(Stdio::null())
+        .kill_on_drop(true)
+        .output();
+    let out = tokio::time::timeout(Duration::from_secs(300), out).await
+        .context("The installer took too long. Check your connection and try again.")??;
+    if !out.status.success() || find_opencode().is_none() {
+        let err = String::from_utf8_lossy(&out.stderr);
+        let last = err.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("").trim().to_string();
+        bail!("OpenCode could not be installed{}", if last.is_empty() { ".".into() } else { format!(": {last}") });
     }
-    "opencode".into()
+    Ok(opencode_version().await.unwrap_or_default())
 }

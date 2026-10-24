@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Atrium</title>
+<link rel="stylesheet" href="/onboarding.css">
 <style>
 /* Browser chrome in the established shape: an Arc/Zen sidebar (navigation,
    address, Favorites, per-space Pinned + Today tabs, space switcher), the page
@@ -19,6 +20,7 @@
   --accent: AccentColor; --accent-soft: color-mix(in srgb, AccentColor 16%, transparent);
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --window: #ececee;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -28,15 +30,21 @@
     --selected: rgb(255 255 255 / .14); --selected-ring: rgb(255 255 255 / .08);
     --card: #1c1c1e; --card-ring: rgb(255 255 255 / .1); --field: rgb(255 255 255 / .08); --well: rgb(255 255 255 / .06);
     --menu: rgb(40 40 42 / .98); --menu-ring: rgb(255 255 255 / .12);
+    --window: #1e1e20;
     --shadow: 0 0.5px 1.5px rgb(0 0 0 / .4), 0 8px 24px -8px rgb(0 0 0 / .55);
     color-scheme: dark;
   }
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
+/* WebKit draws the shell over native glass; Chromium can't composite through,
+   so it gets the system window colour instead. */
+html.opaque { background: var(--window); }
 body { background: transparent; color: var(--fg); font: 13px/1.4 var(--font); -webkit-font-smoothing: antialiased;
   user-select: none; -webkit-user-select: none; cursor: default; }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: default; }
+[data-drag] { -webkit-app-region: drag; }
+[data-drag] button, [data-drag] input, [data-drag] select { -webkit-app-region: no-drag; }
 input, textarea { font: inherit; color: inherit; }
 svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .spin { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--press); border-top-color: var(--fg-2); animation: spin .8s linear infinite; flex: none; }
@@ -412,6 +420,7 @@ body.glance #glance { display: flex; }
 </template>
 
 <script>
+if (!window.webkit?.messageHandlers) document.documentElement.classList.add('opaque');
 // The Chromium host exposes only this same-origin command channel to the shell.
 window.ipc ||= { postMessage(body) { return fetch('/api/browser/command', { method: 'POST', headers: { 'content-type': 'application/json' }, body }).catch(console.error); } };
 window.addEventListener('error', (e) => window.ipc && window.ipc.postMessage(JSON.stringify({ cmd: 'log', msg: `${e.message} @${e.lineno}:${e.colno}` })));
@@ -562,6 +571,7 @@ function render() {
   document.body.classList.toggle('overlay', !!S.overlay);
   document.body.classList.toggle('cmdk', S.overlay === 'cmdk');
   document.body.classList.toggle('glance', S.overlay === 'glance');
+  document.body.classList.toggle('onboarding', S.overlay === 'onboarding');
   document.body.classList.toggle('is-frozen', !!S.overlay && web);
   document.body.classList.toggle('agent-here', working && web && agentTabOf(chat.id) === t.id);
   for (const id of ['#back', '#fwd', '#reload']) $(id).disabled = !web;
@@ -825,6 +835,7 @@ function updateCmdk() {
     { t: 'Pin Tab to Space', k: '⌘D', ic: 'pin', run: togglePin },
     { t: 'Copy Link', k: '⇧⌘C', ic: 'copy', run: copyUrl },
     { t: 'Summarize This Page', ic: 'file', run: () => askAgent(SKILLS[0].p, false) },
+    { t: 'Set Up Atrium', ic: 'check', run: () => window.atriumOnboarding?.open() },
   ];
   for (const a of acts.filter((a) => match(a.t)).slice(0, q ? 3 : 6)) items.push({ g: 'Actions', ...a });
   cmdkItems = items; cmdkSel = 0; drawCmdk();
@@ -1253,7 +1264,7 @@ function onEvent(ev) {
 }
 
 // Handle for poking at the UI from /api/debug/shell.
-window.__shell = { S, chat, render, fillModels, askAgent, openCmdk, openChat, newChat, md };
+window.__shell = { S, chat, render, fillModels, refreshModels, askAgent, openCmdk, openChat, newChat, md, store, toast, post, ipc };
 
 /* ── Boot ───────────────────────────────────────────── */
 (async () => {
@@ -1267,5 +1278,6 @@ window.__shell = { S, chat, render, fillModels, askAgent, openCmdk, openChat, ne
 })();
 } catch (e) { window.ipc && window.ipc.postMessage(JSON.stringify({ cmd: 'log', msg: 'boot: ' + e + ' ' + e.stack })); }
 </script>
+<script src="/onboarding.js"></script>
 </body>
 </html>
