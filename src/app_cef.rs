@@ -787,7 +787,13 @@ impl Manager {
                 });
                 self.create_view(SHELL);
                 self.layout();
+                if mac::background() {
+                    mac::keep_out_of_sight(window.window_handle());
+                }
                 window.show();
+                if mac::background() {
+                    mac::keep_out_of_sight(window.window_handle());
+                }
                 self.restore_session();
                 let mut maintenance = Maintenance::new(self.bridge.clone());
                 post_delayed_task(ThreadId::UI, Some(&mut maintenance), 10000);
@@ -931,6 +937,11 @@ fn on_before_command_line_processing(&self, process_type:Option<&CefString>,comm
         // Throwaway test profiles must not prompt for the login keychain on every ad hoc build.
         if let (Some(command), true) = (command_line.as_deref(), std::env::var_os("ASIDE_MOCK_KEYCHAIN").is_some()) {
             command.append_switch(Some(&CefString::from("use-mock-keychain")));
+        }
+        // An off-screen window counts as occluded; keep its pages painting for screenshots.
+        if let (Some(command), true) = (command_line.as_deref(), mac::background()) {
+            command.append_switch_with_value(Some(&CefString::from("disable-features")), Some(&CefString::from("MacWebContentsOcclusion")));
+            command.append_switch(Some(&CefString::from("disable-backgrounding-occluded-windows")));
         }
         if let (Some(paths),Some(command))=(crate::CHROME_EXTENSIONS.get(),command_line) {
             if !paths.is_empty(){let value=paths.iter().map(|p|p.to_string_lossy()).collect::<Vec<_>>().join(",");command.append_switch_with_value(Some(&CefString::from("load-extension")),Some(&CefString::from(value.as_str())));}

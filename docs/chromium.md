@@ -48,6 +48,24 @@ profiles to use Chromium's mock keychain instead; never use it for a real
 profile. A stable signing identity is required to stop the prompt for
 development builds of a real profile.
 
+### Background test instances
+
+`ASIDE_BACKGROUND_WINDOW=1` keeps a test instance out of the user's way. The
+app uses the `Prohibited` activation policy, so it has no Dock icon or menu bar
+and macOS does not let it become the active application. Its window stays
+ordered in, so Chromium keeps a live compositor, but it is fully transparent,
+has no shadow, ignores mouse events, is excluded from window cycling, and is
+moved toward the screen edge (macOS keeps part of the frame on a display) and
+ordered behind other windows. Chromium's macOS occlusion tracking is disabled in
+this mode so the window still paints. Screenshots and evaluation work; pages
+report `document.visibilityState === "hidden"`, so visibility-dependent page
+behavior differs from a normal window. Keyboard focus, real input, and native
+dialogs are not testable this way. Never use it for a real profile.
+
+Verified on macOS 26 with the smoke, lifecycle, and persistence checks: the
+frontmost application never changed to the test instance, the window reported
+`alpha 0` and not on screen, and screenshots contained the rendered fixture.
+
 `tools/build-chromium.sh --release` creates a complete development app with the
 CEF framework, sandbox helper executables, Chromium credits, and verified ad hoc
 signatures. CEF updates require changing the pin, rebuilding, and re-running the

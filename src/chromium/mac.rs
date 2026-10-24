@@ -47,9 +47,38 @@ define_class!(
 impl AsideApplication {
     extern_methods! { #[unsafe(method(sharedApplication))] fn shared_application()->Retained<Self>; }
 }
+/// `ASIDE_BACKGROUND_WINDOW=1` is for test instances that must never activate, take focus, or be seen.
+pub fn background() -> bool {
+    std::env::var_os("ASIDE_BACKGROUND_WINDOW").is_some_and(|v| v == "1")
+}
 pub fn setup() {
     let app = AsideApplication::shared_application();
-    app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
+    app.setActivationPolicy(if background() {
+        NSApplicationActivationPolicy::Prohibited
+    } else {
+        NSApplicationActivationPolicy::Regular
+    });
+}
+/// Keeps the window ordered in, so Chromium still paints, but transparent, click-through,
+/// off-screen, and behind other windows.
+pub fn keep_out_of_sight(handle: *mut std::ffi::c_void) {
+    let view = handle as *mut AnyObject;
+    if view.is_null() {
+        return;
+    }
+    unsafe {
+        let window: *mut AnyObject = msg_send![view, window];
+        let Some(window) = window.as_ref() else { return };
+        let _: () = msg_send![window, setAlphaValue: 0.0f64];
+        let _: () = msg_send![window, setHasShadow: Bool::NO];
+        let _: () = msg_send![window, setIgnoresMouseEvents: Bool::YES];
+        let _: () = msg_send![window, setExcludedFromWindowsMenu: Bool::YES];
+        // NSWindowCollectionBehaviorTransient | NSWindowCollectionBehaviorIgnoresCycle
+        let _: () = msg_send![window, setCollectionBehavior: (1usize << 3) | (1usize << 6)];
+        let origin = objc2_foundation::NSPoint::new(-30000.0, -30000.0);
+        let _: () = msg_send![window, setFrameOrigin: origin];
+        let _: () = msg_send![window, orderBack: std::ptr::null::<AnyObject>()];
+    }
 }
 pub(super) fn menu(bridge: Bridge) -> Menu {
     let _ = BRIDGE.set(bridge.clone());
