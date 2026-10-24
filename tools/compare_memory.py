@@ -14,9 +14,10 @@ import urllib.request
 from pathlib import Path
 from memory_benchmark import process_table, tree
 import statistics
+import aside_api
 
 parser=argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--api',default='http://127.0.0.1:7783')
+aside_api.add_arguments(parser,api='http://127.0.0.1:7783')
 parser.add_argument('--fixture',default='http://127.0.0.1:7789')
 parser.add_argument('--aside',default='/Applications/Aside.app/Contents/MacOS/Aside')
 parser.add_argument('--tabs',type=int,default=10)
@@ -24,9 +25,8 @@ parser.add_argument('--distinct-sites',action='store_true')
 parser.add_argument('--warmup',type=int,default=50)
 parser.add_argument('--output',type=Path,required=True)
 args=parser.parse_args()
-def api(path,data=None):
-    req=urllib.request.Request(args.api+path,data=None if data is None else json.dumps(data).encode(),headers={'Content-Type':'application/json'})
-    with urllib.request.urlopen(req,timeout=10) as r:return json.load(r)
+client=aside_api.Client.from_args(args)
+def api(path,data=None):return client.request(path,data,timeout=10)
 from urllib.parse import urlparse
 fixture_port=urlparse(args.fixture).port or 80
 workload=[(f'http://site-{i}.localhost:{fixture_port}' if args.distinct_sites else args.fixture)+f'/page/benchmark-{i}' for i in range(args.tabs)]

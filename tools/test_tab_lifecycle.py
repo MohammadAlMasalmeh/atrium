@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Integration test for renderer eviction, safe wake, and draft protection."""
-import json
+import argparse
 import time
-import urllib.request
-BASE='http://127.0.0.1:7782'
-def api(path,data=None):
-    req=urllib.request.Request(BASE+path,data=None if data is None else json.dumps(data).encode(),headers={'Content-Type':'application/json'})
-    with urllib.request.urlopen(req,timeout=10) as r:return json.load(r)
-def command(**data):return api('/api/browser/command',data)
+import urllib.error
+import aside_api
+parser=argparse.ArgumentParser(description=__doc__)
+aside_api.add_arguments(parser,api='http://127.0.0.1:7782')
+parser.add_argument('--fixture',default='http://127.0.0.1:7789')
+args=parser.parse_args()
+client=aside_api.Client.from_args(args)
+api,command=client.api,client.command
+FIXTURE=args.fixture
 for attempt in range(100):
     try:
         if api('/api/browser/memory').get('shell_ready'):break
@@ -15,9 +18,9 @@ for attempt in range(100):
     time.sleep(.2)
 else:raise AssertionError('Browser did not become ready')
 before_ids={t['id'] for t in api('/api/browser/tabs')['tabs']}
-command(cmd='newTab',url='http://127.0.0.1:7789/page/foreground-control',background=False)
-command(cmd='newTab',url='http://127.0.0.1:7789/draft/protected',background=True)
-for i in range(9):command(cmd='newTab',url=f'http://127.0.0.1:7789/page/budget-{i}',background=True)
+command(cmd='newTab',url=f'{FIXTURE}/page/foreground-control',background=False)
+command(cmd='newTab',url=f'{FIXTURE}/draft/protected',background=True)
+for i in range(9):command(cmd='newTab',url=f'{FIXTURE}/page/budget-{i}',background=True)
 print('opened:',api('/api/browser/memory'),flush=True)
 for i in range(12):
     time.sleep(5)
@@ -32,10 +35,8 @@ assert api('/api/browser/tabs')['active'] != draft['id'], 'Draft must be protect
 assert not draft['suspended'],draft
 agent_wake=sleeping[0]['id']
 index=next(i for i,t in enumerate(all_tabs) if t['id']==agent_wake)
-result=api('/api/tool',{'name':'switch_tab','args':{'index':index}})
-assert not result.get('isError'),result
-result=api('/api/tool',{'name':'evaluate','args':{'code':'return document.title;'}})
-assert not result.get('isError'),result
+client.tool('switch_tab',{'index':index})
+result=client.tool('evaluate',{'code':'return document.title;'})
 assert 'Fixture' in str(result),result
 wake=sleeping[-1]['id']
 command(cmd='activate',id=wake)

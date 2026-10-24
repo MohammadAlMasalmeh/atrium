@@ -17,10 +17,11 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
 from memory_benchmark import process_table, tree, physical_footprint_mib
+import aside_api
 
 ROOT = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--api', default='http://127.0.0.1:7783')
+aside_api.add_arguments(parser, api='http://127.0.0.1:7783')
 parser.add_argument('--aside', default='/Applications/Aside.app/Contents/MacOS/Aside')
 parser.add_argument('--sites', type=Path, default=ROOT / 'real_sites.json')
 parser.add_argument('--output', type=Path, required=True)
@@ -32,13 +33,10 @@ textLength:document.body?.innerText.length || 0, preview:document.body?.innerTex
 nodes:document.querySelectorAll('*').length,resources:performance.getEntriesByType('resource').length,
 iframes:document.querySelectorAll('iframe').length})"""
 
+client = aside_api.Client.from_args(args)
+
 def api(path, data=None):
-    req = urllib.request.Request(args.api + path, data=None if data is None else json.dumps(data).encode(),
-                                 headers={'Content-Type':'application/json'})
-    with urllib.request.urlopen(req, timeout=40) as response:
-        result = json.load(response)
-    assert 'error' not in result, result
-    return result
+    return client.api(path, data, timeout=40)
 
 def tool(name, arguments):
     result = api('/api/tool', {'name':name,'args':arguments})

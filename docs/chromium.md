@@ -98,20 +98,32 @@ of operating-system renderer processes. Use a process-tree measurement for RAM.
 
 ## Verification
 
-Run the fixture server and an isolated bundled browser in separate terminals:
+Every script that calls the API uses `tools/aside_api.py`, which sends the
+`x-aside-token` header. Pass the instance's `--data-dir` (its `api-token` file is
+read) or `--token-file PATH`, or set `ASIDE_API_TOKEN`; that is the order of
+precedence. The file is re-read per request, so restarts are handled. Scripts
+that start their own instance (`test_profile_persistence.py`) read the token
+from the profile they create and launch with `ASIDE_MOCK_KEYCHAIN=1` and
+`ASIDE_BACKGROUND_WINDOW=1`.
+
+Run the fixture server and an isolated background browser in separate terminals:
 
 ```sh
-python3 tools/fixture_server.py
-./target/bundle/aside.app/Contents/MacOS/aside \
-  --data-dir /tmp/aside-smoke run --port 7782 \
-  --opencode-url http://127.0.0.1:4097
-python3 tools/smoke_chromium.py
-python3 tools/test_tab_lifecycle.py
-python3 tools/test_profile_persistence.py
+python3 tools/fixture_server.py --port 7799
+ASIDE_MOCK_KEYCHAIN=1 ASIDE_BACKGROUND_WINDOW=1 \
+  ./target/bundle/aside.app/Contents/MacOS/aside \
+  --data-dir /private/tmp/aside-smoke run --port 7791 \
+  --opencode-url http://127.0.0.1:1
+python3 tools/smoke_chromium.py --api http://127.0.0.1:7791 \
+  --data-dir /private/tmp/aside-smoke --fixture http://127.0.0.1:7799
+python3 tools/test_tab_lifecycle.py --api http://127.0.0.1:7791 \
+  --data-dir /private/tmp/aside-smoke --fixture http://127.0.0.1:7799
+python3 tools/test_profile_persistence.py --port 7792 --fixture http://127.0.0.1:7799
 ```
 
 The smoke check covers navigation, page interaction, JavaScript isolation,
-screenshots, and rejection of a foreign Origin. With an appropriate synthetic
+screenshots, rejection of a foreign Origin, and rejection of a request without
+the token. With an appropriate synthetic
 extension loaded, `--expect-extension` also checks its content script. The lifecycle
 check opens clean and dirty pages, waits for eviction, checks draft retention,
 and wakes a sleeping page. Rust unit tests cover eviction selection, migration
@@ -125,10 +137,12 @@ For a repeatable RAM comparison, start a **fresh, empty**, extension-free releas
 profile on port 7783 and keep the fixture server on 7789. Then run:
 
 ```sh
-python3 tools/compare_memory.py --output /tmp/aside-memory.json
+python3 tools/compare_memory.py --data-dir /private/tmp/aside-bench \
+  --output /tmp/aside-memory.json
 ```
 
-The script starts the installed `/Applications/Aside.app` with a separate temporary
+The script starts the installed `/Applications/Aside.app` as a normal, visible
+window (it has no background mode) with a separate temporary
 profile, verifies both browsers opened the same ten local pages, waits for the
 lifecycle policy, and samples both process trees six times. `--distinct-sites`
 uses ten separate `.localhost` hosts. Each page touches a 12 MiB buffer and has
@@ -164,7 +178,8 @@ GitHub, Wikipedia, BBC News, MDN, Stack Overflow, Reddit, and Hacker News. Start
 a fresh release profile on port 7783, then run:
 
 ```sh
-python3 tools/compare_real_sites.py --output /tmp/aside-real-sites.json
+python3 tools/compare_real_sites.py --data-dir /private/tmp/aside-bench \
+  --output /tmp/aside-real-sites.json
 ```
 
 This requires Node with its built-in WebSocket API. The script opens each site in
@@ -207,8 +222,7 @@ processes, most idle at about 38 MiB RSS each. That pattern matches
 cross-site subframes (ads and embeds) receiving their own process under site
 isolation. Its process count also stayed at 56 after two pages were evicted,
 which should be checked for renderers outliving their closed BrowserViews.
-Run benchmark instances with `ASIDE_MOCK_KEYCHAIN=1`; the scripts in `tools/`
-must send the API token before they work against current builds.
+Run benchmark instances with `ASIDE_MOCK_KEYCHAIN=1`.
 
 ## Migration and extensions
 
@@ -242,7 +256,6 @@ Chrome Sync have not been validated or implemented here.
   prompts, downloads, printing, accessibility, and broader website compatibility.
 - Password management, passkeys, account migration, and local API isolation
   beyond the same-user token.
-- Token support in the `tools/` integration and benchmark scripts.
 - Per-tab history/scroll restoration and better media-aware eviction coverage.
 - Real-world memory, responsiveness, battery, and long-running stability tests.
 
