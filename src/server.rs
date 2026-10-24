@@ -53,6 +53,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/tool", post(tool))
         .route("/api/debug/shell", post(debug_shell))
         .route("/api/browser/extensions", get(browser_extensions))
+        .route("/api/browser/permissions", get(browser_permissions).post(set_browser_permission))
         .merge(crate::setup::routes(app.clone()))
         .route_layer(axum::middleware::from_fn(crate::setup::require_token))
         .route_layer(axum::middleware::from_fn_with_state(app.clone(), crate::setup::shell_only))
@@ -286,6 +287,25 @@ async fn browser_memory(State(app): Shared) -> Json<Value> {
 
 async fn browser_extensions() -> Json<Value> {
     Json(crate::extensions::review(crate::CHROME_EXTENSIONS.get().map(Vec::as_slice).unwrap_or_default()))
+}
+
+async fn browser_permissions() -> Json<Value> {
+    Json(crate::permissions::list())
+}
+
+#[derive(Deserialize)]
+struct PermissionReq {
+    origin: String,
+    permission: String,
+    /// `allow`, `deny`, or null to forget the decision.
+    decision: Option<crate::permissions::Decision>,
+}
+
+async fn set_browser_permission(Json(req): Json<PermissionReq>) -> Json<Value> {
+    Json(match crate::permissions::set(&req.origin, &req.permission, req.decision) {
+        Ok(()) => crate::permissions::list(),
+        Err(e) => json!({ "error": e.to_string() }),
+    })
 }
 
 async fn browser_tabs(State(app): Shared) -> Json<Value> {

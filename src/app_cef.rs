@@ -865,6 +865,15 @@ impl Manager {
                 if let Some(w) = &self.window { w.set_draggable_regions(Some(&regions)); }
             }
             Event::Init => {
+                crate::permissions::sync(|origin, permission, decision| {
+                    let value = match decision {
+                        Some(crate::permissions::Decision::Allow) => ContentSettingValues::ALLOW,
+                        Some(crate::permissions::Decision::Deny) => ContentSettingValues::BLOCK,
+                        None => ContentSettingValues::DEFAULT,
+                    };
+                    let mut task = SiteSetting::new(origin.into(), permission.into(), value);
+                    post_task(ThreadId::UI, Some(&mut task));
+                });
                 let mut delegate = HostWindow::new(self.bridge.clone(), self.closing.clone());
                 window_create_top_level(Some(&mut delegate));
             }
@@ -1126,6 +1135,7 @@ wrap_client! {struct HostClient {bridge:Bridge,id:u64,base:String,popups:Popups}
     fn request_handler(&self)->Option<RequestHandler>{Some(HostRequests::new(self.bridge.clone(),self.id,self.base.clone()))}
     fn drag_handler(&self)->Option<DragHandler>{(self.id==SHELL).then(|| ShellDrag::new(self.bridge.clone()))}
     fn life_span_handler(&self)->Option<LifeSpanHandler>{Some(HostLife::new(self.bridge.clone(),self.id,self.base.clone(),self.popups.clone()))}
+    fn permission_handler(&self)->Option<PermissionHandler>{Some(HostPermissions::new(self.id))}
     fn display_handler(&self)->Option<DisplayHandler>{Some(HostDisplay::new(self.bridge.clone(),self.id))}
     fn load_handler(&self)->Option<LoadHandler>{Some(HostLoad::new(self.bridge.clone(),self.id))}
     fn download_handler(&self)->Option<DownloadHandler>{Some(HostDownload::new(self.bridge.clone(),self.id))}
@@ -1151,6 +1161,43 @@ wrap_life_span_handler! {struct HostLife {bridge:Bridge,id:u64,base:String,popup
     }
     fn on_before_popup_aborted(&self, _unused19:Option<&mut Browser>, popup_id:i32){if let Some(id)=self.popups.lock().unwrap().remove(&popup_id){self.bridge.send(Event::Closed(id));}}
 }}
+// Websites get a permission only after the user allows it for their origin; the shell never does.
+wrap_permission_handler! {struct HostPermissions {id:u64} impl PermissionHandler {
+    fn on_request_media_access_permission(&self, _unused70:Option<&mut Browser>, _unused71:Option<&mut Frame>, origin:Option<&CefString>, requested:u32, callback:Option<&mut MediaAccessCallback>)->i32{
+        let Some(callback)=callback else{return 0};
+        let granted=if self.id==SHELL{0}else{crate::permissions::decide(&origin.map(ToString::to_string).unwrap_or_default(),requested,crate::permissions::MEDIA)};
+        if granted==0{callback.cancel();}else{callback.cont(granted);}
+        1
+    }
+    fn on_show_permission_prompt(&self, _unused72:Option<&mut Browser>, _unused73:u64, origin:Option<&CefString>, requested:u32, callback:Option<&mut PermissionPromptCallback>)->i32{
+        let Some(callback)=callback else{return 0};
+        let granted=if self.id==SHELL{0}else{crate::permissions::decide(&origin.map(ToString::to_string).unwrap_or_default(),requested,crate::permissions::PROMPT)};
+        callback.cont(if granted==requested&&requested!=0{PermissionRequestResult::ACCEPT}else{PermissionRequestResult::DENY});
+        1
+    }
+}}
+// Chromium persists a denied prompt per origin and stops asking, so user decisions
+// are written to its content settings too.
+wrap_task! {struct SiteSetting {origin:String,permission:String,value:ContentSettingValues} impl Task {fn execute(&self){
+    let Some(context)=request_context_get_global_context() else{return};
+    let origin=CefString::from(self.origin.as_str());
+    for kind in content_settings(&self.permission){context.set_content_setting(Some(&origin),Some(&origin),kind.clone(),self.value.clone());}
+}}}
+fn content_settings(permission:&str)->&'static [ContentSettingTypes]{
+    use ContentSettingTypes as T;
+    match permission {
+        "ar"=>&[T::AR],"camera-pan-tilt-zoom"=>&[T::CAMERA_PAN_TILT_ZOOM],"camera"=>&[T::MEDIASTREAM_CAMERA],
+        "captured-surface-control"=>&[T::CAPTURED_SURFACE_CONTROL],"clipboard"=>&[T::CLIPBOARD_READ_WRITE],
+        "storage-access"=>&[T::STORAGE_ACCESS],"local-fonts"=>&[T::LOCAL_FONTS],"geolocation"=>&[T::GEOLOCATION],
+        "hand-tracking"=>&[T::HAND_TRACKING],"idle-detection"=>&[T::IDLE_DETECTION],"microphone"=>&[T::MEDIASTREAM_MIC],
+        "midi"=>&[T::MIDI_SYSEX],"multiple-downloads"=>&[T::AUTOMATIC_DOWNLOADS],"notifications"=>&[T::NOTIFICATIONS],
+        "keyboard-lock"=>&[T::KEYBOARD_LOCK],"pointer-lock"=>&[T::POINTER_LOCK],"protected-media"=>&[T::PROTECTED_MEDIA_IDENTIFIER],
+        "vr"=>&[T::VR],"web-app-installation"=>&[T::WEB_APP_INSTALLATION],"window-management"=>&[T::WINDOW_MANAGEMENT],
+        "local-network"=>&[T::LOCAL_NETWORK_ACCESS,T::LOCAL_NETWORK],"loopback-network"=>&[T::LOOPBACK_NETWORK],
+        "sensors"=>&[T::SENSORS],"screen"=>&[T::DISPLAY_CAPTURE],
+        _=>&[],
+    }
+}
 wrap_display_handler! {struct HostDisplay {bridge:Bridge,id:u64} impl DisplayHandler {
     fn on_title_change(&self, _unused19:Option<&mut Browser>,title:Option<&CefString>){self.bridge.send(Event::Title(self.id,title.map(ToString::to_string).unwrap_or_default()));}
     fn on_address_change(&self, _unused20:Option<&mut Browser>,frame:Option<&mut Frame>,url:Option<&CefString>){if frame.is_some_and(|f|f.is_main()!=0){self.bridge.send(Event::Address(self.id,url.map(ToString::to_string).unwrap_or_default()));}}
