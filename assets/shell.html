@@ -412,6 +412,8 @@ body.glance #glance { display: flex; }
 </template>
 
 <script>
+// The Chromium host exposes only this same-origin command channel to the shell.
+window.ipc ||= { postMessage(body) { return fetch('/api/browser/command', { method: 'POST', headers: { 'content-type': 'application/json' }, body }).catch(console.error); } };
 window.addEventListener('error', (e) => window.ipc && window.ipc.postMessage(JSON.stringify({ cmd: 'log', msg: `${e.message} @${e.lineno}:${e.colno}` })));
 window.addEventListener('unhandledrejection', (e) => window.ipc && window.ipc.postMessage(JSON.stringify({ cmd: 'log', msg: 'unhandled: ' + (e.reason && e.reason.stack || e.reason) })));
 </script>
@@ -530,6 +532,22 @@ function remember(t) {
 }
 
 /* ── Rendering ─────────────────────────────────────── */
+// State pushes arrive for every title, address, and loading change in any tab.
+// Keep unchanged children so favicons don't re-decode and spinners don't restart.
+function patch(el, html) {
+  if (el._html === html) return;
+  el._html = html;
+  const next = document.createElement('template'); next.innerHTML = html;
+  const pool = new Map();
+  for (const c of el.children) { if (c._src) (pool.get(c._src) || pool.set(c._src, []).get(c._src)).push(c); }
+  const want = [...next.content.children].map((c) => {
+    const src = c.outerHTML, reuse = pool.get(src)?.shift();
+    if (reuse) return reuse;
+    c._src = src; return c;
+  });
+  want.forEach((c, i) => { if (el.children[i] !== c) el.insertBefore(c, el.children[i] || null); });
+  while (el.children.length > want.length) el.lastElementChild.remove();
+}
 function render() {
   const t = activeTab();
   const web = onWeb(), chatView = S.view === 'chat', ntp = !web && !chatView;
@@ -551,8 +569,8 @@ function render() {
 
   // Address
   const h = $('#url-host');
-  if (web) { h.textContent = host(t.url) || t.url; h.classList.remove('empty'); $('#url-lead').innerHTML = t.url.startsWith('https:') ? icon('lock') : icon('globe'); }
-  else { h.textContent = chatView ? (chat.title || 'New Chat') : 'Search or enter address'; h.classList.toggle('empty', !chatView); $('#url-lead').innerHTML = chatView ? icon('chat') : icon('search'); }
+  if (web) { h.textContent = host(t.url) || t.url; h.classList.remove('empty'); patch($('#url-lead'), t.url.startsWith('https:') ? icon('lock') : icon('globe')); }
+  else { h.textContent = chatView ? (chat.title || 'New Chat') : 'Search or enter address'; h.classList.toggle('empty', !chatView); patch($('#url-lead'), chatView ? icon('chat') : icon('search')); }
   $('#url-copy').style.display = $('#url-pin').style.display = web ? '' : 'none';
 
   // The one chat component lives in the full view or the side dock.
@@ -572,22 +590,22 @@ function render() {
 
 function renderSidebar() {
   const t = activeTab(), web = onWeb();
-  $('#favs').innerHTML = S.favs.map((u, i) =>
-    `<button class="fav ${web && host(t.url) === host(u) ? 'active' : ''}" data-i="${i}" title="${esc(siteName(u))}"><img src="${esc(favicon(u))}" alt=""></button>`).join('');
+  patch($('#favs'), S.favs.map((u, i) =>
+    `<button class="fav ${web && host(t.url) === host(u) ? 'active' : ''}" data-i="${i}" title="${esc(siteName(u))}"><img src="${esc(favicon(u))}" alt=""></button>`).join(''));
   $$('#favs .fav').forEach((b) => {
     b.onclick = () => { const u = S.favs[b.dataset.i]; const open = spaceTabs().find((x) => host(x.url) === host(u)); S.view = 'tab'; if (open) ipc({ cmd: 'activate', id: open.id }); else ipc({ cmd: 'newTab', url: u }); };
     b.oncontextmenu = (e) => { e.preventDefault(); S.favs.splice(b.dataset.i, 1); store.set('favs', S.favs); render(); toast('Removed from Favorites'); };
   });
   const sp = curSpace();
-  $('#space-head').innerHTML = `<i style="--c:${spaceColor(sp)}"></i><span>${esc(sp.name)}</span>`;
+  patch($('#space-head'), `<i style="--c:${spaceColor(sp)}"></i><span>${esc(sp.name)}</span>`);
 
   // Pinned pages (Arc): persist per space; open if live, otherwise sleeping.
   const pins = pinnedHere();
-  $('#pinned').innerHTML = pins.map((p, i) => {
+  patch($('#pinned'), pins.map((p, i) => {
     const live = spaceTabs().find((x) => x.url === p.url || host(x.url) === host(p.url) && x.url.startsWith(p.url));
     const active = live && live.id === S.active && S.view === 'tab';
     return `<div class="row ${active ? 'active' : ''} ${live ? '' : 'sleeping'}" data-i="${i}" title="${esc(p.url)}"><img class="fv" src="${esc(favicon(p.url))}" alt=""><span class="t">${esc(p.title || host(p.url))}</span><span class="x" title="Unpin">${icon('x')}</span></div>`;
-  }).join('');
+  }).join(''));
   $('#pin-divider').style.display = pins.length ? '' : 'none';
   $$('#pinned .row').forEach((r) => r.onclick = (e) => {
     const p = pins[+r.dataset.i];
@@ -601,11 +619,11 @@ function renderSidebar() {
   const pinnedLive = new Set(pins.map((p) => spaceTabs().find((x) => x.url === p.url || host(x.url) === host(p.url) && x.url.startsWith(p.url))?.id).filter(Boolean));
   const list = spaceTabs().filter((x) => !pinnedLive.has(x.id));
   const agentTab = agentTabOf(chat.id);
-  $('#tabs').innerHTML = list.map((x) => {
+  patch($('#tabs'), list.map((x) => {
     const lead = x.loading ? '<span class="spin"></span>' : `<img class="fv" src="${esc(favicon(x.url, x.icon))}" alt="" onerror="this.style.visibility='hidden'">`;
     const active = (x.id === S.active || x.id === S.split) && S.view === 'tab';
     return `<div class="row ${active ? 'active' : ''}" data-id="${x.id}" title="${esc(x.url)}">${lead}<span class="t">${esc(x.title || host(x.url) || x.url)}</span>${x.id === agentTab && chat.busy ? '<span class="pulse" title="The agent is working here"></span>' : ''}${x.id === S.split ? '<span class="tag">split</span>' : ''}<span class="x" title="Close Tab (⌘W)">${icon('x')}</span></div>`;
-  }).join('');
+  }).join(''));
   $('#new-tab').classList.toggle('active', !web && S.view !== 'chat');
   $$('#tabs .row').forEach((r) => r.onclick = (e) => {
     const id = Number(r.dataset.id);
@@ -615,14 +633,14 @@ function renderSidebar() {
   });
 
   // Chats
-  $('#chats').innerHTML = S.sessions.slice(0, 8).map((s) => {
+  patch($('#chats'), S.sessions.slice(0, 8).map((s) => {
     const lead = s.busy ? '<span class="pulse"></span>' : `<span class="fv">${icon('chat')}</span>`;
     const active = s.id === chat.id && (S.view === 'chat' || (S.side && web));
     return `<div class="row ${active ? 'active' : ''}" data-id="${esc(s.id)}">${lead}<span class="t">${esc(s.title)}</span></div>`;
-  }).join('');
+  }).join(''));
   $$('#chats .row').forEach((r) => r.onclick = () => openChat(r.dataset.id, true));
 
-  $('#spaces').innerHTML = S.spaces.map((s) => `<button class="space-dot ${s.id === S.space ? 'on' : ''}" style="--c:${spaceColor(s)}" data-id="${s.id}" title="${esc(s.name)}"></button>`).join('');
+  patch($('#spaces'), S.spaces.map((s) => `<button class="space-dot ${s.id === S.space ? 'on' : ''}" style="--c:${spaceColor(s)}" data-id="${s.id}" title="${esc(s.name)}"></button>`).join(''));
   $$('#spaces .space-dot').forEach((b) => b.onclick = () => switchSpace(Number(b.dataset.id)));
 }
 
@@ -634,11 +652,11 @@ function renderStart() {
   for (const h of S.hist) { const k = host(h.url); if (!k) continue; const c = counts.get(k) || { n: 0, url: h.url, title: h.title }; c.n++; counts.set(k, c); }
   const frequent = [...counts.values()].sort((a, b) => b.n - a.n).slice(0, 5);
   const chats = S.sessions.slice(0, 5);
-  $('#start-secs').innerHTML =
+  patch($('#start-secs'),
     (chats.length ? `<div class="sec"><h2>Recent chats</h2><div class="rows">${chats.map((s) =>
       `<div class="r" data-chat="${esc(s.id)}">${s.busy ? '<span class="pulse"></span>' : icon('chat')}<span class="t">${esc(s.title)}</span><span class="s">${s.busy ? 'Working' : ago(s.updated)}</span></div>`).join('')}</div></div>` : '') +
     (frequent.length ? `<div class="sec"><h2>Frequently visited</h2><div class="rows">${frequent.map((f) =>
-      `<div class="r" data-url="${esc(f.url)}"><img src="${esc(favicon(f.url))}" alt=""><span class="t">${esc(f.title || siteName(f.url))}</span><span class="s">${esc(host(f.url))}</span></div>`).join('')}</div></div>` : '');
+      `<div class="r" data-url="${esc(f.url)}"><img src="${esc(favicon(f.url))}" alt=""><span class="t">${esc(f.title || siteName(f.url))}</span><span class="s">${esc(host(f.url))}</span></div>`).join('')}</div></div>` : ''));
   $$('#start-secs [data-chat]').forEach((r) => r.onclick = () => openChat(r.dataset.chat, true));
   $$('#start-secs [data-url]').forEach((r) => r.onclick = () => openUrl(r.dataset.url));
 }
@@ -654,7 +672,7 @@ const pip = {
     if (on) {
       $('#pip-host').textContent = t.title || host(t.url);
       $('#pip-fav').src = favicon(t.url, t.icon);
-      $('#pip-live').innerHTML = chat.busy ? '<span class="pulse"></span>' : '';
+      patch($('#pip-live'), chat.busy ? '<span class="pulse"></span>' : '');
       if (this.loadedFor !== id) this.refresh(true);
     }
     clearInterval(this.timer);
@@ -684,21 +702,28 @@ $('#pip').onclick = () => {
 };
 
 /* ── Layout sync ──────────────────────────────────── */
-let layoutQueued = false;
+let layoutQueued = false, layoutInFlight = false, layoutAgain = false;
 function layoutSoon() {
   if (layoutQueued) return; layoutQueued = true;
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    layoutQueued = false;
-    const r = (el) => { const b = el.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; };
-    const msg = { cmd: 'layout', main: r($('#pane-main')) };
-    if (document.body.classList.contains('split')) msg.split = r($('#pane-split'));
-    if (S.overlay === 'glance') msg.glance = r($('#glance-frame'));
-    ipc(msg);
-  }));
+  requestAnimationFrame(() => { layoutQueued = false; layoutNow(); });
 }
-new ResizeObserver(layoutSoon).observe($('#main'));
+// The Chromium shell's IPC is a fetch per message, and concurrent fetches can be
+// handled out of order. Keep one layout in flight so a stale rect never wins.
+function layoutNow() {
+  if (layoutInFlight) { layoutAgain = true; return; }
+  const r = (el) => { const b = el.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; };
+  const msg = { cmd: 'layout', main: r($('#pane-main')) };
+  if (document.body.classList.contains('split')) msg.split = r($('#pane-split'));
+  if (S.overlay === 'glance') msg.glance = r($('#glance-frame'));
+  layoutInFlight = true;
+  Promise.resolve(window.ipc && window.ipc.postMessage(JSON.stringify(msg))).finally(() => {
+    layoutInFlight = false;
+    if (layoutAgain) { layoutAgain = false; layoutNow(); }
+  });
+}
+new ResizeObserver(layoutNow).observe($('#main'));
 $('#sidebar').addEventListener('transitionend', layoutSoon);
-window.addEventListener('resize', layoutSoon);
+window.addEventListener('resize', layoutNow);
 document.addEventListener('mousedown', (e) => {
   if (e.button !== 0 || !e.target.closest('[data-drag]') || e.target.closest('button, input, textarea')) return;
   ipc({ cmd: e.detail === 2 ? 'zoom' : 'drag' });
@@ -864,9 +889,18 @@ function askAgent(text, fullView = true) {
 }
 
 /* ── Models ─────────────────────────────────────────── */
+async function refreshModels() {
+  try {
+    const st = await (await fetch('/api/state')).json();
+    S.models = st.models || [];
+    if (!S.models.some(m => m.id === S.model)) S.model = st.default || S.models[0]?.id || null;
+    fillModels();
+  } catch {}
+}
 function fillModels() {
   $$('.model-select').forEach((sel) => {
-    if (sel.options.length !== S.models.length) {
+    if (sel.dataset.models !== JSON.stringify(S.models)) {
+      sel.dataset.models = JSON.stringify(S.models);
       sel.innerHTML = S.models.map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
       sel.onchange = () => { S.model = sel.value; store.set('model', S.model); fillModels(); };
     }
@@ -1189,6 +1223,7 @@ const refreshSoon = () => { clearTimeout(sessTimer); sessTimer = setTimeout(refr
 function onEvent(ev) {
   const p = ev.properties || {};
   switch (ev.type) {
+    case 'aside.connection.ready': refreshModels(); break;
     case 'message.updated':
       chat.roles.set(p.info.id, p.info.role);
       if (p.info.sessionID === chat.id && p.info.error && p.info.error.name !== 'MessageAbortedError') chat.add('err', esc(errText(p.info.error)));
@@ -1225,12 +1260,8 @@ window.__shell = { S, chat, render, fillModels, askAgent, openCmdk, openChat, ne
   chat.reset(); setNtpMode('search'); render();
   const es = new EventSource('/api/events');
   es.onmessage = (m) => { try { onEvent(JSON.parse(m.data)); } catch (e) { console.error(e); } };
-  for (let i = 0; i < 20 && !S.models.length; i++) {
-    try { const st = await (await fetch('/api/state')).json(); S.models = st.models || []; if (!S.models.some((m) => m.id === S.model)) S.model = st.default || S.models[0]?.id || null; } catch {}
-    if (!S.models.length) await new Promise((r) => setTimeout(r, 500));
-  }
-  fillModels(); refreshSessions();
   ipc({ cmd: 'ready' });
+  await refreshModels(); refreshSessions();
   setTimeout(() => ob.focus(), 60);
   setInterval(refreshSessions, 20000);
 })();

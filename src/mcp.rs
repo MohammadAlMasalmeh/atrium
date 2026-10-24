@@ -38,7 +38,11 @@ pub async fn serve(api: String) -> Result<()> {
                 "tools/list" => Ok(json!({ "tools": tool_specs() })),
                 "tools/call" => {
                     let body = json!({ "name": params["name"], "args": params.get("arguments").cloned().unwrap_or(json!({})) });
-                    Ok(match http.post(format!("{api}/api/tool")).json(&body).send().await {
+                    let mut request = http.post(format!("{api}/api/tool")).json(&body);
+                    if let Some(token) = crate::read_api_token() {
+                        request = request.header(crate::TOKEN_HEADER, token);
+                    }
+                    Ok(match request.send().await {
                         Ok(resp) => resp.json::<Value>().await.unwrap_or_else(|e| error_result(&e.to_string())),
                         Err(e) => error_result(&format!("The browser is not reachable at {api}: {e}")),
                     })

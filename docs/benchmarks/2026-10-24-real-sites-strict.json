@@ -1,0 +1,550 @@
+{
+  "metric": "Median aggregate descendant-process RSS and sum of macOS per-process physical footprint in MiB. RSS may double-count shared pages. Footprint uses proc_pid_rusage v2; incomplete samples are null.",
+  "workload": "Public live websites, fresh profiles, signed out, no extensions. Challenges/errors excluded from BOTH browsers.",
+  "baseline_browser": "Chrome/154.0.8037.100",
+  "cef_version": "156.0.8",
+  "accepted_sites": [
+    {
+      "name": "YouTube",
+      "url": "https://www.youtube.com/",
+      "cef_id": 3,
+      "validation": {
+        "Aside": {
+          "url": "https://www.youtube.com/",
+          "title": "YouTube",
+          "ready": "complete",
+          "visibility": "visible",
+          "viewport": [
+            920,
+            897,
+            2
+          ],
+          "textLength": 151,
+          "nodes": 2013,
+          "resources": 142,
+          "iframes": 1
+        },
+        "CEF build": {
+          "iframes": 1,
+          "nodes": 1508,
+          "ready": "complete",
+          "resources": 29,
+          "textLength": 151,
+          "title": "YouTube",
+          "url": "https://www.youtube.com/",
+          "viewport": [
+            1024,
+            776,
+            2
+          ],
+          "visibility": "visible"
+        }
+      }
+    },
+    {
+      "name": "Gmail (signed out)",
+      "url": "https://mail.google.com/",
+      "redirect_hosts": [
+        "accounts.google.com",
+        "workspace.google.com"
+      ],
+      "cef_id": 4,
+      "validation": {
+        "Aside": {
+          "url": "https://workspace.google.com/intl/en-US/gmail/",
+          "title": "Gmail: Secure, AI-Powered Email for Everyone | Google Workspace",
+          "ready": "interactive",
+          "visibility": "visible",
+          "viewport": [
+            920,
+            897,
+            2
+          ],
+          "textLength": 3507,
+          "nodes": 876,
+          "resources": 86,
+          "iframes": 0
+        },
+        "CEF build": {
+          "iframes": 0,
+          "nodes": 879,
+          "ready": "interactive",
+          "resources": 80,
+          "textLength": 3507,
+          "title": "Gmail: Secure, AI-Powered Email for Everyone | Google Workspace",
+          "url": "https://workspace.google.com/intl/en-US/gmail/",
+          "viewport": [
+            1024,
+            776,
+            2
+          ],
+          "visibility": "visible"
+        }
+      }
+    },
+    {
+      "name": "GitHub",
+      "url": "https://github.com/tauri-apps/cef-rs",
+      "cef_id": 5,
+      "validation": {
+        "Aside": {
+          "url": "https://github.com/tauri-apps/cef-rs",
+          "title": "GitHub - tauri-apps/cef-rs \u00b7 GitHub",
+          "ready": "complete",
+          "visibility": "visible",
+          "viewport": [
+            920,
+            897,
+            2
+          ],
+          "textLength": 6520,
+          "nodes": 2183,
+          "resources": 193,
+          "iframes": 0
+        },
+        "CEF build": {
+          "iframes": 0,
+          "nodes": 2183,
+          "ready": "complete",
+          "resources": 186,
+          "textLength": 6633,
+          "title": "GitHub - tauri-apps/cef-rs \u00b7 GitHub",
+          "url": "https://github.com/tauri-apps/cef-rs",
+          "viewport": [
+            1280,
+            788,
+            2
+          ],
+          "visibility": "visible"
+        }
+      }
+    },
+    {
+      "name": "Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Web_browser",
+      "cef_id": 6,
+      "validation": {
+        "Aside": {
+          "url": "https://en.wikipedia.org/wiki/Web_browser",
+          "title": "Web browser - Wikipedia",
+          "ready": "complete",
+          "visibility": "visible",
+          "viewport": [
+            920,
+            897,
+            2
+          ],
+          "textLength": 20106,
+          "nodes": 4168,
+          "resources": 30,
+          "iframes": 0
+        },
+        "CEF build": {
+          "iframes": 0,
+          "nodes": 4169,
+          "ready": "complete",
+          "resources": 29,
+          "textLength": 20359,
+          "title": "Web browser - Wikipedia",
+          "url": "https://en.wikipedia.org/wiki/Web_browser",
+          "viewport": [
+            1280,
+            788,
+            2
+          ],
+          "visibility": "visible"
+        }
+      }
+    },
+    {
+      "name": "BBC News",
+      "url": "https://www.bbc.com/news",
+      "redirect_hosts": [
+        "www.bbc.co.uk"
+      ],
+      "cef_id": 7,
+      "validation": {
+        "Aside": {
+          "url": "https://www.bbc.com/news",
+          "title": "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
+          "ready": "complete",
+          "visibility": "visible",
+          "viewport": [
+            920,
+            897,
+            2
+          ],
+          "textLength": 8458,
+          "nodes": 1439,
+          "resources": 166,
+          "iframes": 13
+        },
+        "CEF build": {
+          "iframes": 7,
+          "nodes": 1459,
+          "ready": "complete",
+          "resources": 126,
+          "textLength": 8619,
+          "title": "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
+          "url": "https://www.bbc.com/news",
+          "viewport": [
+            1024,
+            776,
+            2
+          ],
+          "visibility": "visible"
+        }
+      }
+    },
+    {
+      "name": "MDN",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API",
+      "cef_id": 8,
+      "validation": {
+        "Aside": {
+          "url": "https://developer.mozilla.org/en-US/docs/Web/API",
+          "title": "Web APIs | MDN",
+          "ready": "complete",
+          "visibility": "visible",
+          "viewport": [
+            920,
+            897,
+            2
+          ],
+          "textLength": 22252,
+          "nodes": 4397,
+          "resources": 75,
+          "iframes": 0
+        },
+        "CEF build": {
+          "iframes": 0,
+          "nodes": 4397,
+          "ready": "complete",
+          "resources": 70,
+          "textLength": 22308,
+          "title": "Web APIs | MDN",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/API",
+          "viewport": [
+            1280,
+            788,
+            2
+          ],
+          "visibility": "visible"
+        }
+      }
+    },
+    {
+      "name": "Stack Overflow",
+      "url": "https://stackoverflow.com/questions/tagged/rust",
+      "cef_id": 9,
+      "validation": {
+        "Aside": {
+          "url": "https://stackoverflow.com/questions/tagged/rust",
+          "title": "Newest 'rust' Questions - Stack Overflow",
+          "ready": "complete",
+          "visibility": "visible",
+          "viewport": [
+            920,
+            897,
+            2
+          ],
+          "textLength": 10194,
+          "nodes": 3344,
+          "resources": 174,
+          "iframes": 22
+        },
+        "CEF build": {
+          "iframes": 2,
+          "nodes": 3296,
+          "ready": "interactive",
+          "resources": 80,
+          "textLength": 9894,
+          "title": "Newest 'rust' Questions - Stack Overflow",
+          "url": "https://stackoverflow.com/questions/tagged/rust",
+          "viewport": [
+            1280,
+            788,
+            2
+          ],
+          "visibility": "visible"
+        }
+      }
+    },
+    {
+      "name": "Hacker News",
+      "url": "https://news.ycombinator.com/",
+      "cef_id": 11,
+      "validation": {
+        "Aside": {
+          "url": "https://news.ycombinator.com/",
+          "title": "Hacker News",
+          "ready": "complete",
+          "visibility": "visible",
+          "viewport": [
+            920,
+            897,
+            2
+          ],
+          "textLength": 4274,
+          "nodes": 821,
+          "resources": 6,
+          "iframes": 0
+        },
+        "CEF build": {
+          "iframes": 0,
+          "nodes": 821,
+          "ready": "complete",
+          "resources": 5,
+          "textLength": 4274,
+          "title": "Hacker News",
+          "url": "https://news.ycombinator.com/",
+          "viewport": [
+            1280,
+            788,
+            2
+          ],
+          "visibility": "visible"
+        }
+      }
+    }
+  ],
+  "excluded_sites": [
+    {
+      "name": "Google Search",
+      "url": "https://www.google.com/search?q=chromium+browser",
+      "cef_id": 2,
+      "validation": {
+        "Aside": {
+          "url": "https://www.google.com/sorry/index",
+          "title": "https://www.google.com/search?q=chromium+browser&sei=ERTdasK0BaulqtsP3If-OA",
+          "ready": "complete",
+          "visibility": "visible",
+          "viewport": [
+            920,
+            897,
+            2
+          ],
+          "textLength": 328,
+          "nodes": 49,
+          "resources": 5,
+          "iframes": 3
+        },
+        "CEF build": {
+          "iframes": 0,
+          "nodes": 1810,
+          "ready": "interactive",
+          "resources": 19,
+          "textLength": 5080,
+          "title": "chromium browser - Google Search",
+          "url": "https://www.google.com/search",
+          "viewport": [
+            1280,
+            788,
+            2
+          ],
+          "visibility": "visible"
+        }
+      },
+      "reasons": {
+        "Aside": "Page navigated away from the requested URL",
+        "CEF build": null
+      }
+    },
+    {
+      "name": "Reddit",
+      "url": "https://www.reddit.com/r/rust/",
+      "cef_id": 10,
+      "validation": {
+        "Aside": {
+          "url": "https://www.reddit.com/r/rust/",
+          "title": "Reddit - Prove your humanity",
+          "ready": "complete",
+          "visibility": "visible",
+          "viewport": [
+            920,
+            897,
+            2
+          ],
+          "textLength": 240,
+          "nodes": 44,
+          "resources": 5,
+          "iframes": 3
+        },
+        "CEF build": {
+          "iframes": 0,
+          "nodes": 1326,
+          "ready": "interactive",
+          "resources": 19,
+          "textLength": 2430,
+          "title": "The Rust Programming Language",
+          "url": "https://www.reddit.com/r/rust/",
+          "viewport": [
+            1024,
+            776,
+            2
+          ],
+          "visibility": "visible"
+        }
+      },
+      "reasons": {
+        "Aside": "Challenge or error page",
+        "CEF build": null
+      }
+    }
+  ],
+  "phases": [
+    {
+      "phase": "live pages: agent protection prevents eviction",
+      "cef_live_views": 9,
+      "browsers": {
+        "Aside": {
+          "median_mib": 7769.57,
+          "samples_mib": [
+            7734.91,
+            7714.55,
+            7834.69,
+            7885.84,
+            7710.3,
+            7755.91,
+            7783.23,
+            7811.72
+          ],
+          "process_counts": [
+            89,
+            88,
+            89,
+            89,
+            89,
+            89,
+            89,
+            89
+          ],
+          "footprint_samples_mib": [
+            4245.65,
+            4358.39,
+            4320.17,
+            4299.1,
+            4299.85,
+            4295.0,
+            4288.73,
+            4283.96
+          ],
+          "footprint_median_mib": 4297.05
+        },
+        "CEF build": {
+          "median_mib": 4537.21,
+          "samples_mib": [
+            4705.3,
+            4560.16,
+            4542.2,
+            4545.38,
+            4507.34,
+            4532.22,
+            4498.59,
+            4503.95
+          ],
+          "process_counts": [
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56
+          ],
+          "footprint_samples_mib": [
+            3340.54,
+            3343.95,
+            3366.92,
+            3369.42,
+            3318.01,
+            3313.29,
+            3313.15,
+            3309.68
+          ],
+          "footprint_median_mib": 3329.28
+        }
+      },
+      "rss_reduction_percent": 41.6,
+      "footprint_reduction_percent": 22.5
+    },
+    {
+      "phase": "idle pages: normal background eviction enabled",
+      "cef_live_views": 7,
+      "browsers": {
+        "Aside": {
+          "median_mib": 3850.42,
+          "samples_mib": [
+            4872.58,
+            4675.48,
+            3657.23,
+            3670.55,
+            3730.59,
+            3799.81,
+            3901.03,
+            3995.62
+          ],
+          "process_counts": [
+            70,
+            70,
+            70,
+            70,
+            70,
+            70,
+            70,
+            70
+          ],
+          "footprint_samples_mib": [
+            3346.8,
+            3343.12,
+            3340.38,
+            3340.27,
+            3338.68,
+            3327.45,
+            3314.4,
+            3314.93
+          ],
+          "footprint_median_mib": 3339.47
+        },
+        "CEF build": {
+          "median_mib": 2242.92,
+          "samples_mib": [
+            3102.59,
+            3070.75,
+            2079.94,
+            2110.09,
+            2234.0,
+            2236.78,
+            2249.06,
+            2442.11
+          ],
+          "process_counts": [
+            56,
+            56,
+            55,
+            55,
+            55,
+            55,
+            55,
+            55
+          ],
+          "footprint_samples_mib": [
+            3021.46,
+            3020.24,
+            2809.84,
+            2809.91,
+            2809.01,
+            2808.96,
+            2809.15,
+            2764.96
+          ],
+          "footprint_median_mib": 2809.49
+        }
+      },
+      "rss_reduction_percent": 41.7,
+      "footprint_reduction_percent": 15.9
+    }
+  ],
+  "scope": "Shared external OpenCode and other running applications are outside both sampled process trees."
+}

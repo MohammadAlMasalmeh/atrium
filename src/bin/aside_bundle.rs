@@ -1,0 +1,82 @@
+//! Bundle already-built main/helper executables with the pinned CEF runtime.
+fn main() -> anyhow::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        let release = std::env::args().any(|arg| arg == "--release");
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let target = std::env::var_os("CARGO_TARGET_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| root.join("target"));
+        let profile = if release { "release" } else { "debug" };
+        let info = cef::build_util::mac::BundleInfo::new(
+            "aside",
+            "dev.aside-rs.browser",
+            "Aside",
+            "en",
+            env!("CARGO_PKG_VERSION").parse()?,
+        );
+        let output = target.join("bundle");
+        std::fs::create_dir_all(&output)?;
+        let staging = output.join(format!(".staging-{}", uuid::Uuid::new_v4()));
+        let path = cef::build_util::mac::bundle(
+            &staging,
+            &target.join(profile),
+            "aside",
+            "aside_helper",
+            None,
+            info,
+        )?;
+        let resources = path.join("Contents/Resources");
+        std::fs::create_dir_all(&resources)?;
+        let cef_root = std::env::var_os("CEF_PATH")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| target.join("cef"));
+        std::fs::copy(
+            cef_root.join("CREDITS.html"),
+            resources.join("Chromium-CREDITS.html"),
+        )?;
+        std::fs::write(
+            resources.join("THIRD-PARTY-NOTICES.txt"),
+            include_str!("../../THIRD-PARTY-NOTICES.txt"),
+        )?;
+        std::fs::write(
+            resources.join("CEF-LICENSE.txt"),
+            include_str!("../../docs/licenses/CEF-LICENSE.txt"),
+        )?;
+        std::fs::write(
+            resources.join("Chromium-LICENSE.txt"),
+            include_str!("../../docs/licenses/Chromium-LICENSE.txt"),
+        )?;
+        let status = std::process::Command::new("/usr/bin/codesign")
+            .args(["--force", "--deep", "--sign", "-"])
+            .arg(&path)
+            .status()?;
+        anyhow::ensure!(status.success(), "Development app signing failed");
+        let verified = std::process::Command::new("/usr/bin/codesign")
+            .args(["--verify", "--deep", "--strict"])
+            .arg(&path)
+            .status()?;
+        anyhow::ensure!(
+            verified.success(),
+            "Development app signature verification failed"
+        );
+        let final_path = output.join("aside.app");
+        let backup = output.join(".previous-aside.app");
+        if backup.exists() {
+            std::fs::remove_dir_all(&backup)?;
+        }
+        if final_path.exists() {
+            std::fs::rename(&final_path, &backup)?;
+        }
+        if let Err(error) = std::fs::rename(&path, &final_path) {
+            if backup.exists() {
+                let _ = std::fs::rename(&backup, &final_path);
+            }
+            return Err(error.into());
+        }
+        let _ = std::fs::remove_dir(&staging);
+        std::fs::write(output.join("profile.txt"), profile)?;
+        println!("{}", final_path.display());
+    }
+    Ok(())
+}

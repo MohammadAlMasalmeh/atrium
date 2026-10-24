@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""Restart an isolated bundled browser and check storage and lazy tab restoration."""
+import argparse
+import json
+import subprocess
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--app', type=Path, default=Path('target/bundle/aside.app/Contents/MacOS/aside'))
+parser.add_argument('--port', type=int, default=7784)
+args = parser.parse_args()
+base = f'http://127.0.0.1:{args.port}'
+
+def api(path, data=None):
+    request = urllib.request.Request(base + path, data=None if data is None else json.dumps(data).encode(),
+                                     headers={'Content-Type': 'application/json'})
+    with urllib.request.urlopen(request, timeout=35) as response:
+        result = json.load(response)
+    assert 'error' not in result, result
+    return result
+
+def tool(name, arguments):
+    result = api('/api/tool', {'name': name, 'args': arguments})
+    assert not result.get('isError'), result
+    return result
+
+def wait_ready():
+    for _ in range(120):
+        try:
+            memory = api('/api/browser/memory')
+            tabs = api('/api/browser/tabs')
+            if memory.get('shell_ready') and not any(t['loading'] for t in tabs['tabs']):
+                return memory, tabs
+        except (urllib.error.URLError, TimeoutError):
+            pass
+        time.sleep(.5)
+    raise AssertionError('Browser did not become ready')
+
+def stop(process):
+    try:
+        api('/api/browser/command', {'cmd': 'quit'})
+    except (urllib.error.URLError, TimeoutError):
+        pass
+    try:
+        process.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        process.terminate()
+        process.wait(timeout=5)
+        raise AssertionError('Browser did not shut down cleanly')
+
+with tempfile.TemporaryDirectory(prefix='aside-persistence-') as directory:
+    profile = Path(directory)
+    with (profile / 'launch.log').open('w') as log:
+        command = [str(args.app.resolve()), '--data-dir', str(profile), 'run', '--port', str(args.port),
+                   '--opencode-url', 'http://127.0.0.1:1']
+        process = subprocess.Popen(command, stdout=log, stderr=log)
+        try:
+            wait_ready()
+            tool('open_tab', {'url': 'http://127.0.0.1:7789/page/persistence-one'})
+            tool('open_tab', {'url': 'http://127.0.0.1:7789/page/persistence-two'})
+            tabs = api('/api/browser/tabs')
+            api('/api/browser/command', {'cmd': 'activate', 'id': tabs['tabs'][-1]['id']})
+            tool('evaluate', {'code': "document.cookie = 'aside_fixture=persisted; Max-Age=86400; Path=/; SameSite=Lax'; localStorage.setItem('aside_fixture', 'persisted'); return document.cookie;"})
+            stop(process)
+            process = subprocess.Popen(command, stdout=log, stderr=log)
+            memory, tabs = wait_ready()
+            assert len(tabs['tabs']) == 2, tabs
+            assert sum(t['suspended'] for t in tabs['tabs']) == 1, tabs
+            assert memory['live_renderers'] == 2, memory  # one shell and one active page
+            index = next(i for i, tab in enumerate(tabs['tabs']) if tab['id'] == tabs['active'])
+            tool('switch_tab', {'index': index})
+            result = tool('evaluate', {'code': "return { cookie: document.cookie.includes('aside_fixture=persisted'), storage: localStorage.getItem('aside_fixture') };"})
+            text = '\n'.join(item.get('text', '') for item in result['content'])
+            decoded = json.loads(text)
+            assert decoded == {'cookie': True, 'storage': 'persisted'}, result
+            print('PASS: cookies, localStorage, saved tabs, lazy restart, and clean shutdown', flush=True)
+        finally:
+            if process.poll() is None:
+                stop(process)

@@ -109,11 +109,13 @@ pub struct Agent {
     current: Mutex<Option<u64>>,
     /// Last interactive tree seen per tab: (url, tree), for change reports.
     seen: Mutex<HashMap<u64, (String, String)>>,
+    scratch_slots: std::sync::Arc<tokio::sync::Semaphore>,
+
 }
 
 impl Agent {
     pub fn new(browser: Handle) -> Self {
-        Self { browser, current: Mutex::new(None), seen: Mutex::new(HashMap::new()) }
+        Self { browser, current: Mutex::new(None), seen: Mutex::new(HashMap::new()), scratch_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(3)) }
     }
 
     /// Point the agent at the tab the user is looking at (None: it opens its own).
@@ -137,11 +139,27 @@ impl Agent {
     }
 
     async fn eval_in(&self, tab: u64, js: &str) -> Result<Value> {
-        let js = js.to_string();
-        match self.browser.op(|reply| Op::Eval { tab: Some(tab), js, reply }).await? {
-            Ok(v) => Ok(v),
-            Err(e) => bail!("{e}"),
+        for attempt in 0..2 {
+            let js = js.to_string();
+            match self.browser.op(|reply| Op::Eval { tab: Some(tab), js, reply }).await? {
+                Ok(v) => return Ok(v),
+                // CEF creates discarded views asynchronously. This response means
+                // the script has not run; wait for the new document before retrying.
+                Err(e) if attempt == 0 && e == "The tab is still loading. Try again in a moment." => {
+                    let deadline = tokio::time::Instant::now() + Duration::from_secs(24);
+                    loop {
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                        let state = self.browser.op(Op::Tabs).await?;
+                        let page = state.tabs.iter().find(|t| t.id == tab)
+                            .ok_or_else(|| anyhow!("The tab closed while it was waking up"))?;
+                        if !page.loading { break; }
+                        if tokio::time::Instant::now() >= deadline { bail!("The tab is still loading; retry when navigation finishes"); }
+                    }
+                }
+                Err(e) => bail!("{e}"),
+            }
         }
+        unreachable!("both evaluation attempts returned")
     }
 
     /// Like `eval_in`, but a navigation triggered by the script counts as success.
@@ -395,14 +413,15 @@ impl Agent {
                     })
                     .collect();
                 let url = format!("https://html.duckduckgo.com/html/?q={q}");
-                let id = self.scratch(&url).await?;
+                let scratch = self.scratch(&url).await?;
+                let id = scratch.id;
                 let res = self.eval_in(id, &SEARCH_JS.replace("__MAX__", &max.to_string())).await;
                 let fallback = if res.as_ref().map(|v| v.as_array().map_or(true, |a| a.is_empty())).unwrap_or(true) {
                     self.eval_in(id, "return __aside.readPage(3000).text").await.ok()
                 } else {
                     None
                 };
-                self.close_scratch(id).await;
+                self.close_scratch(scratch).await;
                 let results = res?;
                 let list = results.as_array().cloned().unwrap_or_default();
                 if list.is_empty() {
@@ -429,9 +448,10 @@ impl Agent {
             "fetch" => {
                 let url = req("url")?;
                 let max = args.get("max_chars").and_then(Value::as_u64).unwrap_or(12_000);
-                let id = self.scratch(&url).await?;
+                let scratch = self.scratch(&url).await?;
+                let id = scratch.id;
                 let v = self.eval_in(id, &format!("return __aside.readPage({max})")).await;
-                self.close_scratch(id).await;
+                self.close_scratch(scratch).await;
                 let v = v?;
                 Ok(text(format!(
                     "Page: {} — {}\n\n{}{}",
@@ -522,15 +542,19 @@ impl Agent {
     }
 
     /// An invisible tab for background reads.
-    async fn scratch(&self, url: &str) -> Result<u64> {
+    async fn scratch(&self, url: &str) -> Result<Scratch> {
+        let permit = self.scratch_slots.clone().acquire_owned().await?;
         let url = url.to_string();
         let id = self.browser.op(|reply| Op::NewTab { url: Some(url), background: true, scratch: true, reply }).await?;
+        let scratch = Scratch { id, browser: self.browser.clone(), permit: Some(permit) };
         self.wait_loaded(id).await;
-        Ok(id)
+        Ok(scratch)
     }
 
-    async fn close_scratch(&self, id: u64) {
+    async fn close_scratch(&self, mut scratch: Scratch) {
+        let id = scratch.id;
         let _ = self.browser.op(|reply| Op::Close { id, reply }).await;
+        scratch.permit.take();
     }
 }
 
@@ -556,4 +580,16 @@ fn line_diff(old: &str, new: &str, cap: usize) -> String {
         out.push(format!("… ({} more changed lines; snapshot for the full tree)", total - out.len()));
     }
     out.join("\n")
+}
+
+// Cancellation still closes temporary renderers before freeing their budget slot.
+struct Scratch { id: u64, browser: Handle, permit: Option<tokio::sync::OwnedSemaphorePermit> }
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let Some(permit) = self.permit.take() else { return };
+        let id = self.id; let browser = self.browser.clone();
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            runtime.spawn(async move { let _ = browser.op(|reply| Op::Close { id, reply }).await; drop(permit); });
+        }
+    }
 }

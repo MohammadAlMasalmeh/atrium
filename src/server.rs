@@ -23,6 +23,11 @@ pub struct App {
     pub agent: Agent,
     pub oc: OpenCode,
     pub events: broadcast::Sender<Value>,
+    pub ui_origin: String,
+    pub workspace: std::path::PathBuf,
+    pub opencode_port: u16,
+    pub oc_child: Arc<std::sync::Mutex<Option<tokio::process::Child>>>,
+    pub setup_lock: tokio::sync::Mutex<()>,
 }
 
 type Shared = State<Arc<App>>;
@@ -32,6 +37,9 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/shell", get(|| async { Html(SHELL_HTML) }))
         .route("/frozen/:slot", get(frozen))
         .route("/api/state", get(state))
+        .route("/api/browser/command", post(browser_command))
+        .route("/api/browser/memory", get(browser_memory))
+        .route("/api/browser/tabs", get(browser_tabs))
         .route("/api/sessions", get(sessions))
         .route("/api/session/:id/messages", get(messages))
         .route("/api/chat", post(chat))
@@ -40,6 +48,10 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/events", get(events))
         .route("/api/tool", post(tool))
         .route("/api/debug/shell", post(debug_shell))
+        .route("/api/browser/extensions", get(browser_extensions))
+        .merge(crate::setup::routes(app.clone()))
+        .route_layer(axum::middleware::from_fn(crate::setup::require_token))
+        .route_layer(axum::middleware::from_fn_with_state(app.clone(), crate::setup::shell_only))
         .with_state(app)
 }
 
@@ -47,17 +59,23 @@ pub fn router(app: Arc<App>) -> Router {
 pub fn spawn_event_pump(app: Arc<App>) {
     tokio::spawn(async move {
         loop {
-            match app.oc.events().await {
-                Ok(stream) => {
-                    let mut stream = Box::pin(stream);
-                    while let Some(ev) = stream.next().await {
-                        let kind = ev["type"].as_str().unwrap_or("");
-                        if kind.starts_with("message.") || kind.starts_with("session.") || kind.starts_with("permission.") {
-                            let _ = app.events.send(ev);
+            tokio::select! {
+                _ = app.oc.changed.notified() => continue,
+                _ = async {
+                    match app.oc.events().await {
+                        Ok(stream) => {
+                            let _ = app.events.send(json!({ "type": "aside.connection.ready" }));
+                            let mut stream = Box::pin(stream);
+                            while let Some(ev) = stream.next().await {
+                                let kind = ev["type"].as_str().unwrap_or("");
+                                if kind.starts_with("message.") || kind.starts_with("session.") || kind.starts_with("permission.") {
+                                    let _ = app.events.send(ev);
+                                }
+                            }
                         }
+                        Err(e) => eprintln!("opencode event stream: {e}"),
                     }
-                }
-                Err(e) => eprintln!("opencode event stream: {e}"),
+                } => {}
             }
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
@@ -105,9 +123,11 @@ Current time: {now}.
 
 
 async fn state(State(app): Shared) -> Json<Value> {
-    let (models, default) = app.oc.models().await.unwrap_or_default();
+    let healthy = app.oc.healthy().await;
+    let browser_tools = healthy && app.oc.browser_tools_ready().await;
+    let (models, default) = if healthy { app.oc.models().await.unwrap_or_default() } else { Default::default() };
     let models: Vec<Value> = models.into_iter().map(|(id, name)| json!({ "id": id, "name": name })).collect();
-    Json(json!({ "models": models, "default": default, "opencode": app.oc.base }))
+    Json(json!({ "models": models, "default": default, "opencode": app.oc.base(), "healthy": healthy, "browser_tools": browser_tools }))
 }
 
 
@@ -238,6 +258,7 @@ async fn tool(State(app): Shared, Json(req): Json<ToolReq>) -> Json<Value> {
 
 /// Runs JS in the browser UI itself; handy for inspecting the shell's state.
 async fn debug_shell(State(app): Shared, body: String) -> Json<Value> {
+    if !cfg!(debug_assertions) { return Json(json!({"error":"Shell evaluation is disabled in release builds"})); }
     let r = app
         .agent
         .browser
@@ -248,4 +269,21 @@ async fn debug_shell(State(app): Shared, body: String) -> Json<Value> {
         Ok(Err(e)) => json!({ "error": e }),
         Err(e) => json!({ "error": e.to_string() }),
     })
+}
+
+async fn browser_command(State(app): Shared, Json(body): Json<Value>) -> Json<Value> {
+    Json(match app.agent.browser.op(|reply| Op::Shell { body, reply }).await {
+        Ok(()) => json!({"ok":true}), Err(e) => json!({"error":e.to_string()})
+    })
+}
+async fn browser_memory(State(app): Shared) -> Json<Value> {
+    Json(app.agent.browser.op(Op::Memory).await.unwrap_or_else(|e|json!({"error":e.to_string()})))
+}
+
+async fn browser_extensions() -> Json<Value> {
+    Json(crate::extensions::review(crate::CHROME_EXTENSIONS.get().map(Vec::as_slice).unwrap_or_default()))
+}
+
+async fn browser_tabs(State(app): Shared) -> Json<Value> {
+    Json(match app.agent.browser.op(Op::Tabs).await { Ok(tabs) => serde_json::to_value(tabs).unwrap_or_default(), Err(e) => json!({"error":e.to_string()}) })
 }

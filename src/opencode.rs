@@ -1,6 +1,6 @@
 //! Client for the `opencode serve` HTTP API.
 
-use std::{path::Path, process::Stdio, time::Duration};
+use std::{path::Path, process::Stdio, sync::{Arc, RwLock}, time::Duration};
 
 use anyhow::{bail, Context, Result};
 use futures_util::{Stream, StreamExt};
@@ -9,26 +9,58 @@ use tokio::process::{Child, Command};
 
 #[derive(Clone)]
 pub struct OpenCode {
-    pub base: String,
+    connection: Arc<RwLock<Connection>>,
+    pub changed: Arc<tokio::sync::Notify>,
     http: reqwest::Client,
+}
+
+#[derive(Clone)]
+struct Connection {
+    base: String,
+    username: String,
+    password: Option<String>,
 }
 
 impl OpenCode {
     pub fn new(base: impl Into<String>) -> Self {
+        Self::with_auth(base.into(), std::env::var("OPENCODE_SERVER_USERNAME").unwrap_or_else(|_| "opencode".into()),
+            std::env::var("OPENCODE_SERVER_PASSWORD").ok())
+    }
+
+    pub fn with_auth(base: String, username: String, password: Option<String>) -> Self {
         Self {
-            base: base.into().trim_end_matches('/').to_string(),
-            http: reqwest::Client::builder().no_proxy().build().expect("http client"),
+            connection: Arc::new(RwLock::new(Connection { base: base.trim_end_matches('/').into(), username, password })),
+            changed: Arc::new(tokio::sync::Notify::new()),
+            http: reqwest::Client::builder().no_proxy().connect_timeout(Duration::from_secs(3))
+                .redirect(reqwest::redirect::Policy::none()).build().expect("http client"),
         }
     }
 
+    pub fn base(&self) -> String { self.connection.read().unwrap().base.clone() }
+
+    pub fn use_connection(&self, other: &Self) {
+        *self.connection.write().unwrap() = other.connection.read().unwrap().clone();
+        self.changed.notify_one();
+    }
+
+    fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
+        let c = self.connection.read().unwrap();
+        let req = self.http.request(method, format!("{}{path}", c.base));
+        match &c.password { Some(password) => req.basic_auth(&c.username, Some(password)), None => req }
+    }
+
     pub async fn healthy(&self) -> bool {
-        self.http
-            .get(format!("{}/global/health", self.base))
+        let response = self.request(reqwest::Method::GET, "/global/health")
             .timeout(Duration::from_secs(2))
             .send()
             .await
-            .map(|r| r.status().is_success())
-            .unwrap_or(false)
+            .ok()
+            .filter(|r| r.status().is_success())
+            .map(|r| r.json::<Value>());
+        match response {
+            Some(body) => body.await.is_ok_and(|v| v["healthy"] == true),
+            None => false,
+        }
     }
 
     /// Spawn `opencode serve` on `port` with `workdir` as its project directory.
@@ -53,7 +85,7 @@ impl OpenCode {
     }
 
     async fn send(&self, req: reqwest::RequestBuilder) -> Result<Value> {
-        let resp = req.send().await?;
+        let resp = req.timeout(Duration::from_secs(12)).send().await?;
         let status = resp.status();
         let body = resp.text().await?;
         if !status.is_success() {
@@ -63,11 +95,11 @@ impl OpenCode {
     }
 
     async fn get(&self, path: &str) -> Result<Value> {
-        self.send(self.http.get(format!("{}{path}", self.base))).await
+        self.send(self.request(reqwest::Method::GET, path)).await
     }
 
     async fn post(&self, path: &str, body: Value) -> Result<Value> {
-        self.send(self.http.post(format!("{}{path}", self.base)).json(&body)).await
+        self.send(self.request(reqwest::Method::POST, path).json(&body)).await
     }
 
     pub async fn add_mcp(&self, name: &str, command: Vec<String>) -> Result<Value> {
@@ -76,6 +108,10 @@ impl OpenCode {
             json!({ "name": name, "config": { "type": "local", "command": command, "enabled": true, "timeout": 15000 } }),
         )
         .await
+    }
+
+    pub async fn browser_tools_ready(&self) -> bool {
+        self.get("/mcp").await.is_ok_and(|v| v["aside"]["status"] == "connected")
     }
 
     /// Returns (models as "provider/model" with display names, default "provider/model").
@@ -185,9 +221,7 @@ impl OpenCode {
 
     /// The server's event bus (SSE), as parsed JSON events.
     pub async fn events(&self) -> Result<impl Stream<Item = Value>> {
-        let resp = self
-            .http
-            .get(format!("{}/event", self.base))
+        let resp = self.request(reqwest::Method::GET, "/event")
             .header("accept", "text/event-stream")
             .send()
             .await?
