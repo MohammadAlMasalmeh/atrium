@@ -4,6 +4,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 import argparse
 
+# An OAuth-style pair: the popup reports to its opener, then closes itself.
+OPENER = "addEventListener('message', e => { if (e.origin === location.origin) document.title = 'Opener got ' + e.data; });"
+POPUP = "if (window.opener) { window.opener.postMessage('signed-in', location.origin); setTimeout(() => window.close(), 500); } else { document.title = 'Popup without opener'; }"
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
@@ -15,6 +20,7 @@ class Handler(BaseHTTPRequestHandler):
         window.fixtureMemory = new Uint8Array(12 * 1024 * 1024).fill(42);
         let count = 0; document.querySelector('#increment').onclick = () => document.querySelector('#count').value = ++count;
         {'document.querySelector("#draft").value = "Unsaved test draft";' if draft else ''}
+        {OPENER if path.startswith('/opener') else POPUP if path.startswith('/popup') else ''}
         </script>'''.encode()
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
