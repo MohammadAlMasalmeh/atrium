@@ -34,6 +34,8 @@ pub struct TabInfo {
     pub loading: bool,
     pub icon: Option<String>,
     pub suspended: bool,
+    /// The renderer died; the tab reloads when selected, reloaded, or navigated.
+    pub crashed: bool,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct TabsState {
@@ -135,6 +137,7 @@ enum Event {
     Created(u64, Browser),
     Detach(u64),
     Closed(u64),
+    Crashed(u64),
     Title(u64, String),
     Address(u64, String),
     Loading(u64, bool),
@@ -163,9 +166,32 @@ struct Tab {
     agent_until: Instant,
     suspended: bool,
     suspending: bool,
+    crashed: bool,
     downloads: std::collections::HashSet<u32>,
 }
 impl Tab {
+    fn new(id: u64, url: String, title: String) -> Self {
+        let now = Instant::now();
+        Tab {
+            id,
+            title,
+            url,
+            loading: false,
+            icon: None,
+            scratch: false,
+            view: None,
+            browser: None,
+            registration: None,
+            last_used: now,
+            capture: false,
+            page_protected_until: now,
+            agent_until: now,
+            suspended: false,
+            suspending: false,
+            crashed: false,
+            downloads: Default::default(),
+        }
+    }
     fn info(&self) -> TabInfo {
         TabInfo {
             id: self.id,
@@ -181,6 +207,7 @@ impl Tab {
             loading: self.loading,
             icon: self.icon.clone(),
             suspended: self.suspended,
+            crashed: self.crashed,
         }
     }
 }
@@ -272,6 +299,7 @@ impl Manager {
             if let Some(tab) = self.tab_mut(id) {
                 tab.view = Some(view);
                 tab.suspended = false;
+                tab.crashed = false;
                 tab.loading = true;
             }
         }
@@ -279,26 +307,12 @@ impl Manager {
     fn new_tab(&mut self, url: Option<String>, foreground: bool, scratch: bool) -> u64 {
         self.next_id += 1;
         let id = self.next_id;
-        let now = Instant::now();
+        let url = url
+            .map(|u| normalize_url(&u))
+            .unwrap_or_else(|| "about:blank".into());
         self.tabs.push(Tab {
-            id,
-            title: String::new(),
-            url: url
-                .map(|u| normalize_url(&u))
-                .unwrap_or_else(|| "about:blank".into()),
-            loading: false,
-            icon: None,
             scratch,
-            view: None,
-            browser: None,
-            registration: None,
-            last_used: now,
-            capture: false,
-            page_protected_until: now,
-            agent_until: now,
-            suspended: false,
-            suspending: false,
-            downloads: Default::default(),
+            ..Tab::new(id, url, String::new())
         });
         if foreground || self.active.is_none() {
             self.active = Some(id);
@@ -317,6 +331,11 @@ impl Manager {
         self.active = Some(id);
         if let Some(t) = self.tab_mut(id) {
             t.last_used = Instant::now();
+            if t.crashed {
+                if let Some(browser) = &t.browser {
+                    browser.reload();
+                }
+            }
         }
         self.create_view(id);
         self.layout();
@@ -438,20 +457,31 @@ impl Manager {
         })
     }
     fn cdp(&mut self, tab: u64, method: &str, params: Json, pending: Pending) {
-        self.create_view(tab);
+        let crashed = self.tab(tab).is_some_and(|t| t.crashed);
+        if !crashed {
+            self.create_view(tab);
+        }
         let Some(host) = self
             .tab(tab)
+            .filter(|t| !t.crashed)
             .and_then(|t| t.browser.as_ref())
             .and_then(|b| b.host())
         else {
+            const CRASHED: &str = "The page crashed. Reload it or select the tab to recover.";
             match pending {
                 Pending::Eval(r) => {
-                    let _ = r.send(Err(
+                    let _ = r.send(Err(if crashed {
+                        CRASHED.into()
+                    } else {
                         "The tab is still loading. Try again in a moment.".into()
-                    ));
+                    }));
                 }
                 Pending::Screenshot(r) => {
-                    let _ = r.send(Err("The tab is not ready to capture".into()));
+                    let _ = r.send(Err(if crashed {
+                        CRASHED.into()
+                    } else {
+                        "The tab is not ready to capture".into()
+                    }));
                 }
                 _ => {}
             }
@@ -553,15 +583,61 @@ impl Manager {
                     }
                 }
                 if error.is_none() && data["result"]["value"] == true && self.can_suspend(id) {
-                    if let Some(tab) = self.tab_mut(id) {
-                        tab.suspending = true;
-                        if let Some(host) = tab.browser.as_ref().and_then(|b| b.host()) {
-                            host.close_browser(0);
-                        }
-                    }
+                    self.suspend(id);
                 }
             }
         }
+    }
+    /// Closes the page but keeps the tab; selecting it creates a fresh view at its URL.
+    fn suspend(&mut self, id: u64) {
+        if let Some(tab) = self.tab_mut(id) {
+            if let Some(host) = tab.browser.as_ref().and_then(|b| b.host()) {
+                tab.suspending = true;
+                host.close_browser(0);
+            }
+        }
+    }
+    fn crashed(&mut self, id: u64) {
+        if self.closing.load(Ordering::Relaxed) {
+            return;
+        }
+        let calls = self
+            .pending
+            .iter()
+            .filter(|(_, (_, tab, _))| *tab == id)
+            .map(|(call, _)| *call)
+            .collect::<Vec<_>>();
+        for call in calls {
+            self.finish(call, false, json!({"message":"The page's renderer stopped"}));
+        }
+        let visible = Some(id) == self.active || Some(id) == self.split || id == GLANCE;
+        let Some(tab) = self.tab_mut(id).filter(|t| !t.suspending) else {
+            return;
+        };
+        // Debug URLs such as chrome://kill never commit; keep the last committed page.
+        if let Some(url) = tab
+            .browser
+            .as_ref()
+            .and_then(|b| b.main_frame())
+            .map(|f| CefString::from(&f.url()).to_string())
+            .filter(|u| !u.is_empty())
+        {
+            tab.url = url;
+        }
+        tab.loading = false;
+        if id == SHELL {
+            if let Some(browser) = &tab.browser {
+                browser.reload();
+            }
+            return;
+        }
+        eprintln!("tab {id}: renderer process terminated");
+        tab.crashed = true;
+        if !visible {
+            self.suspend(id);
+        }
+        self.session_dirty = true;
+        self.push(false);
     }
     fn operation(&mut self, op: Op) {
         match op {
@@ -570,8 +646,12 @@ impl Manager {
             Op::Close { id, reply } => { self.close(id); let _ = reply.send(()); }
             Op::Navigate { tab, url, reply } => { let id = self.navigate(tab.or(self.active), url); let _ = reply.send(id); }
             Op::History { tab, action, reply } => {
-                let result = match tab.or(self.active).and_then(|id| self.tab(id)).and_then(|t| t.browser.as_ref()) {
-                    Some(b) => { match action { "back" => b.go_back(), "forward" => b.go_forward(), _ => b.reload() }; Ok(()) }, None => Err("No page is open".into())
+                let id = tab.or(self.active).filter(|id| self.tab(*id).is_some());
+                let result = match (id, id.and_then(|id| self.tab(id)?.browser.as_ref())) {
+                    (_, Some(b)) => { match action { "back" => b.go_back(), "forward" => b.go_forward(), _ => b.reload() }; Ok(()) },
+                    // A released (sleeping or crashed) tab reloads with a fresh view.
+                    (Some(id), None) if action == "reload" => { self.create_view(id); self.layout(); Ok(()) },
+                    _ => Err("No page is open".into())
                 }; let _ = reply.send(result);
             }
             Op::Eval { tab, js, reply } => { if let Some(tab) = tab.or(self.active) { self.evaluate(tab, js, reply); } else { let _ = reply.send(Err("No page is open".into())); } }
@@ -766,24 +846,9 @@ impl Manager {
             Event::Window(window) => {
                 window.set_title(Some(&CefString::from("Atrium")));
                 self.window = Some(window.clone());
-                let now = Instant::now();
                 self.tabs.push(Tab {
-                    id: SHELL,
-                    title: "Atrium".into(),
-                    url: format!("{}/shell", self.base),
                     loading: true,
-                    icon: None,
-                    scratch: false,
-                    view: None,
-                    browser: None,
-                    registration: None,
-                    last_used: now,
-                    capture: false,
-                    page_protected_until: now,
-                    agent_until: now,
-                    suspended: false,
-                    suspending: false,
-                    downloads: Default::default(),
+                    ..Tab::new(SHELL, format!("{}/shell", self.base), "Atrium".into())
                 });
                 self.create_view(SHELL);
                 self.layout();
@@ -870,9 +935,11 @@ impl Manager {
             Event::Loading(id, loading) => {
                 if let Some(t) = self.tab_mut(id) {
                     t.loading = loading;
+                    t.crashed &= !loading;
                 }
                 self.push(false);
             }
+            Event::Crashed(id) => self.crashed(id),
             Event::Loaded(id) => {
                 if id != SHELL {
                     if let Some(frame) = self
@@ -972,8 +1039,9 @@ wrap_window_delegate! {
     }
 }
 // Only the shell's own browser carries the local API token; website tabs never see it.
-wrap_request_handler! {struct ShellRequests {base:String} impl RequestHandler {
-    fn resource_request_handler(&self, _unused40:Option<&mut Browser>, _unused41:Option<&mut Frame>, _unused42:Option<&mut Request>, _unused43:i32, _unused44:i32, _unused45:Option<&CefString>, _unused46:Option<&mut i32>)->Option<ResourceRequestHandler>{Some(ShellResources::new(self.base.clone()))}
+wrap_request_handler! {struct HostRequests {bridge:Bridge,id:u64,base:String} impl RequestHandler {
+    fn resource_request_handler(&self, _unused40:Option<&mut Browser>, _unused41:Option<&mut Frame>, _unused42:Option<&mut Request>, _unused43:i32, _unused44:i32, _unused45:Option<&CefString>, _unused46:Option<&mut i32>)->Option<ResourceRequestHandler>{(self.id==SHELL).then(|| ShellResources::new(self.base.clone()))}
+    fn on_render_process_terminated(&self, _unused50:Option<&mut Browser>, _unused51:TerminationStatus, _unused52:i32, _unused53:Option<&CefString>){self.bridge.send(Event::Crashed(self.id));}
 }}
 wrap_resource_request_handler! {struct ShellResources {base:String} impl ResourceRequestHandler {
     fn on_before_resource_load(&self, _unused47:Option<&mut Browser>, _unused48:Option<&mut Frame>, request:Option<&mut Request>, _unused49:Option<&mut Callback>)->ReturnValue{
@@ -986,7 +1054,7 @@ wrap_resource_request_handler! {struct ShellResources {base:String} impl Resourc
     }
 }}
 wrap_client! {struct HostClient {bridge:Bridge,id:u64,base:String} impl Client {
-    fn request_handler(&self)->Option<RequestHandler>{(self.id==SHELL).then(|| ShellRequests::new(self.base.clone()))}
+    fn request_handler(&self)->Option<RequestHandler>{Some(HostRequests::new(self.bridge.clone(),self.id,self.base.clone()))}
     fn life_span_handler(&self)->Option<LifeSpanHandler>{Some(HostLife::new(self.bridge.clone(),self.id))}
     fn display_handler(&self)->Option<DisplayHandler>{Some(HostDisplay::new(self.bridge.clone(),self.id))}
     fn load_handler(&self)->Option<LoadHandler>{Some(HostLoad::new(self.bridge.clone(),self.id))}
@@ -1121,10 +1189,20 @@ impl Manager {
     fn maintain(&mut self) {
         self.save_session();
         let now = Instant::now();
+        let crashed = self
+            .tabs
+            .iter()
+            .filter(|t| t.crashed && t.view.is_some() && !t.suspending)
+            .filter(|t| Some(t.id) != self.active && Some(t.id) != self.split && t.id != GLANCE)
+            .map(|t| t.id)
+            .collect::<Vec<_>>();
+        for id in crashed {
+            self.suspend(id);
+        }
         let candidates = self
             .tabs
             .iter()
-            .filter(|t| t.id != SHELL && t.id != GLANCE && t.view.is_some() && !t.scratch)
+            .filter(|t| t.id != SHELL && t.id != GLANCE && t.view.is_some() && !t.scratch && !t.crashed)
             .map(|t| crate::memory::Candidate {
                 id: t.id,
                 idle: now.saturating_duration_since(t.last_used),
@@ -1203,24 +1281,9 @@ impl Manager {
             };
             self.next_id += 1;
             let id = self.next_id;
-            let now = Instant::now();
             self.tabs.push(Tab {
-                id,
-                title: saved["title"].as_str().unwrap_or("").into(),
-                url: url.into(),
-                loading: false,
-                icon: None,
-                scratch: false,
-                view: None,
-                browser: None,
-                registration: None,
-                last_used: now,
-                capture: false,
-                page_protected_until: now,
-                agent_until: now,
                 suspended: true,
-                suspending: false,
-                downloads: Default::default(),
+                ..Tab::new(id, url.into(), saved["title"].as_str().unwrap_or("").into())
             });
             if saved["active"] == true {
                 self.active = Some(id);
