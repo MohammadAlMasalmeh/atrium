@@ -15,13 +15,13 @@ client = aside_api.Client.from_args(args)
 request, tool = client.api, client.tool
 
 
-for attempt in range(50):
+for attempt in range(100):
     try:
         memory = request('/api/browser/memory')
-        break
+        if memory.get('shell_ready'): break
     except urllib.error.URLError:
-        if attempt == 49: raise
-        time.sleep(.2)
+        if attempt == 99: raise
+    time.sleep(.2)
 assert memory['engine'] == 'Chromium / CEF', memory
 assert memory.get('shell_ready'), memory
 print('engine:', memory['engine'], flush=True)
