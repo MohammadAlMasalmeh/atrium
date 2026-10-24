@@ -1,0 +1,58 @@
+{
+  "metric": "Aggregate descendant-process RSS in MiB. Shared memory can be counted more than once. This is not physical footprint.",
+  "workload": {
+    "pages": 10,
+    "distinct_sites": true,
+    "page_content": "Local deterministic page, 12 MiB touched buffer, button, empty textarea",
+    "extensions": 0,
+    "signed_in_accounts": 0,
+    "warmup_seconds": 50,
+    "samples": 6,
+    "sample_interval_seconds": 3
+  },
+  "baseline_browser": "Chrome/154.0.8037.100",
+  "cef_version": "156.0.8",
+  "cef_live_views": 7,
+  "cef_tab_budget": 6,
+  "browsers": {
+    "Aside": {
+      "median_mib": 2843.91,
+      "samples_mib": [
+        2926.2,
+        2940.95,
+        2848.05,
+        2839.77,
+        2832.78,
+        2505.25
+      ],
+      "process_counts": [
+        27,
+        28,
+        27,
+        27,
+        26,
+        26
+      ]
+    },
+    "CEF build": {
+      "median_mib": 1135.04,
+      "samples_mib": [
+        1154.3,
+        1147.86,
+        1113.28,
+        1124.41,
+        1145.66,
+        1098.89
+      ],
+      "process_counts": [
+        12,
+        12,
+        12,
+        12,
+        12,
+        12
+      ]
+    }
+  },
+  "rss_reduction_percent": 60.1
+}

@@ -1,79 +1,72 @@
 # atrium-rs
 
-A native macOS AI browser written in Rust. It started as a reverse-engineering
-of [Aside](https://aside.com) and borrows ideas from Arc, Zen, Dia, Comet and
-Safari 26. The built-in assistant runs on **opencode** through its server API
-(`opencode serve`), so it uses whatever models you have configured there,
-including the free OpenCode Zen models.
+A macOS browser written in Rust, using Chromium Embedded Framework (CEF) for
+websites and a local OpenCode server for the assistant. Chromium is the default
+engine. The original shell is retained; this work focuses on browser infrastructure.
 
-## Features
+## Build and run
 
-- **Native shell:** a real window with WKWebView tabs. The sidebar and
-  assistant sit on macOS 26 Liquid Glass (`NSGlassEffectView`) over a vibrant
-  window background. The app uses the system font and your system accent colour.
-- **Sidebar (Arc):** back/forward/reload and the address pill, favorite tiles,
-  vertical tabs, and **Spaces** at the bottom (⌃← / ⌃→).
-- **Command bar (Arc), ⌘T / ⌘K / ⌘L:** search, enter a URL, switch tabs, search
-  history and chats, run actions or ask the assistant. It floats over a frozen,
-  dimmed snapshot of the page.
-- **Split View (Zen/Arc), ⇧⌘= or ⌥-click a tab:** two tabs side by side.
-- **Glance (Zen) / Peek (Arc):** ⌥-click any link to preview it in a floating
-  card, then open it as a tab or in a split. ⌘-click opens a background tab.
-- **Compact Mode (Zen), ⇧⌘S:** hides the sidebar until you hover the left edge.
-- **Start page (Safari):** an address field with a Search/Ask toggle (Tab),
-  Favorites, Frequently Visited and Recent Chats.
-- **Assistant (Comet sidecar / Dia), ⌘E:**
-  - Docks beside the page or opens as a full page.
-  - It always sees the current tab. `@` adds other tabs as context, and `/`
-    offers shortcuts (summarize, compare, extract, translate, research, reply).
-  - While it drives the page, the page gets an accent outline and the element
-    it clicks or types into is highlighted (Atlas-style).
-  - Chats run in parallel as opencode sessions (Opera Neon-style tasks).
+Requires macOS, Rust, Xcode command-line tools, CMake, and Ninja. The first build
+downloads the pinned CEF runtime, so allow time and disk space. This development
+build has been exercised on Apple Silicon.
 
-## How it works
+```sh
+# If Ninja is not already installed:
+python3 -m pip install --target target/build-tools ninja
 
-```
- ┌──────────────────────── atrium (one process) ────────────────────────────┐
- │  tao window + muda menus                                                │
- │   ├─ NSGlassEffectView panes (positioned from the shell's layout)        │
- │   ├─ shell WKWebView (transparent): sidebar, start page, command bar,   │
- │   │    assistant, all served from 127.0.0.1:7777/shell                  │
- │   └─ one WKWebView per tab (+ Glance), laid over the shell's panes      │
- │  axum server :7777 ── /api/chat, /api/events (SSE), /api/tool ...       │
- │  opencode client ── prompt_async, /event, POST /mcp ─┐                  │
- └──────────────────────────────────────────────────────┼──────────────────┘
-        opencode serve :4097 ── spawns `atrium mcp` ◄─────┘
-        (stdio MCP bridge → /api/tool → browser tools on the active tab)
+./tools/build-chromium.sh --release
+./target/bundle/atrium.app/Contents/MacOS/atrium
 ```
 
-The browser tools follow Aside's agent design (reverse-engineered from Aside
-1.0.1022 / agent 1.26.1024):
+Run the **bundled executable**, which includes Chromium's framework and sandboxed
+helper applications. Running `target/release/atrium` directly cannot find that
+runtime. The script stages and verifies an ad hoc signed app before replacing
+`target/bundle/atrium.app`. This is not a notarized public release.
 
-- **`snapshot`** produces a compact accessibility-style list of interactive
-  elements with refs (`e12`).
-- **Actions:** `click`, `type`, `select_option`, `press_key` and `scroll` target
-  those refs.
-- **Tabs and navigation:** `navigate`, `open_tab`, `switch_tab`, `close_tab`,
-  `tabs`.
-- **Reading:** `read_page`, `screenshot`, `evaluate`, `wait`.
+For an isolated profile and an existing OpenCode server:
 
-## Usage
-
-Requires macOS (26 for Liquid Glass; older versions fall back to vibrancy) and
-[opencode](https://opencode.ai) with at least one provider.
-
-```bash
-cargo build --release
-./target/release/atrium
+```sh
+./target/bundle/atrium.app/Contents/MacOS/atrium \
+  --data-dir /tmp/atrium-test run --port 7782 \
+  --opencode-url http://127.0.0.1:4097
 ```
 
-Ask from the terminal while it runs:
+Without an explicit server, the app reuses the saved endpoint or tries to start
+`opencode serve` locally. Browsing opens independently of the assistant. OpenCode
+must have a provider configured to answer prompts. Default browser data is stored
+in `~/.atrium-rs`; Chromium cookies and storage live under `chromium/profile`.
+Do not run two instances against the same profile.
 
-```bash
-./target/release/atrium ask --model opencode/big-pickle "summarize this page"
+Load an unpacked Chromium extension by adding `--extension /absolute/path/to/extension`
+to `run`. A synthetic Manifest V3 content script and `chrome.storage` have been
+verified. Chrome Web Store installation, extension management, and compatibility
+with arbitrary extensions are unfinished.
+
+## Infrastructure
+
+- Sandboxed CEF subprocesses and a persistent Chromium profile.
+- Saved tab metadata with lazy restoration: only the selected page loads at startup.
+- Background tab eviction, with a six-page target and a five-minute idle timeout.
+  Active/split pages, drafts, media checks, downloads, capture, and agent work can
+  prevent eviction. Selecting an evicted tab reloads it.
+- Limits background assistant reads to three concurrent operations, with page cleanup on cancellation.
+- Browser automation through CEF's DevTools protocol: navigation, page reading,
+  element actions, JavaScript evaluation, and screenshots.
+- Loopback API with Host/Origin checks; shell evaluation is disabled in release builds.
+- Backend APIs for explicit Chrome bookmark/history import, extension inventory,
+  and OpenCode connection. These have no new onboarding UI.
+
+See [Chromium implementation and limitations](docs/chromium.md) for details,
+verification commands, and the RAM benchmark methodology. This remains a
+prototype: engine replacement and lifecycle coverage do not complete a shipping
+browser's security, compatibility, and update responsibilities.
+
+While the app is running, the terminal client can use its assistant:
+
+```sh
+./target/bundle/atrium.app/Contents/MacOS/atrium ask "summarize this page"
 ```
 
-Options: `--port` (UI/API, default 7777), `--opencode-url` (use an existing
-server), `--opencode-port` (4097). Data lives in `~/.atrium-rs`.
-`POST /api/debug/shell` runs JS in the UI, for development; it listens on
-127.0.0.1 only.
+The previous WKWebView backend remains available for development with
+`cargo run --no-default-features --features webkit --bin atrium`; it is not the
+default build and does not provide Chromium extensions.
