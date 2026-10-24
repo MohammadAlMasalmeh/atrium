@@ -145,6 +145,13 @@ enum Event {
     Capture(u64, bool),
     Download(u64, u32, bool),
     Popup(String),
+    PopupTab {
+        id: u64,
+        opener: Option<u64>,
+        url: String,
+        foreground: bool,
+    },
+    PopupView(BrowserView),
     Command(Json),
     Quit,
     DevResult(i32, bool, Json),
@@ -167,6 +174,10 @@ struct Tab {
     suspended: bool,
     suspending: bool,
     crashed: bool,
+    /// The tab that opened this one as a `window.open` popup, while both exist.
+    opener: Option<u64>,
+    /// A popup whose BrowserView Chromium is still creating; no view must be made for it.
+    opening: bool,
     downloads: std::collections::HashSet<u32>,
 }
 impl Tab {
@@ -189,6 +200,8 @@ impl Tab {
             suspended: false,
             suspending: false,
             crashed: false,
+            opener: None,
+            opening: false,
             downloads: Default::default(),
         }
     }
@@ -234,6 +247,7 @@ struct Manager {
     next_id: u64,
     next_call: i32,
     pending: HashMap<i32, (Instant, u64, Pending)>,
+    popup_views: Vec<BrowserView>,
     closing: Arc<AtomicBool>,
 }
 impl Manager {
@@ -279,11 +293,11 @@ impl Manager {
     fn create_view(&mut self, id: u64) {
         let Some(window) = &self.window else { return };
         let Some(tab) = self.tab(id) else { return };
-        if tab.view.is_some() || tab.url == "about:blank" {
+        if tab.view.is_some() || tab.opening || tab.url == "about:blank" {
             return;
         }
-        let mut client = HostClient::new(self.bridge.clone(), id, self.base.clone());
-        let mut delegate = HostView::new();
+        let mut client = HostClient::new(self.bridge.clone(), id, self.base.clone(), Default::default());
+        let mut delegate = HostView::new(self.bridge.clone());
         let mut context: Option<RequestContext> = None;
         let view = browser_view_create(
             Some(&mut client),
@@ -360,13 +374,20 @@ impl Manager {
         }
     }
     fn remove_tab(&mut self, id: u64) {
+        let opener = self.tab(id).and_then(|t| t.opener);
         self.tabs.retain(|t| t.id != id);
+        for t in &mut self.tabs {
+            if t.opener == Some(id) {
+                t.opener = None;
+            }
+        }
         if self.active == Some(id) {
-            self.active = self
-                .tabs
-                .iter()
-                .find(|t| t.id != SHELL && t.id != GLANCE && !t.scratch)
-                .map(|t| t.id);
+            self.active = opener.filter(|o| self.tab(*o).is_some()).or_else(|| {
+                self.tabs
+                    .iter()
+                    .find(|t| t.id != SHELL && t.id != GLANCE && !t.scratch)
+                    .map(|t| t.id)
+            });
         }
         if self.split == Some(id) {
             self.split = None;
@@ -517,7 +538,7 @@ impl Manager {
         self.cdp(
             tab,
             "Runtime.evaluate",
-            json!({ "expression": expression, "awaitPromise": true, "returnByValue": true }),
+            json!({ "expression": expression, "awaitPromise": true, "returnByValue": true, "userGesture": true }),
             Pending::Eval(reply),
         );
     }
@@ -872,6 +893,7 @@ impl Manager {
                     t.browser = Some(browser);
                     t.registration = reg;
                 }
+                self.attach_popups();
                 self.layout();
             }
             Event::Detach(id) => {
@@ -975,6 +997,30 @@ impl Manager {
             Event::Popup(url) => {
                 self.new_tab(Some(url), true, false);
             }
+            Event::PopupTab {
+                id,
+                opener,
+                url,
+                foreground,
+            } => {
+                let url = if url.is_empty() { "about:blank".into() } else { url };
+                self.tabs.push(Tab {
+                    opener,
+                    opening: true,
+                    loading: true,
+                    ..Tab::new(id, url, String::new())
+                });
+                if foreground {
+                    self.active = Some(id);
+                }
+                self.session_dirty = true;
+                self.layout();
+                self.push(foreground);
+            }
+            Event::PopupView(view) => {
+                self.popup_views.push(view);
+                self.attach_popups();
+            }
             Event::DevResult(id, success, data) => self.finish(id, success, data),
             Event::Quit => {
                 self.save_session();
@@ -1017,7 +1063,11 @@ fn on_before_command_line_processing(&self, process_type:Option<&CefString>,comm
 }
 fn browser_process_handler(&self)->Option<BrowserProcessHandler>{Some(HostProcess::new(self.bridge.clone()))}} }
 wrap_browser_process_handler! {struct HostProcess {bridge:Bridge} impl BrowserProcessHandler {fn on_context_initialized(&self){self.bridge.send(Event::Init);}}}
-wrap_browser_view_delegate! {struct HostView {} impl ViewDelegate {} impl BrowserViewDelegate {fn browser_runtime_style(&self)->RuntimeStyle{RuntimeStyle::ALLOY} fn chrome_toolbar_type(&self, _unused0:Option<&mut BrowserView>)->ChromeToolbarType{ChromeToolbarType::NONE}}}
+wrap_browser_view_delegate! {struct HostView {bridge:Bridge} impl ViewDelegate {} impl BrowserViewDelegate {fn browser_runtime_style(&self)->RuntimeStyle{RuntimeStyle::ALLOY} fn chrome_toolbar_type(&self, _unused0:Option<&mut BrowserView>)->ChromeToolbarType{ChromeToolbarType::NONE}
+    fn on_popup_browser_view_created(&self, _unused1:Option<&mut BrowserView>, popup:Option<&mut BrowserView>, is_devtools:i32)->i32{
+        match popup.filter(|_|is_devtools==0){Some(view)=>{self.bridge.send(Event::PopupView(view.clone()));1} None=>0}
+    }
+}}
 wrap_window_delegate! {
     struct HostWindow {bridge:Bridge,closing:Arc<AtomicBool>}
     impl ViewDelegate {fn preferred_size(&self, _unused1:Option<&mut View>)->Size{Size{width:1280,height:820}} fn minimum_size(&self, _unused2:Option<&mut View>)->Size{Size{width:760,height:480}}
@@ -1053,19 +1103,35 @@ wrap_resource_request_handler! {struct ShellResources {base:String} impl Resourc
         ReturnValue::CONTINUE
     }
 }}
-wrap_client! {struct HostClient {bridge:Bridge,id:u64,base:String} impl Client {
+type Popups = Arc<Mutex<HashMap<i32, u64>>>;
+static NEXT_POPUP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1 << 32);
+wrap_client! {struct HostClient {bridge:Bridge,id:u64,base:String,popups:Popups} impl Client {
     fn request_handler(&self)->Option<RequestHandler>{Some(HostRequests::new(self.bridge.clone(),self.id,self.base.clone()))}
-    fn life_span_handler(&self)->Option<LifeSpanHandler>{Some(HostLife::new(self.bridge.clone(),self.id))}
+    fn life_span_handler(&self)->Option<LifeSpanHandler>{Some(HostLife::new(self.bridge.clone(),self.id,self.base.clone(),self.popups.clone()))}
     fn display_handler(&self)->Option<DisplayHandler>{Some(HostDisplay::new(self.bridge.clone(),self.id))}
     fn load_handler(&self)->Option<LoadHandler>{Some(HostLoad::new(self.bridge.clone(),self.id))}
     fn download_handler(&self)->Option<DownloadHandler>{Some(HostDownload::new(self.bridge.clone(),self.id))}
     fn keyboard_handler(&self)->Option<KeyboardHandler>{Some(HostKeyboard::new(self.bridge.clone()))}
 }}
-wrap_life_span_handler! {struct HostLife {bridge:Bridge,id:u64} impl LifeSpanHandler {
+wrap_life_span_handler! {struct HostLife {bridge:Bridge,id:u64,base:String,popups:Popups} impl LifeSpanHandler {
     fn on_after_created(&self,browser:Option<&mut Browser>){if let Some(b)=browser{self.bridge.send(Event::Created(self.id,b.clone()));}}
     fn do_close(&self,_browser:Option<&mut Browser>)->i32{self.bridge.send(Event::Detach(self.id));1}
     fn on_before_close(&self, _unused6:Option<&mut Browser>){self.bridge.send(Event::Closed(self.id));}
-    fn on_before_popup(&self, _unused7:Option<&mut Browser>, _unused8:Option<&mut Frame>, _unused9:i32,url:Option<&CefString>, _unused10:Option<&CefString>, _unused11:WindowOpenDisposition, _unused12:i32, _unused13:Option<&PopupFeatures>, _unused14:Option<&mut WindowInfo>, _unused15:Option<&mut Option<Client>>, _unused16:Option<&mut BrowserSettings>, _unused17:Option<&mut Option<DictionaryValue>>, _unused18:Option<&mut i32>)->i32{if let Some(u)=url{self.bridge.send(Event::Popup(u.to_string()));}1}
+    // Website popups keep their opener so OAuth-style flows can message it and close.
+    // The shell and Glance must never become a website's window.opener.
+    fn on_before_popup(&self, _unused7:Option<&mut Browser>, _unused8:Option<&mut Frame>, popup_id:i32,url:Option<&CefString>, _unused10:Option<&CefString>, disposition:WindowOpenDisposition, _unused12:i32, _unused13:Option<&PopupFeatures>, _unused14:Option<&mut WindowInfo>, client:Option<&mut Option<Client>>, _unused16:Option<&mut BrowserSettings>, _unused17:Option<&mut Option<DictionaryValue>>, _unused18:Option<&mut i32>)->i32{
+        let url=url.map(ToString::to_string).unwrap_or_default();
+        let Some(client)=client.filter(|_|self.id!=SHELL&&self.id!=GLANCE) else {
+            if !url.is_empty(){self.bridge.send(Event::Popup(url));}
+            return 1;
+        };
+        let id=NEXT_POPUP.fetch_add(1,Ordering::Relaxed);
+        self.popups.lock().unwrap().insert(popup_id,id);
+        self.bridge.send(Event::PopupTab{id,opener:(disposition==WindowOpenDisposition::NEW_POPUP).then_some(self.id),url,foreground:disposition!=WindowOpenDisposition::NEW_BACKGROUND_TAB});
+        *client=Some(HostClient::new(self.bridge.clone(),id,self.base.clone(),Default::default()));
+        0
+    }
+    fn on_before_popup_aborted(&self, _unused19:Option<&mut Browser>, popup_id:i32){if let Some(id)=self.popups.lock().unwrap().remove(&popup_id){self.bridge.send(Event::Closed(id));}}
 }}
 wrap_display_handler! {struct HostDisplay {bridge:Bridge,id:u64} impl DisplayHandler {
     fn on_title_change(&self, _unused19:Option<&mut Browser>,title:Option<&CefString>){self.bridge.send(Event::Title(self.id,title.map(ToString::to_string).unwrap_or_default()));}
@@ -1128,6 +1194,7 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
             next_id: 0,
             next_call: 0,
             pending: HashMap::new(),
+            popup_views: Vec::new(),
             closing,
         })
     });
@@ -1171,8 +1238,39 @@ wrap_download_handler! {struct HostDownload {bridge:Bridge,id:u64} impl Download
 }}
 wrap_task! {struct Maintenance {bridge:Bridge} impl Task {fn execute(&self){self.bridge.send(Event::Maintenance);if self.bridge.manager.upgrade().is_some(){let mut next=Self::new(self.bridge.clone());post_delayed_task(ThreadId::UI,Some(&mut next),10000);}}}}
 impl Manager {
+    /// Chromium may report a popup's BrowserView before or after its browser; pair them
+    /// once both are known.
+    fn attach_popups(&mut self) {
+        for view in std::mem::take(&mut self.popup_views) {
+            let id = view.browser().and_then(|b| {
+                self.tabs
+                    .iter()
+                    .filter(|t| t.opening)
+                    .find(|t| t.browser.as_ref().is_some_and(|t| t.identifier() == b.identifier()))
+                    .map(|t| t.id)
+            });
+            match (id, &self.window) {
+                (Some(id), Some(window)) => {
+                    window.add_child_view(Some(&mut View::from(&view)));
+                    if let Some(t) = self.tab_mut(id) {
+                        t.view = Some(view);
+                        t.opening = false;
+                    }
+                    self.layout();
+                    self.push(false);
+                }
+                _ => self.popup_views.push(view),
+            }
+        }
+    }
+    /// A live popup and its live opener protect each other, so `window.opener` keeps working.
+    fn linked(&self, id: u64) -> bool {
+        let live = |id: u64| self.tab(id).is_some_and(|t| t.browser.is_some());
+        self.tab(id).and_then(|t| t.opener).is_some_and(live)
+            || self.tabs.iter().any(|t| t.opener == Some(id) && live(t.id))
+    }
     fn can_suspend(&self, id: u64) -> bool {
-        self.tab(id).is_some_and(|t| {
+        !self.linked(id) && self.tab(id).is_some_and(|t| {
             t.view.is_some()
                 && !t.suspending
                 && !t.loading
@@ -1209,6 +1307,7 @@ impl Manager {
                 visible: Some(t.id) == self.active || Some(t.id) == self.split,
                 loading: t.loading,
                 protected: t.capture
+                    || self.linked(t.id)
                     || !t.downloads.is_empty()
                     || t.agent_until > now
                     || t.page_protected_until > now

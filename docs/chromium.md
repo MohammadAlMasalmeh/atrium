@@ -104,6 +104,24 @@ renderer crashes with other causes (out of memory, real faults) follow the same
 callback but were not separately reproduced. One renderer can host several
 same-site tabs, so a single crash can mark several tabs.
 
+### Popups and openers
+
+Website popups are created by Chromium with the opener's relationship intact
+and shown as tabs in the same window. `window.open` popups (CEF's `NEW_POPUP`
+disposition) record their opener: while both are live neither is evicted,
+and when the popup closes itself the opener becomes the active tab again.
+This is what OAuth and payment popups need: the popup can `postMessage` to
+`window.opener` and call `window.close()`. `target=_blank` links and
+`window.open` without popup features open ordinary foreground tabs (background
+for background dispositions); Chromium's default `noopener` for `_blank` still
+applies. Requested popup sizes are ignored. Popups requested by the shell or
+Glance are opened as plain new tabs without an opener, so websites never get a
+reference to the browser UI. Agent evaluation runs with a user gesture so agent
+clicks can open popups like real clicks. If an opener is evicted after its
+popup closes, or the app restarts, the relationship is gone. Checked with
+`tools/test_popups.py` against a local fixture pair; real identity providers
+(Google, GitHub, Apple) have not been tested.
+
 Session metadata is written with a temporary file and rename. Restart restores
 logical tabs and loads only the active page. Assistant scratch pages are omitted
 and bounded to three simultaneous pages, with cancellation cleanup.
@@ -135,6 +153,8 @@ python3 tools/smoke_chromium.py --api http://127.0.0.1:7791 \
 python3 tools/test_tab_lifecycle.py --api http://127.0.0.1:7791 \
   --data-dir /private/tmp/atrium-smoke --fixture http://127.0.0.1:7799
 python3 tools/test_crash_recovery.py --api http://127.0.0.1:7791 \
+  --data-dir /private/tmp/atrium-smoke --fixture http://127.0.0.1:7799
+python3 tools/test_popups.py --api http://127.0.0.1:7791 \
   --data-dir /private/tmp/atrium-smoke --fixture http://127.0.0.1:7799
 python3 tools/test_profile_persistence.py --port 7792 --fixture http://127.0.0.1:7799
 ```
@@ -270,7 +290,7 @@ Chrome Sync have not been validated or implemented here.
 - Signed/notarized releases, engine security updates, default-browser registration,
   and update/rollback infrastructure.
 - Extension permission management and tests against real required extensions.
-- A visible crashed-page state in the shell, complete popup/opener and OAuth behavior, permission
+- A visible crashed-page state in the shell, OAuth tests against real identity providers, permission
   prompts, downloads, printing, accessibility, and broader website compatibility.
 - Password management, passkeys, account migration, and local API isolation
   beyond the same-user token.
