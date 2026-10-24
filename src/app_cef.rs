@@ -1290,9 +1290,10 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
     );
     let _menu = mac::menu(bridge);
     run_message_loop();
+    // Chromium's teardown watchdog may terminate the process inside shutdown().
+    on_exit();
     drop(manager);
     shutdown();
-    on_exit();
     std::process::exit(0)
 }
 
