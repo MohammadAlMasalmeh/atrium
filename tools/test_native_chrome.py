@@ -231,6 +231,143 @@ def native_suite(app):
     check('window capture', capture)
 
 
+def sidebar_suite(app):
+    """The native sidebar list. Rows are addressed by index as currently drawn."""
+    def sidebar():
+        return app.api('/api/browser/memory')['native_sidebar']
+
+    def row(title=None, kind=None):
+        rows = sidebar()['rows']
+        return next(r for r in rows if (title is None or r['title'] == title) and (kind is None or r['kind'] == kind))
+
+    def act(action, r, **extra):
+        app.command(cmd='nativeSidebar', action=action, row=r, **extra)
+
+    def tab_ids(path):
+        return [t['id'] for t in app.tabs()['tabs'] if path in t['url']]
+
+    def open_page(name):
+        app.command(cmd='newTab', url=f'{FIXTURE}/page/{name}')
+        wait(f'{name} row', lambda: row(f'Fixture /page/{name}', 'Tab'))
+
+    def replaces_list():
+        # Shown once the shell's first layout report says where its list is.
+        s = wait('list placed', lambda: (s := sidebar())['visible'] and s)
+        kinds = [r['kind'] for r in s['rows']]
+        assert kinds[:3] == ['Favs', 'SpaceHeader', 'NewTab'] and 'ChatsHeader' in kinds, kinds
+        hidden = app.shell("return getComputedStyle(document.querySelector('.sb-scroll')).visibility")
+        assert hidden == 'hidden', hidden
+        return f"{len(kinds)} rows in a source-list table; shell list hidden"
+    check('native sidebar list replaces the shell list', replaces_list)
+
+    def tabs_listed():
+        for name in ('alpha', 'beta', 'gamma'):
+            open_page(name)
+        gamma = wait('gamma selected', lambda: (r := row('Fixture /page/gamma', 'Tab'))['selected'] and r)
+        assert not row('Fixture /page/alpha', 'Tab')['selected']
+        return f"tab rows with titles; active tab row {gamma['row']} selected"
+    check('tabs listed and the active one selected', tabs_listed)
+
+    def click_activates():
+        act('click', row('Fixture /page/alpha', 'Tab')['row'])
+        wait('alpha active', lambda: '/page/alpha' in app.active()['url'])
+        wait('alpha selected', lambda: row('Fixture /page/alpha', 'Tab')['selected'])
+        return 'click switches tabs and moves the selection'
+    check('clicking a row activates the tab', click_activates)
+
+    def option_click_splits():
+        act('click', row('Fixture /page/beta', 'Tab')['row'], split=True)
+        wait('split view', lambda: app.shell("return document.body.classList.contains('split')"))
+        wait('both selected', lambda: row('Fixture /page/beta', 'Tab')['selected'] and row('Fixture /page/alpha', 'Tab')['selected'])
+        app.command(cmd='split', id=None)
+        wait('split closed', lambda: not app.shell("return document.body.classList.contains('split')"))
+        return 'Option-click opens split view; both panes selected'
+    check('Option-click opens split view', option_click_splits)
+
+    def loading_row():
+        app.command(cmd='newTab', url=f'{FIXTURE}/slow/sidebar')
+        wait('spinner', lambda: any(r['spinning'] for r in sidebar()['rows'] if r['kind'] == 'Tab'), timeout=5)
+        wait('loaded', lambda: (r := row('Fixture /slow/sidebar', 'Tab')) and not r['spinning'], timeout=15)
+        return 'spinner replaces the favicon while loading'
+    check('loading indicator in the tab row', loading_row)
+
+    def middle_click_closes():
+        [gid] = tab_ids('/page/gamma')
+        act('middle', row('Fixture /page/gamma', 'Tab')['row'])
+        wait('gamma closed', lambda: gid not in [t['id'] for t in app.tabs()['tabs']])
+        wait('row gone', lambda: not any(r['title'] == 'Fixture /page/gamma' for r in sidebar()['rows']))
+        return 'middle click closes the tab'
+    check('middle-click closes a tab', middle_click_closes)
+
+    def drag_reorders():
+        alpha, beta = row('Fixture /page/alpha', 'Tab')['row'], row('Fixture /page/beta', 'Tab')['row']
+        assert alpha < beta, (alpha, beta)
+        act('drag', alpha, to=beta + 1)
+        wait('alpha below beta', lambda: row('Fixture /page/alpha', 'Tab')['row'] > row('Fixture /page/beta', 'Tab')['row'])
+        order = [t['url'].rsplit('/', 1)[-1] for t in app.tabs()['tabs'] if '/page/' in t['url']]
+        assert order.index('alpha') > order.index('beta'), order
+        return f'tab order is now {order}'
+    check('drag to reorder tabs', drag_reorders)
+
+    def menu_duplicate_and_close():
+        act('menu', row('Fixture /page/beta', 'Tab')['row'], item='Duplicate')
+        wait('duplicate', lambda: len(tab_ids('/page/beta')) == 2)
+        copy = max(tab_ids('/page/beta'))  # opened last, so it is the lower row
+        rows = wait('two beta rows', lambda: len(rs := [r for r in sidebar()['rows']
+                                                         if r['kind'] == 'Tab' and r['title'] == 'Fixture /page/beta']) == 2 and rs)
+        act('menu', rows[1]['row'], item='Close Tab')
+        wait('copy closed', lambda: copy not in tab_ids('/page/beta'))
+        return 'Duplicate and Close Tab from the context menu'
+    check('tab context menu', menu_duplicate_and_close)
+
+    def pin_by_drag():
+        url = next(t['url'] for t in app.tabs()['tabs'] if '/page/beta' in t['url'])
+        pinned = f"return Object.values(JSON.parse(localStorage.getItem('atrium.pinned') || '{{}}')).flat().some((p) => p.url === {json.dumps(url)})"
+        act('drag', row('Fixture /page/beta', 'Tab')['row'], to=row(kind='SpaceHeader')['row'] + 1)
+        wait('pinned', lambda: app.shell(pinned) is True)
+        pin = wait('pin row', lambda: row(kind='Pin'))
+        act('menu', pin['row'], item='Unpin')
+        wait('unpinned', lambda: app.shell(pinned) is False)
+        wait('back in tabs', lambda: row('Fixture /page/beta', 'Tab'))
+        return f"dragging a tab above New Tab pins it (row title {pin['title']!r}); Unpin from its menu"
+    check('pin by dragging, unpin from the menu', pin_by_drag)
+
+    def move_to_space():
+        alpha = row('Fixture /page/alpha', 'Tab')
+        assert not alpha['selected'], 'alpha should not be active here'
+        act('menu', alpha['row'], item='Move to Space/Work')
+        wait('alpha left this space', lambda: not any(r['title'] == 'Fixture /page/alpha' for r in sidebar()['rows']))
+        assert row(kind='SpaceHeader')['title'] == 'Personal'
+        return 'Move to Space ▸ Work removes it from this space’s list'
+    check('move a tab to another space', move_to_space)
+
+    def rename_space():
+        act('rename', 0, name='Research')
+        wait('header renamed', lambda: row(kind='SpaceHeader')['title'] == 'Research')
+        saved = app.shell("return JSON.parse(localStorage.getItem('atrium.spaces3')).map((s) => s.name).join()")
+        assert 'Research' in saved, saved
+        return f'renamed in place; saved spaces: {saved}'
+    check('rename the space in place', rename_space)
+
+    def new_tab_row():
+        act('click', row(kind='NewTab')['row'])
+        wait('start page', lambda: not app.chrome()['web'])
+        wait('New Tab selected', lambda: row(kind='NewTab')['selected'])
+        return 'New Tab row opens the start page and stays selected'
+    check('New Tab row', new_tab_row)
+
+    def sleeping_dimmed():
+        for i in range(9):
+            app.command(cmd='newTab', url=f'{FIXTURE}/page/sleep-{i}', background=True)
+        state = wait('a tab to sleep', lambda: (s := app.api('/api/browser/memory')) and any(t['suspended'] for t in s['tabs']) and s, timeout=60)
+        asleep = next(t['id'] for t in state['tabs'] if t['suspended'])
+        url = next(t['url'] for t in app.tabs()['tabs'] if t['id'] == asleep)
+        title = 'Fixture ' + url.split(str(args.fixture_port), 1)[1]
+        r = wait('dimmed row', lambda: (r := row(title, 'Tab')) and r['dim'] and r)
+        return f'sleeping tab row {r["row"]} drawn in secondary colour'
+    check('sleeping tabs are dimmed', sleeping_dimmed)
+
+
 def default_suite(app):
     def web_toolbar():
         assert app.chrome() is None, app.chrome()
@@ -258,7 +395,9 @@ def screenshot(appearance):
 fixture = subprocess.Popen([sys.executable, str(ROOT / 'tools/fixture_server.py'), '--port', str(args.fixture_port)],
                            stdout=subprocess.DEVNULL)
 try:
-    for name, env, suite in [('native', {'ATRIUM_NATIVE_CHROME': '1'}, native_suite), ('default', {}, default_suite)]:
+    for name, env, suite in [('native', {'ATRIUM_NATIVE_CHROME': '1'}, native_suite),
+                             ('sidebar', {'ATRIUM_NATIVE_CHROME': '1'}, sidebar_suite),
+                             ('default', {}, default_suite)]:
         app = Instance(name, **env)
         try:
             suite(app)

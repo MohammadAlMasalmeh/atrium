@@ -43,17 +43,35 @@ the default until the native version covers everything. Done so far:
   a new tab from the start page or chat (as the shell's command bar does), and
   Escape cancels. Copy Link and Pin buttons sit inside it on web pages and call
   the same shell commands as ⇧⌘C and ⌘D.
-- The shell hides only the controls it no longer draws, keeping its layout,
-  and reports whether its sidebar is shown and whether a full overlay (command
-  bar, onboarding) is open. The native controls hide in both cases, because
-  they sit above the shell.
+- Sidebar list: a source-list `NSTableView` in a scroll view, with Favorites
+  as push-button tiles, the space name, pinned pages, New Tab, the space's tabs
+  and recent chats. Rows show favicons (fetched on a background thread), a
+  spinner while loading, dimmed text for sleeping tabs and unopened pins, and
+  a close button on hover and on the active row. The system selection shows
+  the active tab (both tabs in split view). Click activates, Option-click opens
+  split view, middle click closes, drag reorders tabs or pins, and dragging a
+  tab above New Tab pins it. Context menus: Open in Split View, Duplicate, Copy
+  Link, Pin Tab, Move to Space, Close Tab and Close Other Tabs on tabs; Open,
+  Copy Link and Unpin on pins; Remove from Favorites on favorites; Rename
+  Space… (edits the name in place) on the space header.
+- The shell still owns spaces, pins and favorites. In native mode it sends
+  a sidebar model after each render (`sidebar` IPC) and runs the actions the
+  list sends back through `atriumShell.sidebar`. Tab order belongs to the
+  manager (`moveTab`), and is saved with the session.
+- The shell hides only what it no longer draws, keeping its layout, and
+  reports where its sidebar list is, whether the sidebar is shown and whether
+  a full overlay (command bar, onboarding) is open. The native views hide in
+  both cases, because they sit above the shell.
 
-Still web-drawn: the tab list, spaces, pinned tabs and favorites, the start
-page search box, and (by design) chat and onboarding. ⌘L still opens the
-command bar. Not yet verified with real input: clicking, typing with an input
-method, dragging the window from the toolbar's empty area, and VoiceOver.
-`tools/test_native_chrome.py` drives the real controls through a test-only hook
-(`nativeChrome` command, background mode only) and checks the results.
+Still web-drawn: the space switcher and buttons at the bottom of the sidebar,
+the start page search box, and (by design) chat and onboarding. ⌘L still opens
+the command bar. Not yet verified with real input: clicking, typing with an
+input method, real drag sessions (the test calls the same drop logic AppKit
+calls), hover, dragging the window from the toolbar's empty area, and
+VoiceOver. Chat rows and the agent-working badge need an OpenCode server and
+aren't covered by the test. `tools/test_native_chrome.py` drives the real
+controls through test-only hooks (`nativeChrome` and `nativeSidebar`
+commands, background mode only) and checks the results.
 
 ### Layout stability
 

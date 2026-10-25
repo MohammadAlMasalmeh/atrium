@@ -309,13 +309,17 @@ pub(super) fn update(page: Page) {
 }
 
 pub(super) fn shell_state(s: ShellState) {
-    with(|c| {
+    let visible = with(|c| {
         c.sidebar = s.sidebar.unwrap_or(c.sidebar);
         c.overlay = s.overlay.unwrap_or(c.overlay);
         c.web = s.web.unwrap_or(c.web);
         c.root.setHidden(!c.sidebar || c.overlay);
         show_address(c);
+        !c.root.isHidden()
     });
+    if let Some(visible) = visible {
+        super::sidebar::set_visible(visible);
+    }
 }
 
 /// Whether Enter in the address field should load in the current tab rather than a new one.

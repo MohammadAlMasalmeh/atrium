@@ -18,6 +18,8 @@ mod chrome;
 mod mac;
 #[path = "chromium/native.rs"]
 mod native;
+#[path = "chromium/sidebar.rs"]
+mod sidebar;
 #[path = "chromium/url.rs"]
 mod url;
 pub use url::normalize_url;
@@ -147,6 +149,8 @@ enum Event {
     Download(u64, u32, bool),
     Popup(String),
     Command(Json),
+    /// A favicon the native sidebar asked for: its URL and the image bytes.
+    Icon(String, Vec<u8>),
     Quit,
     DevResult(i32, bool, Json),
     Maintenance,
@@ -589,7 +593,7 @@ impl Manager {
             Op::InspectGoogle { tab, reply } => self.evaluate(tab, "return location.hostname === 'mail.google.com' && location.pathname.startsWith('/mail/u/') && !!document.querySelector('[gh=cm],[role=navigation]')".into(), reply),
             Op::Screenshot { tab, reply } => { if let Some(tab) = tab.or(self.active) { self.cdp(tab, "Page.captureScreenshot", json!({ "format": "jpeg", "quality": 80 }), Pending::Screenshot(reply)); } else { let _ = reply.send(Err("No page is open".into())); } }
             Op::Shell { body, reply } => { self.command(body); let _ = reply.send(()); }
-            Op::Memory(reply) => { let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": native::has_shell(), "native_chrome": chrome::describe(), "live_renderers": self.tabs.iter().filter(|t|t.live).count(), "tabs": self.tabs.iter().map(|t| json!({"id":t.id,"live":t.live,"suspended":t.suspended,"view":t.browser.as_ref().filter(|_| !t.detached).and_then(|b| b.host()).and_then(|h| native::frame_of(h.window_handle()))})).collect::<Vec<_>>() })); }
+            Op::Memory(reply) => { let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": native::has_shell(), "native_chrome": chrome::describe(), "native_sidebar": sidebar::describe(), "live_renderers": self.tabs.iter().filter(|t|t.live).count(), "tabs": self.tabs.iter().map(|t| json!({"id":t.id,"live":t.live,"suspended":t.suspended,"view":t.browser.as_ref().filter(|_| !t.detached).and_then(|b| b.host()).and_then(|h| native::frame_of(h.window_handle()))})).collect::<Vec<_>>() })); }
             Op::WindowShot(reply) => { let _ = reply.send(native::window_png()); }
         }
     }
@@ -643,6 +647,9 @@ impl Manager {
                 }
                 self.split_rect = rect(&m["split"]);
                 self.glance_rect = rect(&m["glance"]);
+                if let Some(r) = rect(&m["list"]) {
+                    sidebar::place(r.x as f64, r.y as f64, r.width as f64, r.height as f64);
+                }
                 chrome::shell_state(chrome::ShellState { sidebar: m["sidebar"].as_bool(), ..Default::default() });
                 self.layout();
             }
@@ -665,6 +672,30 @@ impl Manager {
                     } else {
                         self.new_tab(Some(text.into()), true, false);
                     }
+                }
+            }
+            "sidebar" => match serde_json::from_value(m["model"].clone()) {
+                Ok(model) => sidebar::set_model(model),
+                Err(e) => eprintln!("[native-chrome] sidebar model: {e}"),
+            },
+            "sidebarAction" => self.shell(&format!("window.atriumShell?.sidebar({})", m["action"])),
+            "moveTab" => {
+                let id = m["id"].as_u64().unwrap_or(0);
+                if let Some(pos) = self.tabs.iter().position(|t| t.id == id) {
+                    let tab = self.tabs.remove(pos);
+                    let at = m["before"]
+                        .as_u64()
+                        .and_then(|b| self.tabs.iter().position(|t| t.id == b))
+                        .unwrap_or(self.tabs.len());
+                    self.tabs.insert(at, tab);
+                    self.session_dirty = true;
+                    self.push(false);
+                }
+            }
+            "nativeSidebar" if native::background() => {
+                let result = sidebar::debug_action(m["action"].as_str().unwrap_or(""), m["row"].as_i64().unwrap_or(-1), &m);
+                if let Err(e) = result {
+                    eprintln!("[native-chrome] {e}");
                 }
             }
             "nativeChrome" if native::background() => {
@@ -843,6 +874,7 @@ impl Manager {
             Event::Resize => self.layout(),
             Event::Operation(op) => self.operation(op),
             Event::Command(m) => self.command(m),
+            Event::Icon(url, bytes) => sidebar::icon_loaded(&url, &bytes),
             Event::Title(id, title) => {
                 if let Some(t) = self.tab_mut(id) {
                     t.title = title;
