@@ -67,9 +67,10 @@ frontmost application never changed to the test instance, the window reported
 `alpha 0` and not on screen, and screenshots contained the rendered fixture.
 
 `tools/build-chromium.sh --release` creates a complete development app with the
-CEF framework, sandbox helper executables, Chromium credits, and verified ad hoc
-signatures. CEF updates require changing the pin, rebuilding, and re-running the
-integration checks. There is no automatic updater or notarized distribution yet.
+CEF framework, sandbox helper executables, Chromium credits, and verified
+signatures (see [Releases, signing, and updates](#releases-signing-and-updates)).
+CEF updates require changing the pin, rebuilding, and re-running the
+integration checks.
 
 ## Memory behavior
 
@@ -247,10 +248,150 @@ extension updater, or promise of arbitrary extension compatibility. Gmail is a
 normal website in the Chromium profile; actual Google account sign-in and
 Chrome Sync have not been validated or implemented here.
 
+## Releases, signing, and updates
+
+The release procedure is in [RELEASING.md](../RELEASING.md).
+
+### Signing
+
+`tools/sign-app.sh APP` signs inside-out without `--deep`: the CEF libraries,
+the framework, each helper with its own entitlements, then the app, and finally
+runs `codesign --verify --deep --strict`. The bundler calls it, so every build is
+signed this way. Helpers now get their own bundle identifiers
+(`dev.aside-rs.browser.helper`, `.helper.renderer`, `.helper.gpu`,
+`.helper.plugin`, `.helper.alerts`); the CEF bundler had copied the app's.
+
+| Bundle | Entitlements (`tools/entitlements/`) |
+| --- | --- |
+| Aside.app | camera, audio input |
+| Helper (Renderer) | allow-jit, allow-unsigned-executable-memory |
+| Helper (GPU) | allow-jit |
+| Helper (Plugin) | allow-unsigned-executable-memory, disable-library-validation |
+| Helper (utility processes) | allow-jit, camera, audio input |
+| Helper (Alerts) | none |
+
+These follow Chromium's macOS helper entitlement split. Utility processes run
+the audio and video capture services and V8 for proxy scripts, hence their set.
+
+- `ASIDE_SIGN_IDENTITY` set (a Developer ID Application identity): hardened
+  runtime and a secure timestamp, as notarization requires.
+  `ASIDE_SIGN_KEYCHAIN` selects a keychain. No certificate or keychain is created
+  by these scripts. **Not tested here**: no Developer ID identity is available.
+- Unset: ad hoc, without the hardened runtime. Ad hoc code has no Team ID, so
+  library validation under the hardened runtime rejects the ad hoc CEF framework
+  (verified: `dlopen` fails with "different Team IDs"). `ASIDE_HARDENED_RUNTIME=1`
+  signs ad hoc with the runtime plus `disable-library-validation` for local
+  experiments only; it is never applied with a real identity.
+
+Verified on the ad hoc build: `codesign --verify --deep --strict` passes, and
+`codesign -d --entitlements -` shows the table above for each bundle.
+
+### Packaging and notarization
+
+`tools/release.sh` builds (skip with `ASIDE_SKIP_BUILD=1`), signs a copy as
+`dist/stage/Aside.app`, writes `Aside-<version>-macos-<arch>.zip` (`ditto`) and,
+when `ASIDE_UPDATE_SECRET_KEY`/`_B64` is set, its `.sig`, builds a UDZO DMG with
+an Applications link, signs the DMG with a real identity, then mounts it with
+`hdiutil attach -nobrowse -noverify -noautoopen -readonly` at a private
+`/private/tmp` mount point, verifies the app inside, detaches, and writes
+`SHA256SUMS`. Notarization (`xcrun notarytool submit --wait`, then
+`stapler staple` for the app and later the DMG) runs only with a real identity
+and one complete credential set (keychain profile, API key, or Apple ID); it is
+skipped with a message otherwise. Verified: an ad hoc run produced the zip and
+DMG, mounted it invisibly, verified the signature, and left no mounts.
+Notarization itself is untested (no credentials).
+
+`.github/workflows/ci.yml` runs script checks, `cargo test`, the bundle build,
+and signature/entitlement checks on macOS for every push and pull request.
+`release.yml` runs on `v*` tags, imports the certificate into a temporary
+keychain when the secrets exist, runs `tools/release.sh`, and publishes a GitHub
+release. `actionlint` is not installed here; both files were checked with a
+YAML parse and a structural check (every job has `runs-on` and steps, each step
+exactly one of `run`/`uses`). Neither workflow has run on GitHub yet.
+
+### Auto-update
+
+`src/updater.rs` reads a GitHub "latest release" document from
+`ASIDE_UPDATE_FEED`, `"feed"` in `<data dir>/update.json`, or
+`https://api.github.com/repos/<repo>/releases/latest`, where `<repo>` is
+`"repo"` in `update.json` or `ASIDE_UPDATE_REPO` at build time (set by the
+release workflow). Feeds and downloads must be HTTPS except on loopback. The
+release needs `Aside-*-macos-<arch>.zip` and `<zip>.sig`.
+
+The `.sig` is an Ed25519 signature over
+`aside-update-v1\nversion=…\nsha256=…\nsize=…\n`, so a signature cannot be
+replayed for another version or archive (`src/update_sig.rs`). The public key is
+compiled in from `assets/update-public-key.txt` or `ASIDE_UPDATE_PUBLIC_KEY` at
+build time. That file has **no key yet**, so normal builds report the updater as
+disabled and never contact a feed. `aside_sign_update keygen|public|sign|verify`
+creates keys and signs archives.
+
+`POST /api/update/apply` checks the feed and, for a newer semantic version,
+downloads the signature and archive, verifies the signature, extracts with
+`ditto`, and requires the same bundle identifier, matching `CFBundleVersion`, a
+valid `codesign --verify --deep --strict`, and the same Team ID when the running
+app has one. It then removes `com.apple.quarantine` (everything this app writes
+is quarantined because of `LSFileQuarantineEnabled`; running quarantined code
+makes Gatekeeper show a dialog) and moves the app to `<data dir>/updates/staged`.
+`GET /api/update/status` and `POST /api/update/check` report state;
+`POST /api/update/restart` quits and relaunches. Unless `"auto": false`, the app
+checks a minute after start and every six hours, stages updates itself, and the
+sidebar shows an "Update ready · Restart" row (also shown at launch when one is
+staged).
+
+At the next launch, before the browser starts, the old binary moves the current
+bundle to `updates/previous`, renames the staged one into place, starts it, and
+waits up to 120 seconds (`ASIDE_UPDATE_CONFIRM_SECONDS`) for it to report a
+loaded shell. If it exits or times out, the previous bundle is put back and the
+old version continues. A version that keeps failing to confirm on unsupervised
+launches is rolled back on its third. The previous version stays in
+`updates/previous` after a successful update. Moves fall back to a `ditto` copy
+across volumes. The app must be able to write its own location; installing into
+an admin-owned `/Applications` as a standard user is not handled.
+
+Verified with `tools/test_updater.py` against a local feed, on background-only
+copies in `/private/tmp`, with a build carrying a test key:
+- a release signed with another key and an archive changed after signing are
+  both rejected with nothing staged;
+- 0.2.0 is found, downloaded, verified, and staged;
+- a separate run of the launch-time swap (staged 0.2.0, launch 0.1.0) installed
+  0.2.0, which confirmed its start, and the supervisor exited; the same via
+  `POST /api/update/restart` also ended with `"result": "updated"`;
+- when the new version was killed during startup the previous version was
+  restored and kept running (`"result": "rolled_back"`).
+
+In the full run the downloaded 0.2.0 was still quarantined, Gatekeeper showed a
+dialog on the user's screen and rejected it, and the updater rolled back. That
+led to the quarantine removal above, covered by a unit test. The full test has
+**not** been re-run since, and the "update ready" row has not been checked
+visually. Re-run `tools/test_updater.py` (see RELEASING.md) before relying on
+it.
+
+### Crash reports
+
+The bundle's `Contents/Resources/crash_reporter.cfg` enables Crashpad with no
+`ServerURL`, so nothing is uploaded. CEF uses the root cache path,
+`<data dir>/chromium`, as the Crashpad database (`new`, `pending`, `completed`).
+`GET /api/crash-reports` lists the dumps there. Verified by navigating a
+background tab to `chrome://crash`: a 660 KB minidump with `ptype=renderer` from
+`aside Helper (Renderer)` appeared in `<data dir>/chromium/pending`, and the
+browser stayed up. That run listed the wrong folder (`Crashpad/`); the endpoint
+was corrected afterwards and `tools/test_crash_reports.py` has not been re-run.
+
+### Test instances
+
+`tools/background_app.py` prepares bundle copies with `LSBackgroundOnly` and
+re-signs them. Setting `ASIDE_BACKGROUND_WINDOW=1` alone was not enough: an ad
+hoc copy at a new path became frontmost once, because its policy is applied at
+runtime after LaunchServices registered it as a regular app. The harness also
+kills any test process that becomes frontmost, attaches the shared watchdog, and
+refuses to start quarantined bundles.
+
 ## Work needed before public distribution
 
-- Signed/notarized releases, engine security updates, default-browser registration,
-  and update/rollback infrastructure.
+- An update signing key in `assets/update-public-key.txt`, a Developer ID
+  identity, and notary credentials; a full notarized release and update cycle.
+- Engine security updates and default-browser registration.
 - Extension permission management and tests against real required extensions.
 - Renderer-crash recovery, complete popup/opener and OAuth behavior, permission
   prompts, downloads, printing, accessibility, and broader website compatibility.
