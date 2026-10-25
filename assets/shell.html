@@ -231,6 +231,10 @@ body.side-open #side { display: flex; }
 .perm .btns { display: flex; gap: 6px; margin-top: 8px; }
 .perm button { padding: 3px 10px; border-radius: 6px; background: var(--card); box-shadow: 0 0 0 .5px var(--card-ring); }
 .perm button.yes { background: var(--accent-strong); color: #fff; box-shadow: none; }
+.pw { flex: none; margin: -4px 0 10px; box-shadow: inset 0 0 0 .5px var(--line); overflow-wrap: anywhere; }
+.pw[hidden] { display: none; }
+.pw .btns { flex-wrap: wrap; }
+.pw button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .empty { padding: 32px 8px; color: var(--fg-3); line-height: 1.55; }
 .empty b { display: block; color: var(--fg-2); font-weight: 600; margin-bottom: 4px; }
 .composer { flex: none; padding: 4px 10px 10px; position: relative; }
@@ -333,6 +337,7 @@ body.glance #glance { display: flex; }
       <button class="act" id="url-pin" title="Pin to this space (⌘D)" aria-label="Pin to This Space" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><path d="M12 17v4M9 3h6l-1 6 3 3v2H7v-2l3-3Z"/></svg></button>
       <span class="bar"></span>
     </div>
+    <div class="perm pw" id="pw-card" hidden></div>
     <div class="sb-scroll">
       <div class="favs" id="favs" role="group" aria-label="Favorites"></div>
       <div class="space-head" id="space-head" role="heading" aria-level="2"></div>
@@ -507,6 +512,7 @@ const S = {
   pinned: store.get('pinned', {}),   // space id -> [{ url, title }]
   tabSpace: new Map(), lastTab: new Map(),
   agentTabs: new Map(),              // session id -> tab the agent works in
+  pw: new Map(),                     // tab id -> password offer (origin and usernames only)
 };
 const spaceColor = (sp) => SPACE_COLORS[(sp?.color || 0) % SPACE_COLORS.length];
 const curSpace = () => S.spaces.find((s) => s.id === S.space) || S.spaces[0];
@@ -567,8 +573,33 @@ window.asideShell = {
     if (slot === 'pip') { pip.show(url); return; }
     $('#frozen-' + slot).src = url; if (slot === 'main') { S.frozenUrl = url; alignBackdrops(); }
   },
+  password(tab, offer) {
+    if (offer) S.pw.set(tab, offer); else S.pw.delete(tab);
+    renderPw();
+  },
   toast,
 };
+// Save, update, fill, and generate offers for the active tab. Passwords never reach the shell.
+function renderPw() {
+  const el = $('#pw-card'), tab = S.active, o = onWeb() ? S.pw.get(tab) : null;
+  el.hidden = !o;
+  if (!o) return;
+  let site = o.origin; try { site = new URL(o.origin).host; } catch {}
+  site = `<b>${esc(site)}</b>`;
+  const html = o.kind === 'save' || o.kind === 'update'
+    ? `<div>${o.kind === 'save' ? 'Save' : 'Update'} password for ${esc(o.username || 'this account')} on ${site}?</div><div class="btns"><button class="yes" data-a="save">${o.kind === 'save' ? 'Save' : 'Update'}</button>${o.kind === 'save' ? '<button data-a="never">Never</button>' : ''}<button data-a="dismiss">Not now</button></div>`
+    : o.kind === 'fill'
+    ? `<div>Saved password for ${site}</div><div class="btns">${o.accounts.slice(0, 4).map((a) => `<button class="yes" data-fill="${esc(a.id)}">Fill ${esc(a.username || 'password')}</button>`).join('')}<button data-a="close">Not now</button></div>`
+    : `<div>Use a strong generated password on ${site}?</div><div class="btns"><button class="yes" data-a="generate">Use password</button><button data-a="close">Not now</button></div>`;
+  if (el._html !== html) { el._html = html; el.innerHTML = html; }
+  el.onclick = (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.fill) ipc({ cmd: 'passwordFill', tab, id: b.dataset.fill });
+    else if (b.dataset.a === 'generate') ipc({ cmd: 'passwordGenerate', tab });
+    else if (['save', 'never', 'dismiss'].includes(b.dataset.a)) ipc({ cmd: 'passwordSave', tab, action: b.dataset.a });
+    else ipc({ cmd: 'passwordDismiss', tab });
+  };
+}
 function remember(t) {
   if (S.hist[0] && S.hist[0].url === t.url) { S.hist[0].title = t.title; return; }
   S.hist = [{ url: t.url, title: t.title, t: Date.now() }, ...S.hist.filter((h) => h.url !== t.url)].slice(0, 400);
@@ -637,6 +668,7 @@ function renderView() {
 
   if (ntp) renderStart();
   renderSidebar();
+  renderPw();
   if (S.overlay) requestAnimationFrame(alignBackdrops);
   if (S.overlay === 'glance') layoutGlance();
   ipc({ cmd: 'cover', on: !web || (!!S.overlay && S.overlay !== 'glance') });

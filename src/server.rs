@@ -58,6 +58,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/browser/extensions", get(browser_extensions))
         .route("/api/browser/permissions", get(browser_permissions).post(set_browser_permission))
         .merge(crate::setup::routes(app.clone()))
+        .merge(crate::passwords::routes())
         .route_layer(axum::middleware::from_fn(crate::setup::require_token))
         .route_layer(axum::middleware::from_fn_with_state(app.clone(), crate::setup::shell_only))
         .layer(axum::middleware::map_response(harden))
