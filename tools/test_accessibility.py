@@ -247,7 +247,7 @@ def run(b, fixture):
     check(bool(ok) and b.active_id().startswith('tab-'), 'F6 in the page moves focus to the sidebar', (b.state()['focused_view'], b.active_id()))
     press(b, 'shell', 'f6')
     check(bool(wait(lambda: b.state()['focused_view'] == page)), 'F6 in the shell moves focus back to the page', b.state()['focused_view'])
-    b.js("document.querySelector('a').focus()", tab=page)
+    b.js("[...document.querySelectorAll('a')].pop().focus()", tab=page)
     press(b, page, 'tab')
     ok = wait(lambda: b.state()['focused_view'] == 'shell' and b.active_id() == 'sb-toggle')
     check(bool(ok), 'Tab past the end of the page continues at the start of the sidebar', (b.state()['focused_view'], b.active_id()))

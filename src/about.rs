@@ -12,7 +12,7 @@ const CEF_LICENSE: &str = include_str!("../docs/licenses/CEF-LICENSE.txt");
 const CHROMIUM_LICENSE: &str = include_str!("../docs/licenses/Chromium-LICENSE.txt");
 pub const PATH: &str = "/about";
 pub const CREDITS_PATH: &str = "/about/chromium-credits";
-const CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; \
+const CSP: &str = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; \
                    frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
 pub fn is_public(path: &str) -> bool {

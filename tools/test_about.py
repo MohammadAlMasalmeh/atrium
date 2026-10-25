@@ -153,7 +153,7 @@ log = (args.data_dir.parent / f'{args.data_dir.name}.log').open('w')
 process = subprocess.Popen([str(executable), '--data-dir', str(args.data_dir), 'run', '--port', str(args.port),
                             '--opencode-url', 'http://127.0.0.1:1'],
                            stdout=log, stderr=log,
-                           env=aside_api.instance_env())
+                           env={**aside_api.instance_env(), 'ASIDE_DEBUG_API': '1'})
 watchdog = subprocess.Popen(['/bin/sh', str(WATCHDOG), str(process.pid)], stdout=log, stderr=log)
 client = aside_api.Client(base, data_dir=args.data_dir)
 api, tool = client.api, client.tool
@@ -184,21 +184,30 @@ try:
     about = next(t for t in tabs['tabs'] if t['url'] == base + '/about')
     check(tabs['active'] == about['id'], 'App menu > About opens the About page in a tab')
     tool('switch_tab', {'index': [t['id'] for t in tabs['tabs'] if t['kind'] != 'scratch'].index(about['id'])})
-    page = evaluate("""
+    # Runs in the About page's own world: crypto.subtle and navigator.userAgentData are not
+    # exposed to the agent's isolated world on this page.
+    page = api('/api/debug/cdp', {'tab': about['id'], 'method': 'Runtime.evaluate', 'params': {
+        'expression': '(async () => {' + """
         const text = (id) => document.getElementById(id)?.textContent ?? null;
-        const digest = async (s) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s.trim())))]
-            .map((b) => b.toString(16).padStart(2, '0')).join('');
-        const brands = await navigator.userAgentData.getHighEntropyValues(['fullVersionList']);
-        const runtime = brands.fullVersionList.find((b) => b.brand === 'Chromium')?.version ?? null;
         const notices = text('notices-text');
         return { title: document.title, product: text('product-name'), version: text('app-version'),
                  chromium: text('chromium-version'), cef: text('cef-version'), bundle: text('bundle-id'),
-                 license: text('project-license'), notices: await digest(notices),
+                 license: text('project-license'), notices,
                  crates: ['option-ext 0.2.0', 'webpki-roots', 'tokio', 'cef 156'].filter((c) => notices.includes(c)).length,
                  credits: document.getElementById('chromium-credits')?.getAttribute('href') ?? null,
-                 cefLicense: await digest(document.querySelector('#cef-license + pre').textContent),
-                 chromiumLicense: await digest(document.querySelector('#chromium-license + pre').textContent), runtime };
-    """)
+                 cefLicense: document.querySelector('#cef-license + pre').textContent,
+                 chromiumLicense: document.querySelector('#chromium-license + pre').textContent };
+    """ + '})()', 'awaitPromise': True, 'returnByValue': True}})['result']
+    assert 'value' in page.get('result', {}) and not page.get('exceptionDetails'), page
+    page = page['result']['value']
+    # The About page's opaque origin has no crypto.subtle, so texts are hashed here.
+    for key in ('notices', 'cefLicense', 'chromiumLicense'):
+        page[key] = hashlib.sha256(page[key].strip().encode()).hexdigest()
+
+    # The About page's sandboxed origin has no navigator.userAgentData; the shell runs the same engine.
+    page['runtime'] = api('/api/debug/cdp', {'tab': 'shell', 'method': 'Runtime.evaluate', 'params': {
+        'expression': "navigator.userAgentData.getHighEntropyValues(['fullVersionList']).then((b) => b.fullVersionList.find((x) => x.brand === 'Chromium')?.version ?? null)",
+        'awaitPromise': True, 'returnByValue': True}})['result']['result']['value']
     check(page['title'] == f'About {product}' and page['product'] == product, 'About page shows the product name')
     check(page['version'] == cargo_version, f'About page shows the app version {cargo_version}')
     check(page['chromium'] == page['runtime'],

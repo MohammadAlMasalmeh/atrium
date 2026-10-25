@@ -879,7 +879,8 @@ function layoutNow() {
   if (S.overlay === 'glance') msg.glance = r($('#glance-frame'));
   ipc(msg);
 }
-new ResizeObserver(layoutNow).observe($('#main'));
+// Bars inside the main column (passwords, permissions) resize the panes without resizing #main.
+{ const ro = new ResizeObserver(layoutNow); for (const el of [$('#main'), $('#pane-main'), $('#pane-split')]) if (el) ro.observe(el); }
 $('#sidebar').addEventListener('transitionend', layoutSoon);
 window.addEventListener('resize', layoutNow);
 document.addEventListener('mousedown', (e) => {
