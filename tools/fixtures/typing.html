@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Typing latency</title>
+<style>html,body{margin:0;height:100%}textarea{box-sizing:border-box;width:100%;height:100%;font:16px/1.4 system-ui;padding:16px;border:0}</style>
+<textarea id="t" autofocus placeholder="type here"></textarea>
+<script>
+// Event Timing gives each keystroke's input delay, handler time and the time until
+// the next frame was presented, from the OS event's own timestamp.
+window.__lat = [];
+new PerformanceObserver(list => {
+  for (const e of list.getEntries()) if (e.name === 'keydown')
+    window.__lat.push({delay: e.processingStart - e.startTime, processing: e.processingEnd - e.processingStart,
+                       duration: e.duration});
+}).observe({type: 'event', durationThreshold: 16, buffered: true});
+// durationThreshold cannot go below 16 ms, so also time every keystroke ourselves:
+// OS event timestamp -> start of the first frame after it.
+window.__frames = [];
+document.getElementById('t').addEventListener('keydown', e => {
+  const start = e.timeStamp, handler = performance.now();
+  requestAnimationFrame(frame => window.__frames.push({delay: handler - start, to_frame: frame - start}));
+});
+// Where keystrokes went missing: focus and visibility changes, with timestamps.
+window.__focus = [];
+const note = what => window.__focus.push([Math.round(performance.now()), what, document.activeElement?.id || document.activeElement?.tagName]);
+addEventListener('blur', () => note('window blur'));
+addEventListener('focus', () => note('window focus'));
+document.getElementById('t').addEventListener('blur', () => note('textarea blur'));
+document.getElementById('t').addEventListener('focus', () => note('textarea focus'));
+document.addEventListener('visibilitychange', () => note('visibility ' + document.visibilityState));
+window.__keys = 0;
+addEventListener('keydown', () => window.__keys++, true);
+</script>

@@ -39,13 +39,14 @@ ROOT = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--runs', type=int, default=3)
 parser.add_argument('--browsers', default='chrome,aside,atrium')
-parser.add_argument('--app', type=Path, default=ROOT.parent / 'target/bundle/atrium.app/Contents/MacOS/atrium')
+parser.add_argument('--app', type=Path, default=ROOT.parent / 'target/bundle/Atrium.app/Contents/MacOS/atrium')
 parser.add_argument('--port', type=int, default=7881)
 parser.add_argument('--sites', type=Path, default=ROOT / 'real_sites.json')
 parser.add_argument('--live-at', type=int, default=60)
 parser.add_argument('--idle-at', type=int, default=360)
 parser.add_argument('--output', type=Path, required=True)
-args = parser.parse_args()
+# Scripts that import this module add their own options.
+args, _ = parser.parse_known_args()
 
 CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 ASIDE = '/Applications/Aside.app/Contents/MacOS/Aside'

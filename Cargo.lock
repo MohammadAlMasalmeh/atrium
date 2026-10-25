@@ -74,40 +74,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
-name = "atrium"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "base64 0.22.1",
- "block2",
- "cef",
- "clap",
- "dirs 5.0.1",
- "flate2",
- "futures-util",
- "libc",
- "muda",
- "objc2",
- "objc2-app-kit",
- "objc2-core-foundation",
- "objc2-foundation",
- "objc2-quartz-core",
- "objc2-web-kit",
- "plist",
- "reqwest",
- "ring",
- "semver",
- "serde",
- "serde_json",
- "tao",
- "tokio",
- "tokio-stream",
- "uuid",
- "wry",
-]
-
-[[package]]
 name = "async-trait"
 version = "0.1.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -146,6 +112,40 @@ name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
+
+[[package]]
+name = "atrium"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64 0.22.1",
+ "block2",
+ "cef",
+ "clap",
+ "dirs 5.0.1",
+ "flate2",
+ "futures-util",
+ "libc",
+ "muda",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-foundation",
+ "objc2-quartz-core",
+ "objc2-web-kit",
+ "plist",
+ "reqwest",
+ "ring",
+ "semver",
+ "serde",
+ "serde_json",
+ "tao",
+ "tokio",
+ "tokio-stream",
+ "uuid",
+ "wry",
+]
 
 [[package]]
 name = "autocfg"

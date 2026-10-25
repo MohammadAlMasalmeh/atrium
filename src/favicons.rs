@@ -1,8 +1,8 @@
 //! Favicons provided by pages, cached as PNG under `<data dir>/favicons` and served to
 //! the shell, so the sidebar never asks a third-party icon service about visited sites.
 use axum::{
-    extract::Path,
-    http::header,
+    extract::{Path, Query},
+    http::{header, StatusCode},
     response::{IntoResponse, Response},
 };
 
@@ -55,13 +55,20 @@ pub fn store(key: &str, png: &[u8]) -> std::io::Result<()> {
     })
 }
 
-pub async fn serve(Path(key): Path<String>) -> Response {
+#[derive(serde::Deserialize)]
+pub struct ServeQuery {
+    /// `?missing=404` reports an uncached icon as Not Found, so the shell can draw its own placeholder.
+    missing: Option<u16>,
+}
+
+pub async fn serve(Path(key): Path<String>, Query(q): Query<ServeQuery>) -> Response {
     let cached = match file(&key) {
         Some(path) => tokio::fs::read(path).await.ok(),
         None => None,
     };
     let (content_type, body) = match cached {
         Some(png) => ("image/png", png),
+        None if q.missing == Some(404) => return StatusCode::NOT_FOUND.into_response(),
         None => ("image/svg+xml", GENERIC.as_bytes().to_vec()),
     };
     (
