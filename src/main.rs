@@ -7,6 +7,7 @@
 mod agent;
 mod app;
 mod extensions;
+mod instance;
 mod mcp;
 mod migration;
 mod memory;
@@ -72,6 +73,9 @@ struct RunArgs {
     /// Load an unpacked Chromium extension from a local directory.
     #[arg(long = "extension")]
     extensions: Vec<PathBuf>,
+    /// URLs or files to open. If Atrium is already running for this data
+    /// directory, they open as new tabs there instead.
+    urls: Vec<String>,
 }
 
 static CHROME_EXTENSIONS: std::sync::OnceLock<Vec<PathBuf>> = std::sync::OnceLock::new();
@@ -131,6 +135,10 @@ fn data_dir() -> Result<PathBuf> {
 
 fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
     let dir = data_dir()?;
+    let urls = instance::urls(&args.urls);
+    let Some(instance_lock) = instance::claim(&dir)? else {
+        return rt.block_on(instance::forward(&dir, &urls));
+    };
     let mut extensions = Vec::new();
     for extension in &args.extensions {
         let path = extension.canonicalize().context("Extension directory does not exist")?;
@@ -148,6 +156,7 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
         .with_context(|| format!("port {} is busy (is Atrium already running?)", args.port))?;
     listener.set_nonblocking(true)?;
     let _ = API_TOKEN.set(write_api_token(&dir).context("could not write the local API token")?);
+    instance::publish(&dir, args.port).context("could not record the running instance")?;
     let token_dir = dir.clone();
 
     // Opening the browser must not wait for an optional AI server to start.
@@ -162,6 +171,7 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
     let app_child = oc_child.clone();
 
     app::run(ui.clone(), move |browser| {
+        browser.open_urls(urls);
         let (tx, _) = tokio::sync::broadcast::channel(1024);
         let app = Arc::new(App { agent: Agent::new(browser), oc: oc.clone(), events: tx,
             ui_origin: ui.clone(), oc_child: app_child, setup_lock: tokio::sync::Mutex::new(()),
@@ -201,6 +211,8 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
             let _ = c.start_kill();
         }
         let _ = std::fs::remove_file(token_dir.join(TOKEN_FILE));
+        instance::clear(&token_dir);
+        drop(instance_lock);
     })
 }
 
