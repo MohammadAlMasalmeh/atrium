@@ -38,7 +38,8 @@ class Instance:
     def __init__(self, name, **env):
         self.data = args.data_root / name
         self.data.mkdir(parents=True, exist_ok=True)
-        full_env = {**os.environ, 'ATRIUM_MOCK_KEYCHAIN': '1', 'ATRIUM_BACKGROUND_WINDOW': '1', **env}
+        # Shell scripting needs its own test flag on top of the mock keychain.
+        full_env = {**os.environ, 'ATRIUM_MOCK_KEYCHAIN': '1', 'ATRIUM_BACKGROUND_WINDOW': '1', 'ATRIUM_TEST_SHELL_EVAL': '1', **env}
         self.log = open(self.data / 'app.log', 'w')
         self.proc = subprocess.Popen([str(APP), '--data-dir', str(self.data), 'run', '--port', str(args.port),
                                       '--opencode-url', 'http://127.0.0.1:1'],

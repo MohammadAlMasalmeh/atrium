@@ -84,7 +84,8 @@ def agent_uses(tab_id):
     tool('switch_tab', index=index)
 
 
-env = {**os.environ, 'ATRIUM_MOCK_KEYCHAIN': '1', 'ATRIUM_BACKGROUND_WINDOW': '1'}
+# Shell scripting needs its own test flag on top of the mock keychain.
+env = {**os.environ, 'ATRIUM_MOCK_KEYCHAIN': '1', 'ATRIUM_BACKGROUND_WINDOW': '1', 'ATRIUM_TEST_SHELL_EVAL': '1'}
 args.data_dir.mkdir(parents=True, exist_ok=True)
 args.shot.parent.mkdir(parents=True, exist_ok=True)
 fixture = subprocess.Popen([sys.executable, str(ROOT / 'tools/fixture_server.py'), '--port', str(args.fixture_port)],
@@ -177,7 +178,13 @@ try:
     check('tab sleeping releases renderers and wakes them in place', suspension)
 
     def capture():
-        png = api('/api/debug/window.png', raw=True)
+        def attempt():
+            try:
+                return api('/api/debug/window.png', raw=True)
+            except urllib.error.HTTPError as e:
+                raise urllib.error.URLError(f'{e.code}: {e.read().decode(errors="replace")}')
+        # The window server can return nothing for an off-screen window while it is busy.
+        png = wait('window image', attempt, timeout=10)
         assert png[:8] == b'\x89PNG\r\n\x1a\n', png[:40]
         args.shot.write_bytes(png)
         return f'{len(png)} bytes -> {args.shot}'
