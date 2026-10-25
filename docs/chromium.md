@@ -359,12 +359,109 @@ Run benchmark instances with `ASIDE_MOCK_KEYCHAIN=1`.
 ## Migration and extensions
 
 Backend setup routes remain available under `/api/setup`. They discover Chrome
-profile names, explicitly import HTTP(S) bookmarks and optional recent history
-read-only, and inventory installed extension names. They do not copy passwords,
-cookies, passkeys, or Google sessions. OpenCode connection checks validate the
+profile names, import selected data on request, and inventory installed extension
+names. Chrome's files are only read, never changed, and they are not copied. Passwords and passkeys are not imported
+(password import is separate work). OpenCode connection checks validate the
 endpoint and browser tool registration before changing the active connection.
 Only the endpoint address is saved; server credentials remain in memory or come
 from `OPENCODE_SERVER_USERNAME` / `OPENCODE_SERVER_PASSWORD`.
+
+### Chrome import
+
+`POST /api/setup/import` takes `{"profile": "Default", "bookmarks": true,
+"history": true, "tabs": true, "search_engine": true, "extensions": true}`; every
+kind is opt-in. Imported data is stored under `<data dir>/import/`:
+
+- **Bookmarks** keep Chrome's folder tree (bookmarks bar, other, mobile; empty
+  roots dropped, empty sub-folders kept), titles, and added dates, keyed by
+  Chrome's bookmark GUID. A re-import replaces that profile's snapshot and
+  reports `added`, `updated`, `removed`, and `unchanged`. Only HTTP(S) URLs are
+  imported (up to 10,000). The response keeps the old flat `bookmarks` list with
+  `folder` paths such as `Bookmarks bar / Work`.
+- **History** reads one row per visit from Chrome's `visits` table (subframe
+  navigations and hidden URLs excluded) with real visit times, falling back to
+  one row per URL for databases without it. Visits merge by URL and timestamp,
+  so re-imports add nothing already imported (`already_imported`). Limits: 20,000
+  URLs, 200 visits each.
+- **Tabs** parse the newest `Sessions/Session_*` SNSS file (or `Current
+  Session`): tabs of open normal windows in window and tab order, at their selected
+  navigation entry. Closed tabs and windows, popups and app windows, and non-web
+  URLs are skipped. Tabs are added asleep (no renderer) like a restored session;
+  URLs already open are not opened again. Encrypted session files are rejected.
+- **Search engine**: Chrome's default from `Preferences`
+  (`default_search_provider_data.template_url_data`, or the `synced_guid` looked
+  up in `Web Data`'s `keywords` table). Chrome-only template parameters are
+  removed, and only HTTPS templates (or loopback HTTP) are accepted. The saved
+  `search-engine.json` drives searches typed in the address bar. With
+  no explicit choice Chrome uses its built-in default, so Aside keeps Google.
+  Other keywords (site search shortcuts) are not imported.
+
+`GET /api/setup/imported?history=N` returns the imported bookmarks (flat and per
+profile tree) and the N most recent history entries with their visit times. The
+shell does not show imported bookmarks or history yet; this API is the
+integration point.
+
+`POST /api/setup/import/cookies` is a separate request that only runs with
+`{"profile": ..., "consent": true}` (optionally `"domains": ["example.com"]` to
+limit it to those sites and their subdomains). Without consent it returns
+`consent_required` and the security notice and does nothing. **Security:**
+imported cookies are live sign-in sessions. Anything that can read the Aside
+profile (software running as the user, installed extensions) can use them to act
+as the user on those sites. Chrome's copies remain valid. Revoking a session means
+signing out on the site. The response always includes this `security_notice`; a
+UI must show it and get agreement before sending `consent: true`.
+
+The import reads `Network/Cookies` (or `Cookies`) read-only and obtains the
+"Chrome Safe Storage" password with `security find-generic-password`. **In
+real use macOS shows a keychain prompt at this point**; that is by design and
+happens only on this explicit request. Values are decrypted (`v10`,
+AES-128-CBC, PBKDF2-SHA1 key, the SHA-256 domain prefix of database version
+24+ verified and removed) through macOS CommonCrypto, so no crates were added.
+Each cookie is written to CEF's global cookie manager with its domain (host-only
+vs. domain cookie), path, Secure, HttpOnly, SameSite, priority, creation and
+expiry; session cookies stay session cookies (the profile persists them). Expired
+and partitioned (CHIPS) cookies are skipped, since CEF cannot set a partition key.
+Values that fail to decrypt or belong to another domain are reported by domain and name.
+After writing, the import reads all cookies back from CEF and reports how many
+match exactly (`verified`). Re-importing replaces cookies with the same
+name/domain/path rather than duplicating them. Cookie values never appear in
+responses or reports. Chrome holds exclusive locks on its open databases, so
+history and cookie imports ask the user to close Chrome when they are busy.
+
+`GET /api/setup/import/report` returns every import run (newest first, last 50)
+with per-kind `status`, `imported`, `skipped`, and `errors` plus details, a
+`latest` result per kind, and the active search engine.
+
+Test instances (`ASIDE_MOCK_KEYCHAIN` set) never read the user's Chrome
+directory or login keychain. They see only `ASIDE_TEST_CHROME_ROOT` (otherwise no
+profiles). `ASIDE_TEST_CHROME_SAFE_STORAGE` supplies the cookie password and is
+honored only when `ASIDE_MOCK_KEYCHAIN=1`. Without it, the cookie import fails
+instead of prompting.
+
+`tools/test_chrome_import.py` builds a synthetic Chrome root in `/private/tmp`
+(Bookmarks, History and Cookies SQLite with values encrypted with a test key
+using Python's `hashlib` and the `openssl` CLI, an SNSS session, Preferences, and
+Web Data). It then starts its own background instance with the watchdog and
+checks the following:
+folder paths and counts; visit counts and times; that the second run adds no
+bookmarks, visits, or tabs; restored tabs (closed window, old entries, and
+`chrome://` skipped); a typed search using the imported engine; that cookies are
+refused without consent; and that the fixture server's `/cookies` page receives
+exactly the expected `Cookie` header. That header includes host-only, domain,
+HttpOnly, Secure (on `*.localhost`), and plaintext legacy cookies. It excludes
+expired, partitioned, wrong-path, unrelated-domain, and tampered cookies. The test
+also checks that `document.cookie` hides the HttpOnly cookie, that there are no
+duplicates after re-import, that the domain filter works, and the report:
+
+```sh
+python3 tools/test_chrome_import.py --port 7860 --fixture-port 7861
+```
+
+Not verified: a real Chrome profile and the real keychain prompt (by rule, tests
+never touch them). Before relying on it, run one manual import against a real
+profile with Chrome closed. SameSite enforcement was checked only by reading the
+attributes back, not by cross-site requests. If a restored tab later redirects,
+its URL changes, so a re-import can open the original URL again.
 
 `GET /api/browser/extensions` summarizes each loaded extension's declared API
 permissions, host access, optional permissions, and content-script matches.

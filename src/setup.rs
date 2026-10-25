@@ -16,6 +16,9 @@ pub fn routes(_app: Arc<App>) -> Router<Arc<App>> {
     Router::new()
         .route("/api/setup/profiles", get(profiles))
         .route("/api/setup/import", post(import))
+        .route("/api/setup/import/cookies", post(import_cookies))
+        .route("/api/setup/import/report", get(import_report))
+        .route("/api/setup/imported", get(imported))
         .route("/api/setup/opencode/connect", post(connect))
         .route("/api/setup/opencode/start", post(start))
         .route("/api/setup/google", get(google))
@@ -62,8 +65,33 @@ async fn profiles() -> Json<Value> {
     )
 }
 
-async fn import(Json(req): Json<migration::ImportRequest>) -> Json<Value> {
-    response(migration::import(req).await)
+fn data_dir(app: &App) -> &std::path::Path {
+    app.workspace.parent().unwrap_or(&app.workspace)
+}
+
+async fn import(State(app): State<Arc<App>>, Json(req): Json<migration::ImportRequest>) -> Json<Value> {
+    response(migration::import(req, data_dir(&app), &app.agent.browser).await)
+}
+
+async fn import_cookies(State(app): State<Arc<App>>, Json(req): Json<migration::CookieRequest>) -> Json<Value> {
+    response(migration::import_cookies(req, data_dir(&app), &app.agent.browser).await)
+}
+
+async fn import_report(State(app): State<Arc<App>>) -> Json<Value> {
+    Json(migration::report(data_dir(&app)))
+}
+
+#[derive(Deserialize)]
+struct LibraryQuery {
+    #[serde(default = "default_history_limit")]
+    history: usize,
+}
+fn default_history_limit() -> usize {
+    400
+}
+
+async fn imported(State(app): State<Arc<App>>, axum::extract::Query(q): axum::extract::Query<LibraryQuery>) -> Json<Value> {
+    Json(migration::library(data_dir(&app), q.history.min(20_000)))
 }
 
 #[derive(Deserialize)]
