@@ -331,7 +331,7 @@ mod cc {
     use super::*;
     extern "C" {
         #[allow(clippy::too_many_arguments)]
-        fn CCCrypt(op: u32, alg: u32, options: u32, key: *const u8, key_len: usize, iv: *const u8, data_in: *const u8, in_len: usize, data_out: *mut u8, out_avail: usize, out_moved: *mut usize) -> i32;
+        fn CCCrypt(op: u32, alg: u32, options: u32, key: *const std::ffi::c_void, key_len: usize, iv: *const std::ffi::c_void, data_in: *const std::ffi::c_void, in_len: usize, data_out: *mut std::ffi::c_void, out_avail: usize, out_moved: *mut usize) -> i32;
         #[allow(clippy::too_many_arguments)]
         fn CCKeyDerivationPBKDF(algorithm: u32, password: *const u8, password_len: usize, salt: *const u8, salt_len: usize, prf: u32, rounds: u32, derived: *mut u8, derived_len: usize) -> i32;
         fn CCHmac(alg: u32, key: *const c_void, key_len: usize, data: *const c_void, data_len: usize, mac_out: *mut c_void);
@@ -341,7 +341,7 @@ mod cc {
         let mut out = vec![0u8; input.len() + 16];
         let mut moved = 0usize;
         let status = unsafe {
-            CCCrypt(if encrypt { 0 } else { 1 }, 0, 1, key.as_ptr(), key.len(), iv.as_ptr(), input.as_ptr(), input.len(), out.as_mut_ptr(), out.len(), &mut moved)
+            CCCrypt(if encrypt { 0 } else { 1 }, 0, 1, key.as_ptr().cast(), key.len(), iv.as_ptr().cast(), input.as_ptr().cast(), input.len(), out.as_mut_ptr().cast(), out.len(), &mut moved)
         };
         anyhow::ensure!(status == 0 && (encrypt || input.len() % 16 == 0), "Decryption failed");
         out.truncate(moved);

@@ -754,7 +754,7 @@ impl Manager {
             Pending::Raw(reply) => {
                 let _ = reply.send(Err(message));
             }
-            Pending::Frozen(_) | Pending::Inject => {}
+            Pending::Frozen(_) | Pending::Inject | Pending::Pw(..) => {}
         }
     }
     fn finish(&mut self, id: i32, success: bool, data: Json) {
