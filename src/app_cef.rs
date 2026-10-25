@@ -28,6 +28,8 @@ mod url;
 mod commands;
 #[path = "chromium/media.rs"]
 mod media;
+#[path = "chromium/banner.rs"]
+mod banner;
 pub use url::normalize_url;
 
 const LIFECYCLE_JS: &str = include_str!("../assets/lifecycle.js");
@@ -691,6 +693,7 @@ impl Manager {
             };
             native::place(host.window_handle(), &bounds, visible);
         }
+        self.media_banner();
     }
     fn update_accessibility(&mut self) {
         let on = std::env::var_os("ATRIUM_FORCE_ACCESSIBILITY").is_some_and(|v| v == "1")
@@ -2458,6 +2461,7 @@ impl Manager {
             None => self.pw_offers.remove(&tab),
         };
         self.shell(&format!("window.atriumShell?.password?.({tab}, {})", offer.unwrap_or(Json::Null)));
+        self.media_banner();
     }
     fn pw_store(&self, work: impl FnOnce() -> anyhow::Result<PwEvent> + Send + 'static) {
         let bridge = self.bridge.clone();

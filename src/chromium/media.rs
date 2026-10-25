@@ -101,6 +101,17 @@ impl Manager {
         self.pw_offer(tab, Some(json!({ "kind": "webkit", "origin": origin })));
         self.layout();
     }
+    /// The offer is a native banner over the active page, like Chrome's permission bubbles.
+    pub(super) fn media_banner(&self) {
+        let offer = self
+            .active
+            .filter(|id| !self.covered && self.pw_offers.get(id).is_some_and(|o| o["kind"] == "media"))
+            .and_then(|id| {
+                let url = reqwest::Url::parse(&self.tab(id)?.url).ok()?;
+                Some((id, url.host_str()?.trim_start_matches("www.").to_string()))
+            });
+        super::banner::show(&self.bridge, offer, &self.main_rect);
+    }
     /// Chromium navigated somewhere else, so the WebKit copy of the old page goes away.
     pub(super) fn media_address(&mut self, tab: u64, url: &str) {
         let stale = VIEWS.with(|v| v.borrow().get(&tab).is_some_and(|view| crate::passwords::origin_of(url).as_deref() != Some(view.origin.as_str())));

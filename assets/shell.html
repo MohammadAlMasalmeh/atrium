@@ -815,16 +815,17 @@ window.atriumShell = {
 };
 // Save, update, fill, and generate offers for the active tab. Passwords never reach the shell.
 function renderPw() {
-  const el = $('#pw-card'), tab = S.active, o = onWeb() ? S.pw.get(tab) : null;
+  const el = $('#pw-card'), tab = S.active, offer = onWeb() ? S.pw.get(tab) : null;
+  // The media offer is a native banner over the page (banner.rs); tests read its kind here.
+  el.dataset.offer = offer?.kind || '';
+  const o = offer?.kind === 'media' ? null : offer;
   el.hidden = !o;
   if (!o) return;
   let site = o.origin; try { site = new URL(o.origin).host; } catch {}
   site = `<b>${esc(site)}</b>`;
   const play = '<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-2 6.5 6 3.5-6 3.5Z"/></svg>';
-  el.classList.toggle('media', o.kind === 'media' || o.kind === 'webkit');
-  const html = o.kind === 'media'
-    ? `<div class="head">${play}Video won't play here</div><div>Atrium's engine can't play this video's format. WebKit can.</div><div class="btns"><button class="yes" data-a="webkit">Play in WebKit</button><button data-a="close">Not now</button></div>`
-    : o.kind === 'webkit'
+  el.classList.toggle('media', o.kind === 'webkit');
+  const html = o.kind === 'webkit'
     ? `<div class="head">${play}Playing in WebKit</div><div>You may need to sign in to ${site} again here.</div><div class="btns"><button data-a="chromium">Back to Atrium</button></div>`
     : o.kind === 'save' || o.kind === 'update'
     ? `<div>${o.kind === 'save' ? 'Save' : 'Update'} password for ${esc(o.username || 'this account')} on ${site}?</div><div class="btns"><button class="yes" data-a="save">${o.kind === 'save' ? 'Save' : 'Update'}</button>${o.kind === 'save' ? '<button data-a="never">Never</button>' : ''}<button data-a="dismiss">Not now</button></div>`
@@ -834,8 +835,7 @@ function renderPw() {
   if (el._html !== html) { el._html = html; el.innerHTML = html; }
   el.onclick = (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.a === 'webkit') ipc({ cmd: 'webkitOpen', tab });
-    else if (b.dataset.a === 'chromium') ipc({ cmd: 'webkitClose', tab });
+    if (b.dataset.a === 'chromium') ipc({ cmd: 'webkitClose', tab });
     else if (b.dataset.fill) ipc({ cmd: 'passwordFill', tab, id: b.dataset.fill });
     else if (b.dataset.a === 'generate') ipc({ cmd: 'passwordGenerate', tab });
     else if (['save', 'never', 'dismiss'].includes(b.dataset.a)) ipc({ cmd: 'passwordSave', tab, action: b.dataset.a });

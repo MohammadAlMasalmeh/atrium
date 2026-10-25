@@ -3,7 +3,7 @@
 
 Serves a local page whose cross-origin iframe holds a player that, like hls.js players,
 shows its own error when there's neither MediaSource H.264 nor native HLS. The stock CEF
-runtime has neither, so the shell should offer "Play in WebKit"; accepting it opens a WKWebView over the tab, where the
+runtime has neither, so Atrium should offer "Play in WebKit"; accepting it opens a WKWebView over the tab, where the
 same page reports to this server that WebKit decoded the H.264 track. No external sites.
 """
 import argparse
@@ -121,6 +121,7 @@ def main():
                 return result
 
             card = "const c = document.querySelector('#pw-card'); return c.hidden ? '' : c.textContent;"
+            offered = "return document.querySelector('#pw-card').dataset.offer || '';"
             shell('window.atriumOnboarding && window.atriumOnboarding.close(); return 1')
 
             def show(url):
@@ -128,21 +129,25 @@ def main():
                 # The agent opens tabs in the background; the offer shows for the active tab.
                 tab = wait(lambda: next((t['id'] for t in client.api('/api/browser/tabs')['tabs'] if t['url'] == url), None), 'the tab')
                 client.api('/api/browser/command', {'cmd': 'activate', 'id': tab})
+                return tab
 
             show(f'http://127.0.0.1:{server.server_port}/vp9')
             wait(lambda: any(e['e'] == 'vp9' for e in played), 'Chromium playing VP9')
             time.sleep(4)  # past the watcher's settling delay
-            assert not shell(card), f'offered WebKit for a page that plays: {shell(card)}'
+            assert not shell(offered), f'offered WebKit for a page that plays: {shell(offered)}'
             played.clear()
             print('No offer for a page that falls back to VP9', flush=True)
 
-            show(f'http://127.0.0.1:{server.server_port}/')
-            offer = wait(lambda: 'Play in WebKit' in shell(card) and shell(card), 'the WebKit offer')
+            tab = show(f'http://127.0.0.1:{server.server_port}/')
+            # The offer itself is a native banner over the page; the shell records its kind.
+            offer = wait(lambda: shell(offered) == 'media' and shell(offered), 'the WebKit offer')
+            assert not shell(card), f'the sidebar card should stay hidden for the offer: {shell(card)}'
             print('Offer:', offer, flush=True)
             chromium = [e for e in played if 'Chrome/' in e['ua']]
             assert [e['e'] for e in chromium] == ['refused'], f'Chromium accepted H.264: {chromium}'
 
-            shell("document.querySelector('#pw-card [data-a=webkit]').click(); return 1")
+            # The banner's Play in WebKit button sends this same command.
+            client.api('/api/browser/command', {'cmd': 'webkitOpen', 'tab': tab})
             webkit = lambda: [e for e in played if 'Chrome/' not in e['ua']]
             try:
                 # A never-shown test window may hold playback back, but WebKit still demuxes
