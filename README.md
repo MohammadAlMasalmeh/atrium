@@ -53,8 +53,9 @@ with arbitrary extensions are unfinished.
 - Browser automation through CEF's DevTools protocol: navigation, page reading,
   element actions, JavaScript evaluation, and screenshots.
 - Loopback API with Host/Origin checks; shell evaluation is disabled in release builds.
-- Backend APIs for explicit Chrome bookmark/history import, extension inventory,
-  and OpenCode connection. These have no new onboarding UI.
+- Backend APIs for explicit Chrome import (bookmarks with folders, history visits,
+  last-session tabs, default search engine, and consented cookie import), an import
+  report, extension inventory, and OpenCode connection. These have no new onboarding UI.
 
 See [Chromium implementation and limitations](docs/chromium.md) for details,
 verification commands, and the RAM benchmark methodology. This remains a

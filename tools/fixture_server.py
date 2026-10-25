@@ -3,6 +3,8 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 import argparse
+import html
+import json
 
 # An OAuth-style pair: the popup reports to its opener, then closes itself.
 OPENER = "addEventListener('message', e => { if (e.origin === location.origin) document.title = 'Opener got ' + e.data; });"
@@ -14,6 +16,10 @@ TALL = "const seen = 'seen' + location.pathname.replace(/\\W/g, '_'); if (!docum
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
+        if path.startswith('/cookies'):
+            # Echoes the Cookie request header so tests can check what the browser sent.
+            received = json.dumps({'host': self.headers.get('Host', ''), 'cookie': self.headers.get('Cookie', '')})
+            return self.send(f'<!doctype html><meta charset="utf-8"><title>Cookies</title><pre id="received">{html.escape(received)}</pre>'.encode())
         draft = 'draft' in path
         # /frames/a.localhost,b.localhost embeds a page from each host, for cross-site subframes.
         hosts = path.split('/')[2].split(',') if path.startswith('/frames/') else []
@@ -28,6 +34,8 @@ class Handler(BaseHTTPRequestHandler):
         {'document.querySelector("#draft").value = "Unsaved test draft";' if draft else ''}
         {OPENER if path.startswith('/opener') else POPUP if path.startswith('/popup') else TALL if path.startswith('/tall') else ''}
         </script>'''.encode()
+        self.send(body)
+    def send(self, body):
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.send_header('Cache-Control', 'no-store')

@@ -82,7 +82,19 @@ pub enum Op {
         reply: Reply<()>,
     },
     Memory(Reply<Json>),
+    /// Adds sleeping tabs for (url, title) pairs not already open; replies (added, already open).
+    Restore {
+        tabs: Vec<(String, String)>,
+        reply: Reply<(usize, usize)>,
+    },
+    /// Replies with whether CEF accepted each cookie, in order.
+    SetCookies {
+        cookies: Vec<CookieWrite>,
+        reply: Reply<Vec<bool>>,
+    },
+    Cookies(Reply<Vec<CookieStored>>),
 }
+use crate::migration::cookies::{Stored as CookieStored, Write as CookieWrite};
 #[derive(Clone)]
 pub struct Handle(Bridge);
 impl Handle {
@@ -766,6 +778,14 @@ impl Manager {
             Op::InspectGoogle { tab, reply } => self.evaluate(tab, "return location.hostname === 'mail.google.com' && location.pathname.startsWith('/mail/u/') && !!document.querySelector('[gh=cm],[role=navigation]')".into(), reply),
             Op::Screenshot { tab, reply } => { if let Some(tab) = tab.or(self.active) { self.cdp(tab, "Page.captureScreenshot", json!({ "format": "jpeg", "quality": 80 }), Pending::Screenshot(reply)); } else { let _ = reply.send(Err("No page is open".into())); } }
             Op::Shell { body, reply } => { self.command(body); let _ = reply.send(()); }
+            Op::Restore { tabs, reply } => { let _ = reply.send(self.restore_tabs(tabs)); }
+            Op::SetCookies { cookies, reply } => set_cookies(cookies, reply),
+            Op::Cookies(reply) => {
+                let sink = Arc::new(CookieSink { cookies: Mutex::new(Vec::new()), reply: Mutex::new(Some(reply)) });
+                if let Some(manager) = cookie_manager_get_global_manager(None) {
+                    manager.visit_all_cookies(Some(&mut CookieList::new(sink)));
+                }
+            }
             Op::Memory(reply) => { let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": self.tab(SHELL).is_some_and(|t|t.browser.is_some()), "shell_view": self.tab(SHELL).is_some_and(|t|t.view.is_some()), "shell_record": self.tab(SHELL).is_some(), "live_renderers": self.tabs.iter().filter(|t|t.view.is_some()).count(), "tabs": self.tabs.iter().filter(|t| t.id != SHELL).map(|t| json!({"id":t.id,"live":t.view.is_some(),"suspended":t.suspended})).collect::<Vec<_>>() })); }
         }
     }
@@ -1564,4 +1584,107 @@ impl Manager {
             self.create_view(id);
         }
     }
+    /// A tab that keeps its URL and title but has no view until it is selected.
+    fn push_sleeping(&mut self, url: &str, title: &str) -> u64 {
+        self.next_id += 1;
+        let id = self.next_id;
+        self.tabs.push(Tab { suspended: true, ..Tab::new(id, url.into(), title.into()) });
+        id
+    }
+    fn restore_tabs(&mut self, tabs: Vec<(String, String)>) -> (usize, usize) {
+        let mut open: std::collections::HashSet<String> = self.tabs.iter().map(|t| t.url.clone()).collect();
+        let (mut added, mut already) = (0, 0);
+        for (url, title) in tabs.into_iter().take(1000) {
+            if !is_web(&url) {
+                continue;
+            }
+            if !open.insert(url.clone()) {
+                already += 1;
+                continue;
+            }
+            self.push_sleeping(&url, &title);
+            added += 1;
+        }
+        if added > 0 {
+            self.session_dirty = true;
+            if self.active.is_none() {
+                self.active = self.tabs.iter().find(|t| t.id != SHELL && t.id != GLANCE).map(|t| t.id);
+                if let Some(id) = self.active {
+                    self.create_view(id);
+                }
+            }
+            self.layout();
+            self.push(false);
+        }
+        (added, already)
+    }
 }
+struct CookieBatch {
+    manager: CookieManager,
+    results: Mutex<Vec<bool>>,
+    reply: Mutex<Option<Reply<Vec<bool>>>>,
+}
+// CEF releases each callback after it runs, so the last release reports the batch.
+impl Drop for CookieBatch {
+    fn drop(&mut self) {
+        self.manager.flush_store(None);
+        if let Some(reply) = self.reply.get_mut().unwrap().take() {
+            let _ = reply.send(std::mem::take(self.results.get_mut().unwrap()));
+        }
+    }
+}
+wrap_set_cookie_callback! {struct CookieSet {batch:Arc<CookieBatch>,index:usize} impl SetCookieCallback {
+    fn on_complete(&self,success:i32){self.batch.results.lock().unwrap()[self.index]=success!=0;}
+}}
+fn set_cookies(cookies: Vec<CookieWrite>, reply: Reply<Vec<bool>>) {
+    let Some(manager) = cookie_manager_get_global_manager(None) else {
+        let _ = reply.send(vec![false; cookies.len()]);
+        return;
+    };
+    let batch = Arc::new(CookieBatch { manager: manager.clone(), results: Mutex::new(vec![false; cookies.len()]), reply: Mutex::new(Some(reply)) });
+    for (index, c) in cookies.iter().enumerate() {
+        let cookie = Cookie {
+            name: CefString::from(c.name.as_str()),
+            value: CefString::from(c.value.as_str()),
+            domain: CefString::from(c.domain.as_str()),
+            path: CefString::from(c.path.as_str()),
+            secure: c.secure.into(),
+            httponly: c.httponly.into(),
+            creation: Basetime { val: c.creation },
+            last_access: Basetime { val: c.last_access },
+            has_expires: c.expires.is_some().into(),
+            expires: Basetime { val: c.expires.unwrap_or(0) },
+            same_site: CookieSameSite::from(match c.same_site {
+                1 => sys::cef_cookie_same_site_t::CEF_COOKIE_SAME_SITE_NO_RESTRICTION,
+                2 => sys::cef_cookie_same_site_t::CEF_COOKIE_SAME_SITE_LAX_MODE,
+                3 => sys::cef_cookie_same_site_t::CEF_COOKIE_SAME_SITE_STRICT_MODE,
+                _ => sys::cef_cookie_same_site_t::CEF_COOKIE_SAME_SITE_UNSPECIFIED,
+            }),
+            priority: match c.priority {
+                -1 => CookiePriority::LOW,
+                1 => CookiePriority::HIGH,
+                _ => CookiePriority::MEDIUM,
+            },
+            ..Default::default()
+        };
+        let mut callback = CookieSet::new(batch.clone(), index);
+        manager.set_cookie(Some(&CefString::from(c.url.as_str())), Some(&cookie), Some(&mut callback));
+    }
+}
+struct CookieSink {
+    cookies: Mutex<Vec<CookieStored>>,
+    reply: Mutex<Option<Reply<Vec<CookieStored>>>>,
+}
+impl Drop for CookieSink {
+    fn drop(&mut self) {
+        if let Some(reply) = self.reply.get_mut().unwrap().take() {
+            let _ = reply.send(std::mem::take(self.cookies.get_mut().unwrap()));
+        }
+    }
+}
+wrap_cookie_visitor! {struct CookieList {sink:Arc<CookieSink>} impl CookieVisitor {
+    fn visit(&self,cookie:Option<&Cookie>,_count:i32,_total:i32,_delete:Option<&mut i32>)->i32{
+        if let Some(c)=cookie{self.sink.cookies.lock().unwrap().push(CookieStored{name:c.name.to_string(),value:c.value.to_string(),domain:c.domain.to_string(),path:c.path.to_string(),secure:c.secure!=0,httponly:c.httponly!=0,same_site:c.same_site.get_raw() as i32,expires:(c.has_expires!=0).then_some(c.expires.val)});}
+        1
+    }
+}}
