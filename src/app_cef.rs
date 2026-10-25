@@ -1141,6 +1141,11 @@ impl Manager {
             }
             "log" => eprintln!("[shell] {}", m["msg"].as_str().unwrap_or("")),
             "ready" => {
+                // Onboarding is a shell overlay, and pages under an overlay are hidden,
+                // which defers permission prompts and changes page lifecycle in tests.
+                if mac::background() {
+                    self.shell("window.atriumOnboarding?.close()");
+                }
                 if self.active.is_none() {
                     self.new_tab(None, true, false);
                 }

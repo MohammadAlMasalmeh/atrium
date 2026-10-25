@@ -111,7 +111,9 @@ moved toward the screen edge (macOS keeps part of the frame on a display) and
 ordered behind other windows. Chromium's macOS occlusion tracking is disabled in
 this mode so the window still paints. Screenshots and evaluation work, and the
 selected tab reports `document.visibilityState === "visible"`, so permission
-prompts reach the app. Keyboard focus, real input, and native dialogs are not
+prompts reach the app. The first-run onboarding is closed as soon as the shell
+loads, because pages under a shell overlay are hidden and Chromium defers
+their permission prompts. Keyboard focus, real input, and native dialogs are not
 testable this way. Never use it for a real profile.
 
 Verified on macOS 26 with every integration check listed below: a watchdog
