@@ -78,7 +78,7 @@ pub fn tool_specs() -> Value {
           "inputSchema": { "type": "object", "properties": { "url": { "type": "string" }, "max_chars": { "type": "integer" } }, "required": ["url"] } },
         { "name": "screenshot", "description": "Capture the agent's page as an image, for visual checks or as proof of a finished task.",
           "inputSchema": { "type": "object", "properties": {} } },
-        { "name": "evaluate", "description": "Run JavaScript in the agent's page and return the JSON result (expression, or statements ending in `return`). For extracting structured data in bulk.",
+        { "name": "evaluate", "description": "Run JavaScript in the agent's page and return the JSON result (expression, or statements ending in `return`). For extracting structured data in bulk. It shares the page's DOM but not its JavaScript globals.",
           "inputSchema": { "type": "object", "properties": { "code": { "type": "string" } }, "required": ["code"] } },
         { "name": "wait", "description": "Wait up to 15 seconds, only when a snapshot shows the page is still loading.",
           "inputSchema": { "type": "object", "properties": { "seconds": { "type": "number" } }, "required": ["seconds"] } }
