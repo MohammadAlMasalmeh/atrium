@@ -38,7 +38,8 @@ def agent_tab(id):
 def kill_renderer(id):
     agent_tab(id)
     # The tool reports the crash as an error; the browser itself must keep running.
-    client.request('/api/tool', {'name': 'navigate', 'args': {'url': 'chrome://kill'}})
+    # Needs a test instance started with ATRIUM_DEBUG_API=1.
+    client.request('/api/debug/cdp', {'tab': id, 'method': 'Page.crash', 'params': {}})
     return wait(id, lambda t: t['crashed'], 'Tab was not marked crashed')
 
 

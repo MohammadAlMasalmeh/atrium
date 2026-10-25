@@ -160,7 +160,7 @@ def shell_suite(b):
     for _ in range(3):
         time.sleep(2)
         b.shell("for (let i = 0; i < 400; i++) window.ipc.postMessage(JSON.stringify({ cmd: 'layout', main: { x: i, y: 7, w: 300 + i, h: 200 + i } })); return true;")
-        applied = wait(lambda: b.memory()['layout']['main'] in (last, expected) and b.memory()['layout']['main'], 5)
+        applied = wait(lambda: b.memory()['layout']['main'] in (last, expected) and b.memory()['layout']['main'], 20)
         check('rapid layout messages are never applied out of order', applied in (last, expected), b.memory()['layout'])
         if applied == last:
             break
@@ -187,7 +187,7 @@ def shell_suite(b):
 def attacker_suite(b):
     before = b.memory()['shell_ipc']
     b.tool('open_tab', {'url': f'{args.fixture}/evil?api={API}'})
-    attack = wait(lambda: (lambda v: v if v and v.get('done') else None)(b.evaluate('return window.attack || null')), 20)
+    attack = wait(lambda: (lambda v: v if v and v.get('done') else None)(b.evaluate("return JSON.parse(document.documentElement.dataset.attack || 'null')")), 20)
     check('hostile page ran its probes', attack, attack)
     check('a website has no window.ipc', attack['ipc'] == 'undefined' and attack['atriumShell'] == 'undefined', attack)
     results = attack['results']

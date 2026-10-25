@@ -358,6 +358,7 @@ const DEBUG_CDP_METHODS: &[&str] = &[
     "Emulation.setEmulatedMedia",
     "Emulation.setFocusEmulationEnabled",
     "Runtime.evaluate",
+    "Page.crash",
 ];
 
 #[derive(Deserialize)]

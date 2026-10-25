@@ -167,7 +167,7 @@ def start():
     log = open(f'{args.data_dir}.log', 'a')
     process = subprocess.Popen([str(args.app), '--data-dir', str(args.data_dir), 'run', '--port', str(args.port),
                                 '--opencode-url', 'http://127.0.0.1:1'],
-                               env=atrium_api.instance_env(), stdout=log, stderr=log, start_new_session=True)
+                               env={**atrium_api.instance_env(), 'ATRIUM_DEBUG_API': '1'}, stdout=log, stderr=log, start_new_session=True)
     watch(process.pid)
     wait_ready()
 
@@ -286,9 +286,17 @@ try:
     check(any(t['url'].endswith('/opened-by-extension.html') for t in tabs), 'windows.create opened an Atrium tab')
     popup = entry(UBOL)['popup']
     check(popup == f'chrome-extension://{UBOL}/popup.html', 'popup URL is offered')
-    client.tool('open_tab', {'url': popup}, timeout=60)
+    # The assistant only opens web pages; the user's Popup button goes through the shell.
+    client.command(cmd='newTab', url=popup)
     time.sleep(1)
-    page = evaluate("return { id: chrome.runtime.id, text: document.body.innerText.length, storage: typeof chrome.storage.local }")
+    # chrome.* exists only in the extension page's own world; agent scripts run isolated.
+    popup_tab = None
+    for _ in range(60):
+        popup_tab = next((t['id'] for t in client.api('/api/browser/tabs')['tabs'] if t['url'] == popup and not t['loading']), None)
+        if popup_tab:
+            break
+        time.sleep(0.5)
+    page = client.api('/api/debug/cdp', {'tab': popup_tab, 'method': 'Runtime.evaluate', 'params': {'expression': "({ id: chrome.runtime.id, text: document.body.innerText.length, storage: typeof chrome.storage.local })", 'returnByValue': True}})['result']['result']['value']
     check(page['id'] == UBOL and page['text'] > 0 and page['storage'] == 'object', f'uBO Lite popup page renders with extension APIs: {page}')
 
     print('updates', flush=True)
