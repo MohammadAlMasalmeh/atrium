@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Local, deterministic browser workloads. No external services or personal data."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 import argparse
 import html
 import json
@@ -13,9 +13,39 @@ POPUP = "if (window.opener) { window.opener.postMessage('signed-in', location.or
 TALL = "const seen = 'seen' + location.pathname.replace(/\\W/g, '_'); if (!document.cookie.includes(seen)) { document.cookie = seen + '=1; Path=/'; scrollTo(0, 1500); }"
 
 
+# A hostile website: it probes for the shell's command channel and the local API.
+# Results are left in window.attack for the test to read; nothing leaves the machine.
+EVIL = '''<!doctype html><meta charset="utf-8"><title>Fixture attacker</title>
+<h1>Attacker fixture</h1><a id="shell-link" href="__API__/shell">Shell</a>
+<iframe id="shell-frame" src="__API__/shell" width="200" height="100"></iframe>
+<script>
+const API = __API_JSON__;
+window.attack = { ipc: typeof window.ipc, asideShell: typeof window.asideShell, results: {}, done: false };
+const probe = async (name, run) => {
+  try { attack.results[name] = await run(); } catch (e) { attack.results[name] = 'blocked: ' + e.name; }
+};
+(async () => {
+  await probe('tabs_cors', () => fetch(API + '/api/browser/tabs').then((r) => 'status ' + r.status));
+  await probe('tabs_nocors', () => fetch(API + '/api/browser/tabs', { mode: 'no-cors' }).then((r) => r.type));
+  await probe('command_nocors', () => fetch(API + '/api/browser/command', { method: 'POST', mode: 'no-cors',
+    headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ cmd: 'newTab', url: location.origin + '/page/evil-command' }) }).then((r) => r.type));
+  await probe('tool_nocors', () => fetch(API + '/api/tool', { method: 'POST', mode: 'no-cors',
+    body: JSON.stringify({ name: 'open_tab', args: { url: location.origin + '/page/evil-tool' } }) }).then((r) => r.type));
+  await probe('shell_cors', () => fetch(API + '/shell').then((r) => 'status ' + r.status));
+  attack.popup_file = window.open('file:///etc/hosts') !== null;
+  attack.popup_web = window.open(location.origin + '/page/evil-popup') !== null;
+  attack.done = true;
+})();
+</script>'''
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        path = urlparse(self.path).path
+        url = urlparse(self.path)
+        path = url.path
+        if path.startswith('/evil'):
+            api = parse_qs(url.query).get('api', ['http://127.0.0.1:7777'])[0]
+            return self.send(EVIL.replace('__API_JSON__', json.dumps(api)).replace('__API__', api.replace('"', '')).encode())
         if path.startswith('/cookies'):
             # Echoes the Cookie request header so tests can check what the browser sent.
             received = json.dumps({'host': self.headers.get('Host', ''), 'cookie': self.headers.get('Cookie', '')})
@@ -27,6 +57,7 @@ class Handler(BaseHTTPRequestHandler):
         body = f'''<!doctype html><meta charset="utf-8"><title>Fixture {path}</title>
         <h1>Chromium fixture</h1><button id="increment">Increment</button><output id="count">0</output>
         <label>Draft<textarea id="draft"></textarea></label><a href="/next">Next page</a>
+        <a id="new-window" href="/page/opened-by-link" target="_blank">Open in new tab</a>
         {'<div style="height:6000px"></div>' if path.startswith('/tall') else ''}{frames}
         <script>
         window.fixtureMemory = new Uint8Array(12 * 1024 * 1024).fill(42);

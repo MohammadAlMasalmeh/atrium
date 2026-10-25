@@ -14,6 +14,8 @@ use std::{
 use tokio::sync::oneshot;
 #[path = "chromium/mac.rs"]
 mod mac;
+#[path = "chromium/shell_ipc.rs"]
+mod shell_ipc;
 #[path = "chromium/url.rs"]
 mod url;
 pub use url::normalize_url;
@@ -22,6 +24,11 @@ const LIFECYCLE_JS: &str = include_str!("../assets/lifecycle.js");
 const PAGE_JS: &str = include_str!("../assets/page.js");
 pub const SHELL: u64 = u64::MAX - 1;
 const GLANCE: u64 = u64::MAX - 2;
+/// CEF identifier of the shell's browser; process messages from any other browser are ignored.
+static SHELL_BROWSER: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+static SHELL_MESSAGES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static HTTP_COMMANDS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static REJECTED_MESSAGES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 pub static FROZEN: std::sync::LazyLock<Mutex<HashMap<String, Vec<u8>>>> =
     std::sync::LazyLock::new(Default::default);
 pub type Reply<T> = oneshot::Sender<T>;
@@ -65,6 +72,12 @@ pub enum Op {
         reply: Reply<Result<(), String>>,
     },
     Eval {
+        tab: Option<u64>,
+        js: String,
+        reply: Reply<Result<Json, String>>,
+    },
+    /// Like `Eval`, for an agent action that should count as user activation.
+    Act {
         tab: Option<u64>,
         js: String,
         reply: Reply<Result<Json, String>>,
@@ -311,6 +324,9 @@ impl Manager {
             frame.execute_java_script(Some(&CefString::from(js)), None, 0);
         }
     }
+    fn shell_url(&self) -> String {
+        format!("{}/shell", self.base)
+    }
     fn cmd(&self, command: &str) {
         self.shell(&format!("window.asideShell?.cmd({})", json!(command)));
     }
@@ -323,11 +339,19 @@ impl Manager {
         let mut client = HostClient::new(self.bridge.clone(), id, self.base.clone(), Default::default());
         let mut delegate = HostView::new(self.bridge.clone());
         let mut context: Option<RequestContext> = None;
+        // Renderers expose window.ipc only in a browser created with this marker.
+        let mut extra = (id == SHELL).then(dictionary_value_create).flatten();
+        if let Some(extra) = &extra {
+            extra.set_string(
+                Some(&CefString::from(shell_ipc::EXTRA_INFO_KEY)),
+                Some(&CefString::from(self.shell_url().as_str())),
+            );
+        }
         let view = browser_view_create(
             Some(&mut client),
             Some(&CefString::from(tab.url.as_str())),
             Some(&BrowserSettings::default()),
-            None,
+            extra.as_mut(),
             context.as_mut(),
             Some(&mut delegate),
         );
@@ -557,17 +581,23 @@ impl Manager {
             );
         }
     }
-    fn evaluate(&mut self, tab: u64, js: String, reply: Reply<Result<Json, String>>) {
+    fn evaluate(&mut self, tab: u64, js: String, reply: Reply<Result<Json, String>>, gesture: bool) {
+        if tab == SHELL && !crate::shell_eval_enabled() {
+            let _ = reply.send(Err("The browser shell cannot be scripted".into()));
+            return;
+        }
         if tab != SHELL {
             if let Some(t) = self.tab_mut(tab) {
                 t.agent_until = Instant::now() + Duration::from_secs(180);
             }
         }
         let expression = format!("{PAGE_JS}\n(async () => {{ {js}\n }})()");
+        // Agent clicks count as user activation, so links they open become tabs. Reads
+        // don't, or a page could use the agent's background reads to open popups.
         self.cdp(
             tab,
             "Runtime.evaluate",
-            json!({ "expression": expression, "awaitPromise": true, "returnByValue": true, "userGesture": true }),
+            json!({ "expression": expression, "awaitPromise": true, "returnByValue": true, "userGesture": gesture }),
             Pending::Eval(reply),
         );
     }
@@ -774,10 +804,11 @@ impl Manager {
                     _ => Err("No page is open".into())
                 }; let _ = reply.send(result);
             }
-            Op::Eval { tab, js, reply } => { if let Some(tab) = tab.or(self.active) { self.evaluate(tab, js, reply); } else { let _ = reply.send(Err("No page is open".into())); } }
-            Op::InspectGoogle { tab, reply } => self.evaluate(tab, "return location.hostname === 'mail.google.com' && location.pathname.startsWith('/mail/u/') && !!document.querySelector('[gh=cm],[role=navigation]')".into(), reply),
-            Op::Screenshot { tab, reply } => { if let Some(tab) = tab.or(self.active) { self.cdp(tab, "Page.captureScreenshot", json!({ "format": "jpeg", "quality": 80 }), Pending::Screenshot(reply)); } else { let _ = reply.send(Err("No page is open".into())); } }
-            Op::Shell { body, reply } => { self.command(body); let _ = reply.send(()); }
+            Op::Eval { tab, js, reply } => { if let Some(tab) = tab.or(self.active) { self.evaluate(tab, js, reply, false); } else { let _ = reply.send(Err("No page is open".into())); } }
+            Op::Act { tab, js, reply } => { if let Some(tab) = tab.or(self.active) { self.evaluate(tab, js, reply, true); } else { let _ = reply.send(Err("No page is open".into())); } }
+            Op::InspectGoogle { tab, reply } => self.evaluate(tab, "return location.hostname === 'mail.google.com' && location.pathname.startsWith('/mail/u/') && !!document.querySelector('[gh=cm],[role=navigation]')".into(), reply, false),
+            Op::Screenshot { tab, reply } => { if let Some(tab) = tab.or(self.active).filter(|id| *id != SHELL) { self.cdp(tab, "Page.captureScreenshot", json!({ "format": "jpeg", "quality": 80 }), Pending::Screenshot(reply)); } else { let _ = reply.send(Err("No page is open".into())); } }
+            Op::Shell { body, reply } => { HTTP_COMMANDS.fetch_add(1, Ordering::Relaxed); self.command(body); let _ = reply.send(()); }
             Op::Restore { tabs, reply } => { let _ = reply.send(self.restore_tabs(tabs)); }
             Op::SetCookies { cookies, reply } => set_cookies(cookies, reply),
             Op::Cookies(reply) => {
@@ -786,7 +817,12 @@ impl Manager {
                     manager.visit_all_cookies(Some(&mut CookieList::new(sink)));
                 }
             }
-            Op::Memory(reply) => { let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": self.tab(SHELL).is_some_and(|t|t.browser.is_some()), "shell_view": self.tab(SHELL).is_some_and(|t|t.view.is_some()), "shell_record": self.tab(SHELL).is_some(), "live_renderers": self.tabs.iter().filter(|t|t.view.is_some()).count(), "tabs": self.tabs.iter().filter(|t| t.id != SHELL).map(|t| json!({"id":t.id,"live":t.view.is_some(),"suspended":t.suspended})).collect::<Vec<_>>() })); }
+            Op::Memory(reply) => {
+                let r = &self.main_rect;
+                let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": self.tab(SHELL).is_some_and(|t|t.browser.is_some()), "shell_view": self.tab(SHELL).is_some_and(|t|t.view.is_some()), "shell_record": self.tab(SHELL).is_some(), "live_renderers": self.tabs.iter().filter(|t|t.view.is_some()).count(), "tabs": self.tabs.iter().filter(|t| t.id != SHELL).map(|t| json!({"id":t.id,"live":t.view.is_some(),"suspended":t.suspended})).collect::<Vec<_>>(),
+                    "layout": { "main": { "x": r.x, "y": r.y, "w": r.width, "h": r.height }, "covered": self.covered, "glance": self.glance_rect.is_some() },
+                    "shell_ipc": { "process_messages": SHELL_MESSAGES.load(Ordering::Relaxed), "rejected_messages": REJECTED_MESSAGES.load(Ordering::Relaxed), "http_commands": HTTP_COMMANDS.load(Ordering::Relaxed) } }));
+            }
         }
     }
     fn command(&mut self, m: Json) {
@@ -1214,25 +1250,67 @@ wrap_window_delegate! {
         fn window_runtime_style(&self)->RuntimeStyle{RuntimeStyle::CHROME}
     }
 }
-// Only the shell's own browser carries the local API token; website tabs never see it.
-wrap_request_handler! {struct HostRequests {bridge:Bridge,id:u64,base:String} impl RequestHandler {
-    fn resource_request_handler(&self, _unused40:Option<&mut Browser>, _unused41:Option<&mut Frame>, _unused42:Option<&mut Request>, _unused43:i32, _unused44:i32, _unused45:Option<&CefString>, _unused46:Option<&mut i32>)->Option<ResourceRequestHandler>{(self.id==SHELL).then(|| ShellResources::new(self.base.clone()))}
-    fn on_render_process_terminated(&self, _unused50:Option<&mut Browser>, _unused51:TerminationStatus, _unused52:i32, _unused53:Option<&CefString>){self.bridge.send(Event::Crashed(self.id));}
+fn is_shell_frame(frame: &Frame, base: &str) -> bool {
+    frame.is_main() != 0
+        && shell_ipc::is_shell_url(&CefString::from(&frame.url()).to_string(), &format!("{base}/shell"))
+}
+// Only the shell document in the shell's own browser carries the local API token;
+// website tabs never see it, and the shell browser cannot be navigated elsewhere.
+wrap_request_handler! {struct ShellRequests {bridge:Bridge,base:String} impl RequestHandler {
+    fn on_render_process_terminated(&self, _unused50:Option<&mut Browser>, _unused51:TerminationStatus, _unused52:i32, _unused53:Option<&CefString>){self.bridge.send(Event::Crashed(SHELL));}
+    fn on_before_browse(&self, _browser:Option<&mut Browser>, _frame:Option<&mut Frame>, request:Option<&mut Request>, user_gesture:i32, _is_redirect:i32)->i32{
+        let url = request.map(|r| CefString::from(&r.url()).to_string()).unwrap_or_default();
+        if shell_ipc::is_shell_url(&url, &format!("{}/shell", self.base)) { return 0; }
+        // A link dropped on or opened from the shell becomes a tab instead.
+        if user_gesture != 0 && url::is_web_url(&url) { self.bridge.send(Event::Popup(url)); }
+        1
+    }
+    fn resource_request_handler(&self, _unused40:Option<&mut Browser>, _unused41:Option<&mut Frame>, _unused42:Option<&mut Request>, _unused43:i32, _unused44:i32, _unused45:Option<&CefString>, _unused46:Option<&mut i32>)->Option<ResourceRequestHandler>{Some(ShellResources::new(self.base.clone()))}
 }}
 wrap_resource_request_handler! {struct ShellResources {base:String} impl ResourceRequestHandler {
-    fn on_before_resource_load(&self, _unused47:Option<&mut Browser>, _unused48:Option<&mut Frame>, request:Option<&mut Request>, _unused49:Option<&mut Callback>)->ReturnValue{
-        if let (Some(request), Some(token)) = (request, crate::API_TOKEN.get()) {
-            if CefString::from(&request.url()).to_string().starts_with(&format!("{}/", self.base)) {
+    fn on_before_resource_load(&self, _unused47:Option<&mut Browser>, frame:Option<&mut Frame>, request:Option<&mut Request>, _unused49:Option<&mut Callback>)->ReturnValue{
+        if let (Some(request), Some(token), Some(frame)) = (request, crate::API_TOKEN.get(), frame) {
+            if is_shell_frame(frame, &self.base) && CefString::from(&request.url()).to_string().starts_with(&format!("{}/", self.base)) {
                 request.set_header_by_name(Some(&CefString::from(crate::TOKEN_HEADER)), Some(&CefString::from(token.as_str())), 1);
             }
         }
         ReturnValue::CONTINUE
     }
 }}
+fn is_local_api(url: &str, base: &str) -> bool {
+    url.strip_prefix(base).is_some_and(|rest| rest.is_empty() || rest.starts_with(['/', '?', '#']))
+}
+// Tabs never load the API origin, so no page shares the shell's origin and storage.
+wrap_request_handler! {struct TabRequests {bridge:Bridge,id:u64,base:String} impl RequestHandler {
+    fn on_render_process_terminated(&self, _unused50:Option<&mut Browser>, _unused51:TerminationStatus, _unused52:i32, _unused53:Option<&CefString>){self.bridge.send(Event::Crashed(self.id));}
+    fn on_before_browse(&self, _browser:Option<&mut Browser>, _frame:Option<&mut Frame>, request:Option<&mut Request>, _user_gesture:i32, _is_redirect:i32)->i32{
+        request.is_some_and(|r| is_local_api(&CefString::from(&r.url()).to_string(), &self.base)).into()
+    }
+}}
 type Popups = Arc<Mutex<HashMap<i32, u64>>>;
 static NEXT_POPUP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1 << 32);
 wrap_client! {struct HostClient {bridge:Bridge,id:u64,base:String,popups:Popups} impl Client {
-    fn request_handler(&self)->Option<RequestHandler>{Some(HostRequests::new(self.bridge.clone(),self.id,self.base.clone()))}
+    fn request_handler(&self)->Option<RequestHandler>{Some(if self.id==SHELL { ShellRequests::new(self.bridge.clone(), self.base.clone()) } else { TabRequests::new(self.bridge.clone(), self.id, self.base.clone()) })}
+    fn on_process_message_received(&self, browser:Option<&mut Browser>, frame:Option<&mut Frame>, source_process:ProcessId, message:Option<&mut ProcessMessage>)->i32{
+        let Some(message) = message else { return 0 };
+        if CefString::from(&message.name()).to_string() != shell_ipc::MESSAGE { return 0; }
+        let trusted = self.id == SHELL
+            && source_process.get_raw() == ProcessId::RENDERER.get_raw()
+            && browser.is_some_and(|b| b.identifier() == SHELL_BROWSER.load(Ordering::Acquire))
+            && frame.is_some_and(|f| is_shell_frame(f, &self.base));
+        let body = message.argument_list().map(|args| CefString::from(&args.string(0)).to_string()).unwrap_or_default();
+        match serde_json::from_str::<Json>(&body) {
+            Ok(command) if trusted && body.len() <= shell_ipc::MAX_MESSAGE_BYTES && command.is_object() => {
+                SHELL_MESSAGES.fetch_add(1, Ordering::Relaxed);
+                self.bridge.send(Event::Command(command));
+            }
+            _ => {
+                REJECTED_MESSAGES.fetch_add(1, Ordering::Relaxed);
+                eprintln!("ignored a shell command from an untrusted frame or with an invalid body");
+            }
+        }
+        1
+    }
     fn life_span_handler(&self)->Option<LifeSpanHandler>{Some(HostLife::new(self.bridge.clone(),self.id,self.base.clone(),self.popups.clone()))}
     fn permission_handler(&self)->Option<PermissionHandler>{Some(HostPermissions::new(self.id))}
     fn display_handler(&self)->Option<DisplayHandler>{Some(HostDisplay::new(self.bridge.clone(),self.id))}
@@ -1241,13 +1319,18 @@ wrap_client! {struct HostClient {bridge:Bridge,id:u64,base:String,popups:Popups}
     fn keyboard_handler(&self)->Option<KeyboardHandler>{Some(HostKeyboard::new(self.bridge.clone()))}
 }}
 wrap_life_span_handler! {struct HostLife {bridge:Bridge,id:u64,base:String,popups:Popups} impl LifeSpanHandler {
-    fn on_after_created(&self,browser:Option<&mut Browser>){if let Some(b)=browser{self.bridge.send(Event::Created(self.id,b.clone()));}}
+    fn on_after_created(&self,browser:Option<&mut Browser>){if let Some(b)=browser{if self.id==SHELL{SHELL_BROWSER.store(b.identifier(),Ordering::Release);}self.bridge.send(Event::Created(self.id,b.clone()));}}
     fn do_close(&self,_browser:Option<&mut Browser>)->i32{self.bridge.send(Event::Detach(self.id));1}
     fn on_before_close(&self, _unused6:Option<&mut Browser>){self.bridge.send(Event::Closed(self.id));}
     // Website popups keep their opener so OAuth-style flows can message it and close.
     // The shell and Glance must never become a website's window.opener.
-    fn on_before_popup(&self, _unused7:Option<&mut Browser>, _unused8:Option<&mut Frame>, popup_id:i32,url:Option<&CefString>, _unused10:Option<&CefString>, disposition:WindowOpenDisposition, _unused12:i32, _unused13:Option<&PopupFeatures>, _unused14:Option<&mut WindowInfo>, client:Option<&mut Option<Client>>, _unused16:Option<&mut BrowserSettings>, _unused17:Option<&mut Option<DictionaryValue>>, _unused18:Option<&mut i32>)->i32{
+    fn on_before_popup(&self, _unused7:Option<&mut Browser>, _unused8:Option<&mut Frame>, popup_id:i32,url:Option<&CefString>, _unused10:Option<&CefString>, disposition:WindowOpenDisposition, user_gesture:i32, _unused13:Option<&PopupFeatures>, _unused14:Option<&mut WindowInfo>, client:Option<&mut Option<Client>>, _unused16:Option<&mut BrowserSettings>, _unused17:Option<&mut Option<DictionaryValue>>, _unused18:Option<&mut i32>)->i32{
         let url=url.map(ToString::to_string).unwrap_or_default();
+        // Like Chrome's popup blocker, and without browser-initiated loads of file: or chrome: URLs.
+        if user_gesture==0||!url::is_web_url(&url){
+            if !url.is_empty(){eprintln!("blocked a popup to {}", url.chars().take(80).collect::<String>());}
+            return 1;
+        }
         let Some(client)=client.filter(|_|self.id!=SHELL&&self.id!=GLANCE) else {
             if !url.is_empty(){self.bridge.send(Event::Popup(url));}
             return 1;

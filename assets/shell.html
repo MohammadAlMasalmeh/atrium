@@ -412,8 +412,8 @@ body.glance #glance { display: flex; }
 </template>
 
 <script>
-// The Chromium host exposes only this same-origin command channel to the shell.
-window.ipc ||= { postMessage(body) { return fetch('/api/browser/command', { method: 'POST', headers: { 'content-type': 'application/json' }, body }).catch(console.error); } };
+// window.ipc is provided natively, to this document only: a CEF process message per
+// call in the Chromium build, WebKit's message handler otherwise. Both keep call order.
 window.addEventListener('error', (e) => window.ipc && window.ipc.postMessage(JSON.stringify({ cmd: 'log', msg: `${e.message} @${e.lineno}:${e.colno}` })));
 window.addEventListener('unhandledrejection', (e) => window.ipc && window.ipc.postMessage(JSON.stringify({ cmd: 'log', msg: 'unhandled: ' + (e.reason && e.reason.stack || e.reason) })));
 </script>
@@ -702,24 +702,18 @@ $('#pip').onclick = () => {
 };
 
 /* ── Layout sync ──────────────────────────────────── */
-let layoutQueued = false, layoutInFlight = false, layoutAgain = false;
+let layoutQueued = false;
 function layoutSoon() {
   if (layoutQueued) return; layoutQueued = true;
   requestAnimationFrame(() => { layoutQueued = false; layoutNow(); });
 }
-// The Chromium shell's IPC is a fetch per message, and concurrent fetches can be
-// handled out of order. Keep one layout in flight so a stale rect never wins.
+// IPC messages are delivered in order, so the newest rect is always applied last.
 function layoutNow() {
-  if (layoutInFlight) { layoutAgain = true; return; }
   const r = (el) => { const b = el.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; };
   const msg = { cmd: 'layout', main: r($('#pane-main')) };
   if (document.body.classList.contains('split')) msg.split = r($('#pane-split'));
   if (S.overlay === 'glance') msg.glance = r($('#glance-frame'));
-  layoutInFlight = true;
-  Promise.resolve(window.ipc && window.ipc.postMessage(JSON.stringify(msg))).finally(() => {
-    layoutInFlight = false;
-    if (layoutAgain) { layoutAgain = false; layoutNow(); }
-  });
+  ipc(msg);
 }
 new ResizeObserver(layoutNow).observe($('#main'));
 $('#sidebar').addEventListener('transitionend', layoutSoon);
