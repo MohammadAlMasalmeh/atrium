@@ -816,7 +816,11 @@ function renderPw() {
   if (!o) return;
   let site = o.origin; try { site = new URL(o.origin).host; } catch {}
   site = `<b>${esc(site)}</b>`;
-  const html = o.kind === 'save' || o.kind === 'update'
+  const html = o.kind === 'media'
+    ? `<div>Atrium's engine can't play this video's format.</div><div class="btns"><button class="yes" data-a="webkit">Play in WebKit</button><button data-a="close">Not now</button></div>`
+    : o.kind === 'webkit'
+    ? `<div>Playing in WebKit. You may need to sign in to ${site} again here.</div><div class="btns"><button data-a="chromium">Back to Atrium</button></div>`
+    : o.kind === 'save' || o.kind === 'update'
     ? `<div>${o.kind === 'save' ? 'Save' : 'Update'} password for ${esc(o.username || 'this account')} on ${site}?</div><div class="btns"><button class="yes" data-a="save">${o.kind === 'save' ? 'Save' : 'Update'}</button>${o.kind === 'save' ? '<button data-a="never">Never</button>' : ''}<button data-a="dismiss">Not now</button></div>`
     : o.kind === 'fill'
     ? `<div>Saved password for ${site}</div><div class="btns">${o.accounts.slice(0, 4).map((a) => `<button class="yes" data-fill="${esc(a.id)}">Fill ${esc(a.username || 'password')}</button>`).join('')}<button data-a="close">Not now</button></div>`
@@ -824,7 +828,9 @@ function renderPw() {
   if (el._html !== html) { el._html = html; el.innerHTML = html; }
   el.onclick = (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.fill) ipc({ cmd: 'passwordFill', tab, id: b.dataset.fill });
+    if (b.dataset.a === 'webkit') ipc({ cmd: 'webkitOpen', tab });
+    else if (b.dataset.a === 'chromium') ipc({ cmd: 'webkitClose', tab });
+    else if (b.dataset.fill) ipc({ cmd: 'passwordFill', tab, id: b.dataset.fill });
     else if (b.dataset.a === 'generate') ipc({ cmd: 'passwordGenerate', tab });
     else if (['save', 'never', 'dismiss'].includes(b.dataset.a)) ipc({ cmd: 'passwordSave', tab, action: b.dataset.a });
     else ipc({ cmd: 'passwordDismiss', tab });

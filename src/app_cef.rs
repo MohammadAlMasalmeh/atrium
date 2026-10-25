@@ -26,6 +26,8 @@ mod shell_ipc;
 mod url;
 #[path = "chromium/commands.rs"]
 mod commands;
+#[path = "chromium/media.rs"]
+mod media;
 pub use url::normalize_url;
 
 const LIFECYCLE_JS: &str = include_str!("../assets/lifecycle.js");
@@ -609,6 +611,7 @@ impl Manager {
         self.push(false);
     }
     fn navigate(&mut self, tab: Option<u64>, raw: String) -> u64 {
+        media::remove(id);
         let id = tab
             .filter(|id| self.tab(*id).is_some())
             .unwrap_or_else(|| self.new_tab(None, true, false));
@@ -638,7 +641,7 @@ impl Manager {
     fn layout(&self) {
         let (width, _) = native::size().unwrap_or((1200, 800));
         for t in self.tabs.iter().filter(|t| !t.detached) {
-            let Some(host) = t.browser.as_ref().and_then(|b| b.host()) else { continue };
+            let host = t.browser.as_ref().and_then(|b| b.host());
             let (bounds, visible) = if t.id == GLANCE {
                 (
                     self.glance_rect
@@ -696,6 +699,12 @@ impl Manager {
             .filter(|t| !t.detached)
             .find(|t| t.browser.as_ref().and_then(|b| b.host()).is_some_and(|h| native::has_focus(h.window_handle())))
             .map(|t| match t.id {
+            // A page reopened in WebKit covers its Chromium view, which stays hidden.
+            if media::place(t.id, &bounds, visible) {
+                if let Some(host) = host { native::place(host.window_handle(), &bounds, false); }
+                continue;
+            }
+            let Some(host) = host else { continue };
                 GLANCE => json!("glance"),
                 id => json!(id),
             })
@@ -1387,6 +1396,11 @@ impl Manager {
                 if let Some(id) = self.split {
                     self.create_view(id);
                 }
+            "webkitOpen" | "webkitClose" => {
+                if let Some(tab) = m["tab"].as_u64().or(self.active) {
+                    self.media_command(tab, m["cmd"] == "webkitOpen");
+                }
+            }
                 self.layout();
                 self.push(false);
             }
@@ -1638,7 +1652,7 @@ impl Manager {
                         self.isolated(id, format!("{LIFECYCLE_JS}\n{PAGE_JS}{scroll}"), false, Pending::Inject);
                     }
                     self.pw_forms.remove(&id);
-                    if self.pw_offers.get(&id).is_some_and(|o| matches!(o["kind"].as_str(), Some("fill" | "generate"))) {
+                    if self.pw_offers.get(&id).is_some_and(|o| matches!(o["kind"].as_str(), Some("fill" | "generate" | "media"))) {
                         self.pw_offer(id, None);
                     }
                     self.cdp(id, "Page.getFrameTree", json!({}), Pending::Pw(id, PwStep::Tree));
@@ -1738,6 +1752,7 @@ impl Manager {
                 // With no live browsers, nothing will report closing, so quit now.
                 self.finish_quit();
             }
+                self.media_address(id, &url);
             Event::Maintenance => self.maintain(),
             Event::Commands(event) => self.on_commands(event),
         }
@@ -2431,7 +2446,7 @@ impl Manager {
             }
             PwStep::World => {
                 if let Some(ctx) = data["executionContextId"].as_i64() {
-                    self.cdp(tab, "Runtime.evaluate", json!({ "expression": PASSWORDS_JS, "contextId": ctx }), Pending::Pw(tab, PwStep::Done));
+                    self.cdp(tab, "Runtime.evaluate", json!({ "expression": format!("{PASSWORDS_JS}\n{}", media::JS), "contextId": ctx }), Pending::Pw(tab, PwStep::Done));
                 }
             }
             PwStep::Done => {}
@@ -2568,7 +2583,7 @@ impl Manager {
                 }
             }
             _ => {
-                if self.pw_offers.get(&tab).is_some_and(|o| matches!(o["kind"].as_str(), Some("fill" | "generate"))) {
+                if self.pw_offers.get(&tab).is_some_and(|o| matches!(o["kind"].as_str(), Some("fill" | "generate" | "media"))) {
                     self.pw_offer(tab, None);
                 }
             }
@@ -2578,3 +2593,4 @@ impl Manager {
 fn error_of(data: &Json) -> Option<String> {
     data["exceptionDetails"]["exception"]["description"].as_str().or(data["exceptionDetails"]["text"].as_str()).map(str::to_string)
 }
+            Some("media") => self.media_unsupported(tab, origin, msg["src"].as_str().unwrap_or("")),
