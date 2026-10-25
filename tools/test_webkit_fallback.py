@@ -32,6 +32,13 @@ MediaSource.isTypeSupported('video/mp4; codecs="avc1.4d401f"');
 v.src = '/vp9.webm';
 v.addEventListener('loadeddata', () => fetch('/event?' + new URLSearchParams({ e: 'vp9', ua: navigator.userAgent })));
 </script>'''
+# Probes H.264 and HLS like Google Search does, with no player on the page: no offer.
+PROBE = b'''<!doctype html><title>Probe</title><p>Results</p>
+<script>
+MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E,mp4a.40.2"');
+document.createElement('video').canPlayType('application/vnd.apple.mpegurl');
+fetch('/event?' + new URLSearchParams({ e: 'probe', ua: navigator.userAgent }));
+</script>'''
 PLAYER = b'''<!doctype html><title>Player</title>
 <video id="v" muted playsinline autoplay></video><p id="msg"></p>
 <script>
@@ -54,6 +61,8 @@ class Fixture(BaseHTTPRequestHandler):
             body, mime = PAGE.format(port=self.server.server_port).encode(), 'text/html'
         elif self.path == '/vp9':
             body, mime = FALLBACK, 'text/html'
+        elif self.path == '/probe':
+            body, mime = PROBE, 'text/html'
         elif self.path == '/vp9.webm':
             body, mime = (FIXTURES / 'vp9.webm').read_bytes(), 'video/webm'
         elif self.path == '/player':
@@ -137,6 +146,13 @@ def main():
             assert not shell(offered), f'offered WebKit for a page that plays: {shell(offered)}'
             played.clear()
             print('No offer for a page that falls back to VP9', flush=True)
+
+            show(f'http://127.0.0.1:{server.server_port}/probe')
+            wait(lambda: any(e['e'] == 'probe' for e in played), 'the page probing formats')
+            time.sleep(4)
+            assert not shell(offered), f'offered WebKit for a page with no player: {shell(offered)}'
+            played.clear()
+            print('No offer for a page that only probes formats', flush=True)
 
             tab = show(f'http://127.0.0.1:{server.server_port}/')
             # The offer itself is a native banner over the page; the shell records its kind.

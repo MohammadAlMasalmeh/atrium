@@ -20,12 +20,20 @@
     refused.add(/mpegurl/i.test(type) ? 'hls' : 'mse');
     timer ??= setTimeout(settle, 3000);
   };
+  // A player the user can see. Pages like Google Search probe formats with no player on
+  // screen, and keep hidden preview videos around; neither is a video to offer.
+  const shown = (m) => {
+    if (m instanceof HTMLAudioElement) return m.controls;
+    const r = m.getBoundingClientRect();
+    return r.width >= 120 && r.height >= 60 && getComputedStyle(m).visibility !== 'hidden';
+  };
   // Sites probe many formats and play whichever works (YouTube falls back to VP9), so a
   // refusal only counts if nothing in the frame plays afterwards.
   function settle() {
     const media = [...document.querySelectorAll('video, audio')];
     if (media.some((m) => m.readyState >= 2 || m.currentTime > 0)) return;
-    if (media.length || (refused.has('hls') && refused.has('mse'))) send(media[0]?.currentSrc);
+    const player = media.find(shown);
+    if (player) send(player.currentSrc);
   }
   const MS = window.MediaSource;
   if (MS && MS.isTypeSupported) {
@@ -41,7 +49,7 @@
       : /\.(m4a|aac)([?#]|$)/i.test(url) ? 'audio/mp4'
       : /\.m3u8([?#]|$)/i.test(url) ? 'application/vnd.apple.mpegurl' : '');
   function check(m) {
-    if (!(m instanceof HTMLMediaElement)) return;
+    if (!(m instanceof HTMLMediaElement) || !shown(m)) return;
     if (m.error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) return send(m.currentSrc || m.src);
     // MediaSource players (blob: URLs) are judged by what they asked for, above.
     const sources = m.hasAttribute('src') ? [[m.src, '']] : [...m.querySelectorAll('source')].map((s) => [s.src, s.type]);
