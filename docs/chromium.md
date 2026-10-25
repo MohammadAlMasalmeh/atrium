@@ -379,7 +379,7 @@ Chrome Sync have not been validated or implemented here.
   beyond the same-user token.
 - Per-tab history/scroll restoration and better media-aware eviction coverage.
 - Quiet-machine runs of the guarded memory, responsiveness, and soak tests;
-  battery measurement; diagnosis of the one-time CEF lock hang; and an answer
+  a real-site comparison on replayed, identical content; battery measurement; diagnosis of the one-time CEF lock hang; and an answer
   on whether renderers outlive evicted pages on real sites.
 
 ## References

@@ -191,9 +191,11 @@ def checkpoint():
     for tab_id in churn_ids(state):
         call('checkpoint close', lambda tab_id=tab_id: inst.command(cmd='close', id=tab_id))
         counters['closed'] += 1
-    if 'anchor' in fixed:
-        call('checkpoint activate', lambda: inst.command(cmd='activate', id=fixed['anchor']))
-    time.sleep(25)
+    # Wake every fixed tab so each checkpoint measures the same live set.
+    for name in [n for n in fixed if n != 'anchor'] + ['anchor']:
+        call('checkpoint activate', lambda name=name: inst.command(cmd='activate', id=fixed[name]))
+        time.sleep(2)
+    time.sleep(20)
     values = []
     for _ in range(5):
         values.append(record_sample('checkpoint'))
