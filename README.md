@@ -85,16 +85,18 @@ in a new foreground tab of a visible window, one run each on 2026-10-25
 | Memory, 10 tabs live (60 s after the last load) | **1,351 MiB** | 4,656 MiB | 6,315 MiB |
 | Memory, 10 tabs after 6 min idle | **1,046 MiB** | 3,189 MiB | 4,094 MiB |
 | Processes, 10 tabs live | **20** | 92 | 93 |
-| Startup | 2.0 s | **1.0 s** | 2.8 s |
+| Startup (median of 3 launches) | 0.9 s | **0.6 s** | 10.8 s |
 | First contentful paint (median) | 526 ms | **316 ms** | 400 ms |
 | Load event (median) | 1,084 ms | **787 ms** | 1,108 ms |
 | Switching back to an idle tab | 0.6–1.8 s (reloads) | **0.1 s** | **0.1 s** |
 
 Where Atrium is behind:
-- **First paint and load:** on the same pages Chrome paints first. Atrium also
-  loads fuller pages on some sites (see below).
-- **Startup:** Chrome is up in half the time. Atrium's figure runs until the shell
-  and first tab are ready; Chrome's ends when its DevTools port opens.
+- **First paint:** on real sites Chrome paints about 120–200 ms sooner (a
+  repeated visible-window check: YouTube 476 vs 280 ms, Gmail 496 vs 328 ms,
+  Wikipedia 296 vs 176 ms). A plain local page paints equally fast in both, and
+  turning ad blocking off does not close the gap.
+- **Startup:** Chrome starts about 0.3 s sooner. Atrium's figure runs until the
+  shell and first tab are ready; Chrome's ends when its DevTools port opens.
 - **Idle tabs:** Atrium keeps memory low by evicting idle tabs, so switching back
   reloads them.
 
