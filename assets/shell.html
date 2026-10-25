@@ -153,6 +153,16 @@ img + .mono { display: none; }
 .space-dot:hover::before { background: var(--fg-2); }
 .space-dot.on::before { background: var(--c); transform: scale(1.35); }
 
+/* Peek: while hidden, the sidebar floats over a snapshot of the page when the pointer rests at the left edge (Arc). */
+#peek-zone { position: fixed; left: 0; top: 0; bottom: 0; width: 6px; z-index: 8; display: none; }
+body.sb-hidden #peek-zone { display: block; }
+.native-chrome #peek-zone { display: none !important; }
+body.sb-hidden.peek #sidebar { position: fixed; left: 6px; top: 6px; bottom: 6px; z-index: 9; margin-left: 0; opacity: 1; visibility: visible;
+  border-radius: 12px; background: color-mix(in srgb, var(--c, #0a84ff) 9%, var(--window));
+  box-shadow: 0 0 0 .5px var(--menu-ring), 0 24px 60px -12px rgb(0 0 0 / .45); animation: peek-in .18s cubic-bezier(.3,.7,.2,1); }
+body.sb-hidden.peek #sidebar .sb-top { padding-left: 64px; height: 34px; }
+@keyframes peek-in { from { transform: translateX(-24px); opacity: 0; } }
+
 /* Top bar: the address and navigation when the sidebar is hidden (Arc's toolbar). */
 #col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 #topbar { height: 40px; flex: none; display: none; align-items: center; gap: 2px; padding: 0 0 0 70px; }
@@ -561,6 +571,7 @@ body.finding #findbar { display: flex; }
     <div class="ext-note">Extensions load when Atrium starts, so changes apply after a restart. Extension popups open in a preview window; extensions cannot see or control Atrium's tabs.</div>
   </div>
 </div>
+<div id="peek-zone" aria-hidden="true"></div>
 <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="announcer" class="sr" role="status" aria-live="polite" aria-atomic="true"></div>
 
@@ -669,6 +680,7 @@ const S = {
   agentTabs: new Map(),              // session id -> tab the agent works in
   pw: new Map(),                     // tab id -> password offer (origin and usernames only)
   chatsFolded: store.get('chatsFolded', false),
+  peek: false,                       // the hidden sidebar is floating over the page
 };
 const spaceColor = (sp) => SPACE_COLORS[(sp?.color || 0) % SPACE_COLORS.length];
 const curSpace = () => S.spaces.find((s) => s.id === S.space) || S.spaces[0];
@@ -708,6 +720,7 @@ window.atriumShell = {
       case 'commandBar': openCmdk(''); break;
       case 'editUrl': openCmdk(onWeb() ? activeTab().url : '', true); break;
       case 'toggleSidebar':
+        peek.close(false);
         if (document.body.classList.toggle('sb-hidden') && $('#sidebar').contains(document.activeElement)) leaveShell();
         // Report now as well: hidden or busy windows can delay the next animation frame.
         layoutNow(); layoutSoon(); break;
@@ -739,7 +752,7 @@ window.atriumShell = {
   },
   frozen(slot, url) {
     if (slot === 'pip') { pip.show(url); return; }
-    $('#frozen-' + slot).src = url; if (slot === 'main') { S.frozenUrl = url; alignBackdrops(); }
+    $('#frozen-' + slot).src = url; if (slot === 'main') { S.frozenUrl = url; alignBackdrops(); peek.frozen(); }
   },
   password(tab, offer) {
     if (offer) S.pw.set(tab, offer); else S.pw.delete(tab);
@@ -833,7 +846,9 @@ function renderView() {
   document.body.classList.toggle('glance', S.overlay === 'glance');
   document.body.classList.toggle('onboarding', S.overlay === 'onboarding');
   document.body.classList.toggle('ext', S.overlay === 'ext');
-  document.body.classList.toggle('is-frozen', !!S.overlay && web);
+  if (S.overlay || !document.body.classList.contains('sb-hidden')) S.peek = false;
+  document.body.classList.toggle('peek', S.peek);
+  document.body.classList.toggle('is-frozen', (!!S.overlay || S.peek) && web);
   document.body.classList.toggle('agent-here', working && web && agentTabOf(chat.id) === t.id);
   for (const id of ['#back', '#fwd', '#reload', '#tb-back', '#tb-fwd', '#tb-reload']) $(id).disabled = !web;
   for (const id of ['#assist', '#tb-assist']) { $(id).classList.toggle('on', S.side && web); $(id).setAttribute('aria-pressed', String(S.side && web)); }
@@ -862,7 +877,7 @@ function renderView() {
   if (S.overlay) requestAnimationFrame(alignBackdrops);
   if (S.overlay === 'glance') layoutGlance();
   const overlay = !!S.overlay && S.overlay !== 'glance';
-  ipc({ cmd: 'cover', on: !web || overlay, web, overlay });
+  ipc({ cmd: 'cover', on: !web || overlay || S.peek, web, overlay });
   layoutSoon();
 }
 
@@ -1260,6 +1275,49 @@ function freeze() {
   if (onWeb()) ipc({ cmd: 'freeze' });
 }
 function closeOverlay() { if (S.overlay === 'glance') ipc({ cmd: 'glanceClose' }); S.overlay = null; render(); restoreFocus(); }
+
+/* ── Peek: the hidden sidebar over the page (Arc) ─── */
+// Page views draw above the shell, so the page is swapped for its snapshot before the sidebar shows.
+const peek = {
+  timer: null, fallback: null, waiting: false,
+  enter() {
+    clearTimeout(this.timer);
+    if (S.peek || this.waiting || S.overlay || nativeChrome() || !document.body.classList.contains('sb-hidden')) return;
+    this.timer = setTimeout(() => {
+      if (!onWeb()) { this.show(); return; }
+      this.waiting = true; freeze();
+      this.fallback = setTimeout(() => this.show(), 400);
+    }, 120);
+  },
+  frozen() {
+    if (!this.waiting) return;
+    const img = $('#frozen-main'), go = () => this.show();
+    img.decode ? img.decode().then(go, go) : go();
+  },
+  show() {
+    clearTimeout(this.fallback);
+    if (!this.waiting && onWeb()) return;
+    this.waiting = false;
+    if (S.overlay || !document.body.classList.contains('sb-hidden')) return;
+    S.peek = true; render();
+  },
+  leave() { clearTimeout(this.timer); this.timer = setTimeout(() => this.close(), 280); },
+  close(refocus = true) {
+    clearTimeout(this.timer); clearTimeout(this.fallback); this.waiting = false;
+    if (!S.peek) return;
+    S.peek = false; render();
+    if (refocus && onWeb() && !S.overlay) focusPage();
+  },
+};
+$('#peek-zone').addEventListener('mouseenter', () => peek.enter());
+// Leaving the edge before the sidebar is out cancels it.
+$('#peek-zone').addEventListener('mouseleave', () => { if (S.peek) peek.leave(); else peek.close(false); });
+$('#sidebar').addEventListener('mouseenter', () => { if (S.peek) clearTimeout(peek.timer); });
+$('#sidebar').addEventListener('mouseleave', () => { if (S.peek) peek.leave(); });
+// Choosing a page from the peeked sidebar shows it right away.
+$('#sidebar').addEventListener('click', (e) => {
+  if (S.peek && e.target.closest('.row, .fav, .space-dot') && !e.target.closest('.x')) setTimeout(() => peek.close(), 0);
+}, true);
 $('#scrim').onclick = closeOverlay;
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.overlay) { e.preventDefault(); closeOverlay(); } });
 
