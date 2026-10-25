@@ -52,8 +52,12 @@ impl Policy {
             .collect()
     }
 }
-/// Whether macOS reports memory pressure (warning or critical).
+/// Whether macOS reports memory pressure (warning or critical). Test instances can
+/// simulate it with `ATRIUM_TEST_MEMORY_PRESSURE=1`, which needs `ATRIUM_MOCK_KEYCHAIN`.
 pub fn system_pressure() -> bool {
+    if std::env::var_os("ATRIUM_TEST_MEMORY_PRESSURE").is_some_and(|v| v == "1") && crate::migration::mock_keychain() {
+        return true;
+    }
     let mut level: libc::c_int = 0;
     let mut size = std::mem::size_of::<libc::c_int>();
     let name = c"kern.memorystatus_vm_pressure_level";
