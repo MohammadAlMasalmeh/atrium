@@ -160,19 +160,18 @@ img + .mono { display: none; }
 #peek-zone { position: fixed; left: 0; top: 0; bottom: 0; width: 6px; z-index: 8; display: none; }
 body.sb-hidden #peek-zone { display: block; }
 .native-chrome #peek-zone { display: none !important; }
-/* The peek floats as a rounded glass panel; what it blurs is the page snapshot under it. */
-body.sb-hidden.peek #sidebar { position: fixed; left: 8px; top: 8px; bottom: 8px; width: 256px; z-index: 9; margin-left: 0; opacity: 1; visibility: visible;
-  padding: 0 8px 8px 10px; border-radius: 22px;
-  background: color-mix(in srgb, var(--window) 66%, transparent);
-  -webkit-backdrop-filter: blur(30px) saturate(1.8); backdrop-filter: blur(30px) saturate(1.8);
-  box-shadow: inset 0 0 0 .5px rgb(255 255 255 / .2), inset 0 1px 0 rgb(255 255 255 / .16), 0 0 0 .5px rgb(0 0 0 / .22),
-    0 22px 50px -14px rgb(0 0 0 / .5);
-  transform-origin: left center; animation: peek-in .34s cubic-bezier(.2,1.15,.3,1); }
-body.sb-hidden.peek.peek-out #sidebar { animation: peek-out .2s cubic-bezier(.4,0,.7,.2) forwards; }
-/* The peeked buttons sit exactly over the top bar's. */
-body.sb-hidden.peek #sidebar .sb-top { padding-left: 62px; height: 22px; margin: 0 0 12px; }
-@keyframes peek-in { from { transform: translateX(calc(-100% - 16px)) scale(.94); opacity: .3; } }
-@keyframes peek-out { to { transform: translateX(calc(-100% - 16px)) scale(.94); opacity: 0; } }
+/* The peek is a glass panel under the top bar: the bar and the page stay put while it fades in
+   over the page's snapshot (which is what it blurs). The bar already has the buttons and address. */
+body.sb-hidden.peek #sidebar { position: fixed; left: 8px; top: 44px; bottom: 8px; width: 256px; z-index: 9; margin-left: 0; opacity: 1; visibility: visible;
+  padding: 8px 8px 8px 10px; border-radius: 16px;
+  background: color-mix(in srgb, var(--window) 72%, transparent);
+  -webkit-backdrop-filter: blur(30px) saturate(1.6); backdrop-filter: blur(30px) saturate(1.6);
+  box-shadow: inset 0 0 0 .5px rgb(255 255 255 / .14), 0 0 0 .5px rgb(0 0 0 / .2), 0 16px 40px -16px rgb(0 0 0 / .45);
+  animation: peek-in .18s cubic-bezier(.2,.7,.2,1); }
+body.sb-hidden.peek.peek-out #sidebar { animation: peek-out .14s ease-in forwards; }
+body.sb-hidden.peek #sidebar .sb-top, body.sb-hidden.peek #sidebar #url { display: none; }
+@keyframes peek-in { from { opacity: 0; transform: translateX(-10px); } }
+@keyframes peek-out { to { opacity: 0; transform: translateX(-10px); } }
 
 /* Top bar: the address and navigation when the sidebar is hidden (Arc's toolbar). */
 #col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -1420,7 +1419,7 @@ const peek = {
       S.peekCover = false; render();
       if (refocus && onWeb() && !S.overlay) focusPage();
       this.finishing = setTimeout(finish, 80);
-    }, 200);
+    }, 140);
   },
   cancelClose() { clearTimeout(this.closing); this.closing = null; document.body.classList.remove('peek-out'); },
 };
@@ -1594,7 +1593,7 @@ function updateCmdk() {
     items.push({ t: q, s: 'Ask the assistant  ⌘↩', ic: 'chat', run: () => askAgent(q) });
   }
   for (const t of S.tabs.filter((t) => t.kind === 'web' && q && match(t.title, t.url)).slice(0, 5))
-    items.push({ g: 'Switch to Tab', t: t.title || t.url, s: host(t.url), img: favicon(t.url, t.icon), page: true, run: () => { S.view = 'tab'; const sp = S.tabSpace.get(t.id); if (sp != null) S.space = sp; ipc({ cmd: 'activate', id: t.id }); } });
+    items.push({ g: 'Switch to Tab', t: t.title || t.url, s: host(t.url), img: favicon(t.url, t.icon), page: true, tab: t.id, run: () => { S.view = 'tab'; const sp = S.tabSpace.get(t.id); if (sp != null) S.space = sp; ipc({ cmd: 'activate', id: t.id }); } });
   for (const h of S.hist.filter((h) => q && match(h.title, h.url) && !S.tabs.some((t) => t.url === h.url)).slice(0, 6))
     items.push({ g: 'History', url: h.url, t: h.title || h.url, s: host(h.url), img: favicon(h.url), page: true, run: () => openUrl(h.url, !cmdkUrlMode) });
   for (const s of S.sessions.filter((s) => q && match(s.title)).slice(0, 3))
@@ -1647,6 +1646,11 @@ async function lookupCmdk(q) {
   drawCmdk();
 }
 function drawCmdk() {
+  // The best-matching and the selected sleeping tabs start loading, so choosing one is instant.
+  for (const it of [cmdkItems.find((x) => x.tab != null), cmdkItems[cmdkSel]]) {
+    const warm = tabById(it?.tab);
+    if (warm?.suspended) ipc({ cmd: 'prewarm', id: warm.id });
+  }
   let g, html = '';
   cmdkItems.forEach((it, i) => {
     if (i === 0 || it.g !== g) {
