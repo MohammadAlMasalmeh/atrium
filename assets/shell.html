@@ -72,6 +72,9 @@ kbd { font: 11px/16px var(--font); padding: 0 5px; border-radius: 4px; border: .
    so animating the width would make the page stutter. Only the contents ease in. */
 #sidebar { width: 250px; flex: none; display: flex; flex-direction: column; padding: 0 6px 6px 8px; }
 body.sb-hidden #sidebar { margin-left: -250px; visibility: hidden; }
+/* The toggle slides over a snapshot of the page (see sbAnim), so the width can animate. */
+body.sb-anim #sidebar { transition: margin-left .28s cubic-bezier(.2,.8,.2,1), opacity .22s, visibility 0s; }
+body.sb-anim.sb-hidden #sidebar { opacity: 0; transition: margin-left .28s cubic-bezier(.2,.8,.2,1), opacity .2s, visibility 0s .28s; }
 body.sb-reveal #sidebar { animation: sb-in .2s cubic-bezier(.2,.8,.2,1); }
 @keyframes sb-in { from { opacity: 0; transform: translateX(-10px); } }
 body.sb-hidden #app { padding-left: 6px; }
@@ -157,22 +160,31 @@ img + .mono { display: none; }
 #peek-zone { position: fixed; left: 0; top: 0; bottom: 0; width: 6px; z-index: 8; display: none; }
 body.sb-hidden #peek-zone { display: block; }
 .native-chrome #peek-zone { display: none !important; }
-body.sb-hidden.peek #sidebar { position: fixed; left: 6px; top: 6px; bottom: 6px; z-index: 9; margin-left: 0; opacity: 1; visibility: visible;
-  border-radius: 12px; background: var(--window);
-  box-shadow: 0 0 0 .5px var(--menu-ring), 0 24px 60px -12px rgb(0 0 0 / .45); animation: peek-in .24s cubic-bezier(.2,.8,.2,1); }
+/* The peek floats as a rounded glass panel; what it blurs is the page snapshot under it. */
+body.sb-hidden.peek #sidebar { position: fixed; left: 8px; top: 8px; bottom: 8px; width: 256px; z-index: 9; margin-left: 0; opacity: 1; visibility: visible;
+  padding: 0 8px 8px 10px; border-radius: 22px;
+  background: color-mix(in srgb, var(--window) 66%, transparent);
+  -webkit-backdrop-filter: blur(30px) saturate(1.8); backdrop-filter: blur(30px) saturate(1.8);
+  box-shadow: inset 0 0 0 .5px rgb(255 255 255 / .2), inset 0 1px 0 rgb(255 255 255 / .16), 0 0 0 .5px rgb(0 0 0 / .22),
+    0 22px 50px -14px rgb(0 0 0 / .5);
+  transform-origin: left center; animation: peek-in .34s cubic-bezier(.2,1.15,.3,1); }
 body.sb-hidden.peek.peek-out #sidebar { animation: peek-out .2s cubic-bezier(.4,0,.7,.2) forwards; }
 /* The peeked buttons sit exactly over the top bar's. */
-body.sb-hidden.peek #sidebar .sb-top { padding-left: 66px; height: 26px; margin-bottom: 8px; }
-@keyframes peek-in { from { transform: translateX(calc(-100% - 12px)); } }
-@keyframes peek-out { to { transform: translateX(calc(-100% - 12px)); } }
+body.sb-hidden.peek #sidebar .sb-top { padding-left: 62px; height: 22px; margin: 0 0 12px; }
+@keyframes peek-in { from { transform: translateX(calc(-100% - 16px)) scale(.94); opacity: .3; } }
+@keyframes peek-out { to { transform: translateX(calc(-100% - 16px)) scale(.94); opacity: 0; } }
 
 /* Top bar: the address and navigation when the sidebar is hidden (Arc's toolbar). */
 #col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-#topbar { height: 38px; flex: none; display: none; align-items: center; gap: 1px; padding: 0 2px 0 74px; }
-body.sb-hidden #topbar { display: flex; }
-body.sb-hidden #col { padding-top: 0; }
-body:not(.sb-hidden) #col { padding-top: 6px; }
+/* With the sidebar shown the bar folds to the 6px gap above the page, so it can grow in step with the slide. */
+#topbar { height: 6px; overflow: hidden; flex: none; display: flex; align-items: center; gap: 1px; padding: 0 2px 0 74px; }
+#topbar > * { opacity: 0; visibility: hidden; }
+body.sb-hidden #topbar { height: 38px; }
+body.sb-hidden #topbar > * { opacity: 1; visibility: visible; }
+body.sb-anim #topbar { transition: height .28s cubic-bezier(.2,.8,.2,1); }
+body.sb-anim #topbar > * { transition: opacity .2s, visibility 0s; }
 .native-chrome #topbar { display: none !important; }
+.native-chrome body:not(.sb-hidden) #col { padding-top: 6px; }
 /* Full screen hides the window buttons, so nothing needs to make room for them. */
 .fullscreen #topbar { padding-left: 6px; }
 .fullscreen .sb-top { padding-left: 4px; }
@@ -699,6 +711,7 @@ const S = {
   chatsFolded: store.get('chatsFolded', false),
   peek: false,                       // the hidden sidebar is floating over the page
   peekFrozen: false, peekCover: false, // its page snapshot is drawn; the live page is parked
+  sbFrozen: false, sbCover: false, sbAnim: false, // the same while the sidebar slides in or out
 };
 const spaceColor = (sp) => SPACE_COLORS[(sp?.color || 0) % SPACE_COLORS.length];
 const curSpace = () => S.spaces.find((s) => s.id === S.space) || S.spaces[0];
@@ -743,12 +756,9 @@ window.atriumShell = {
       case 'toggleSidebar': {
         const peeking = S.peek;
         peek.close(false, true); topEdit.close();
-        const hidden = document.body.classList.toggle('sb-hidden');
-        if (hidden && $('#sidebar').contains(document.activeElement)) leaveShell();
-        // A peeked sidebar is already on screen, so it stays put rather than easing in again.
-        if (!hidden && !peeking) revealSidebar();
-        // Report now as well: hidden or busy windows can delay the next animation frame.
-        layoutNow(); layoutSoon(); break;
+        // A peeked sidebar is already on screen, so it docks where it is.
+        if (peeking) { sbAnim.apply(false); layoutNow(); layoutSoon(); break; }
+        sbAnim.toggle(); break;
       }
       case 'toggleAssistant': toggleSide(); break;
       case 'toggleSplit': toggleSplit(); break;
@@ -779,7 +789,7 @@ window.atriumShell = {
   },
   frozen(slot, url) {
     if (slot === 'pip') { pip.show(url); return; }
-    $('#frozen-' + slot).src = url; if (slot === 'main') { S.frozenUrl = url; alignBackdrops(); peek.frozen(); }
+    $('#frozen-' + slot).src = url; if (slot === 'main') { S.frozenUrl = url; alignBackdrops(); peek.frozen(); sbAnim.frozen(); }
   },
   password(tab, offer) {
     if (offer) S.pw.set(tab, offer); else S.pw.delete(tab);
@@ -875,7 +885,7 @@ function renderView() {
   document.body.classList.toggle('ext', S.overlay === 'ext');
   if (S.overlay || !document.body.classList.contains('sb-hidden')) S.peek = S.peekFrozen = S.peekCover = false;
   document.body.classList.toggle('peek', S.peek);
-  document.body.classList.toggle('is-frozen', (!!S.overlay || S.peekFrozen) && web);
+  document.body.classList.toggle('is-frozen', (!!S.overlay || S.peekFrozen || S.sbFrozen) && web);
   document.body.classList.toggle('agent-here', working && web && agentTabOf(chat.id) === t.id);
   for (const id of ['#back', '#fwd', '#reload', '#tb-back', '#tb-fwd', '#tb-reload']) $(id).disabled = !web;
   for (const id of ['#tb-assist']) { $(id).classList.toggle('on', S.side && web); $(id).setAttribute('aria-pressed', String(S.side && web)); }
@@ -905,7 +915,8 @@ function renderView() {
   if (S.overlay) requestAnimationFrame(alignBackdrops);
   if (S.overlay === 'glance') layoutGlance();
   const overlay = !!S.overlay && S.overlay !== 'glance';
-  ipc({ cmd: 'cover', on: !web || overlay || S.peekCover, web, overlay, peek: S.peekCover && !overlay });
+  const parked = S.peekCover || S.sbCover;
+  ipc({ cmd: 'cover', on: !web || overlay || parked, web, overlay, peek: parked && !overlay });
   layoutSoon();
 }
 
@@ -1208,6 +1219,7 @@ function layoutSoon() {
 }
 // IPC messages are delivered in order, so the newest rect is always applied last.
 function layoutNow() {
+  if (S.sbAnim) return;   // the page is parked while the sidebar slides; it gets its final size once
   const r = (el) => { const b = el.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; };
   const msg = { cmd: 'layout', main: r($('#pane-main')), sidebar: !document.body.classList.contains('sb-hidden'), list: r($('.sb-scroll')) };
   if (S.find) { msg.main.y += FIND_H; msg.main.h = Math.max(0, msg.main.h - FIND_H); }
@@ -1387,6 +1399,77 @@ const peek = {
     }, 200);
   },
   cancelClose() { clearTimeout(this.closing); this.closing = null; document.body.classList.remove('peek-out'); },
+};
+/* ── Sidebar show/hide ─────────────────────────────── */
+// Resizing a live page every frame stutters, so the page is swapped for its snapshot (as for
+// the peek), the sidebar slides, and the page is laid out once at its new size off screen
+// before it comes back.
+const SB_MS = 280;
+function edgeColour(img) {
+  try {
+    const c = document.createElement('canvas'); c.width = 2; c.height = 24;
+    const x = c.getContext('2d');
+    x.drawImage(img, img.naturalWidth - 3, 0, 2, img.naturalHeight, 0, 0, 1, 24);
+    x.drawImage(img, 0, img.naturalHeight - 3, img.naturalWidth, 2, 1, 0, 1, 24);
+    const d = x.getImageData(0, 0, 2, 24).data; let r = 0, g = 0, b = 0;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+    const n = d.length / 4; return `rgb(${r / n | 0} ${g / n | 0} ${b / n | 0})`;
+  } catch { return ''; }
+}
+const sbAnim = {
+  busy: false, pending: null, fallback: null, pageFocus: false,
+  apply(hide) {
+    document.body.classList.toggle('sb-hidden', hide);
+    if (hide && $('#sidebar').contains(document.activeElement)) leaveShell();
+  },
+  toggle() {
+    if (this.busy) return;
+    const hide = !document.body.classList.contains('sb-hidden');
+    if (nativeChrome() || matchMedia('(prefers-reduced-motion: reduce)').matches) { this.apply(hide); layoutNow(); layoutSoon(); return; }
+    if (!onWeb() || S.overlay) { this.run(hide, false); return; }
+    this.busy = true; this.pending = hide; this.pageFocus = !document.hasFocus();
+    freeze();
+    // No snapshot in time: switch without the slide rather than wait.
+    this.fallback = setTimeout(() => { if (this.pending == null) return; this.pending = null; this.busy = false; this.apply(hide); layoutNow(); }, 500);
+  },
+  frozen() {
+    if (this.pending == null) return;
+    const hide = this.pending; this.pending = null; clearTimeout(this.fallback);
+    const img = $('#frozen-main'), go = () => this.cover(hide);
+    img.decode ? img.decode().then(go, go) : go();
+  },
+  cover(hide) {
+    // The snapshot keeps its size while the pane changes; any uncovered strip takes the page's edge colour.
+    for (const slot of ['main', 'split']) {
+      const pane = $('#pane-' + slot), img = $('#frozen-' + slot), b = pane.getBoundingClientRect();
+      Object.assign(img.style, { width: b.width + 'px', height: b.height + 'px', right: 'auto', bottom: 'auto', objectFit: 'fill' });
+      if (img.naturalWidth) pane.style.background = edgeColour(img);
+    }
+    S.sbFrozen = true; render();
+    afterPaint(() => { S.sbCover = true; render(); afterPaint(() => this.run(hide, true)); });
+  },
+  run(hide, parked) {
+    this.busy = true; S.sbAnim = true;
+    document.body.classList.add('sb-anim'); void document.body.offsetWidth;
+    this.apply(hide);
+    setTimeout(() => this.done(parked), SB_MS + 20);
+  },
+  done(parked) {
+    // A window that drew no frames (covered, busy) would otherwise be measured mid-slide.
+    for (const a of document.getAnimations()) if (a instanceof CSSTransition && a.effect?.target?.closest?.('#sidebar, #topbar')) a.finish();
+    document.body.classList.remove('sb-anim'); S.sbAnim = false; layoutNow();
+    if (!parked) { this.busy = false; return; }
+    // The parked page lays out and paints at its new size before it comes back over the snapshot.
+    setTimeout(() => {
+      S.sbCover = false; render();
+      if (this.pageFocus && onWeb() && !S.overlay) focusPage();
+      afterPaint(() => {
+        S.sbFrozen = false;
+        for (const slot of ['main', 'split']) { $('#frozen-' + slot).style.cssText = ''; $('#pane-' + slot).style.background = ''; }
+        render(); this.busy = false;
+      });
+    }, 90);
+  },
 };
 $('#peek-zone').addEventListener('mouseenter', () => peek.enter());
 // Leaving the edge before the sidebar is out cancels it.
