@@ -74,9 +74,13 @@ if (stills) {
 } else {
   const ffmpeg = spawn("ffmpeg", [
     "-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(fps), "-i", "-",
+    // X rejects H.264 above level 4.2 (the slow preset alone picks 5.0) and is
+    // happiest with an audio track, so add a silent one.
+    "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000", "-shortest",
     "-c:v", "libx264", "-preset", "slow", "-crf", "14", "-pix_fmt", "yuv420p", "-profile:v", "high",
+    "-level:v", "4.2", "-maxrate", "12M", "-bufsize", "24M",
     "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
-    "-movflags", "+faststart", out,
+    "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out,
   ], { stdio: ["pipe", "inherit", "inherit"] });
   const total = Math.round(duration * fps);
   for (let f = 0; f < total; f++) {
