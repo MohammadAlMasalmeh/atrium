@@ -23,7 +23,7 @@ app = background_app.prepare(args.app.resolve(), args.root / 'Apps/Aside.app')
 assert (app / 'Contents/Resources/crash_reporter.cfg').exists(), 'crash_reporter.cfg is missing from the bundle'
 cfg_lines = (app / 'Contents/Resources/crash_reporter.cfg').read_text().splitlines()
 assert not any(line.strip().startswith('ServerURL') for line in cfg_lines), 'crash uploads must stay disabled'
-instance = background_app.Instance(app, args.root / 'profile', args.port, args.root / 'browser.log')
+instance = background_app.Instance(app, args.root / 'profile', args.port, args.root / 'browser.log', {'ASIDE_DEBUG_API': '1'})
 failed = False
 try:
     instance.start()
@@ -33,13 +33,10 @@ try:
     before = client.api('/api/crash-reports')
     assert before['enabled'] is True and before['uploads'] is False, before
     assert before['reports'] == [], before
-    # open_tab opens a background tab; navigating it uses CEF's typed LoadURL, which Chromium
-    # requires for renderer debug URLs. The tool reports an error once the page is gone.
+    # Page.crash through the test-only DevTools endpoint; the assistant cannot open chrome:// URLs.
     client.tool('open_tab', {'url': f'{args.fixture}/page/crash-target'})
-    try:
-        client.request('/api/tool', {'name': 'navigate', 'args': {'url': 'chrome://crash'}}, timeout=10)
-    except (TimeoutError, OSError):
-        pass  # the tool keeps waiting for the crashed page to load
+    target = next(t['id'] for t in client.api('/api/browser/tabs')['tabs'] if t['url'].endswith('/page/crash-target'))
+    client.request('/api/debug/cdp', {'tab': target, 'method': 'Page.crash', 'params': {}})
     deadline = time.time() + 45
     reports = []
     while time.time() < deadline and not reports:

@@ -42,7 +42,9 @@ opener = until(lambda s: any(t['id'] not in before and not t['loading'] for t in
 opener = next(t['id'] for t in opener['tabs'] if t['id'] not in before)
 listed = [t for t in tabs()['tabs'] if t['kind'] != 'scratch']
 client.tool('switch_tab', {'index': next(i for i, t in enumerate(listed) if t['id'] == opener)})
-client.tool('evaluate', {'code': "window.open(location.origin + '/popup/oauth', 'signin', 'popup,width=420,height=560'); return true;"})
+# Popups need user activation; the test instance must run with ASIDE_DEBUG_API=1.
+gesture = lambda tab, js: client.request('/api/debug/cdp', {'tab': tab, 'method': 'Runtime.evaluate', 'params': {'expression': js, 'userGesture': True}})
+gesture(opener, "window.open(location.origin + '/popup/oauth', 'signin', 'popup,width=420,height=560')")
 state = until(lambda s: any('/popup/' in t['url'] for t in s['tabs']), 'Popup did not open as a tab')
 popup = next(t for t in state['tabs'] if '/popup/' in t['url'])
 assert state['active'] == popup['id'], state
@@ -52,7 +54,7 @@ assert state['active'] == opener, f'Closing a popup must return to its opener: {
 title = next(t['title'] for t in state['tabs'] if t['id'] == opener)
 assert title == 'Opener got signed-in', title
 print('popup kept window.opener, messaged it, closed itself, and returned to the opener', flush=True)
-client.tool('evaluate', {'code': "const a = Object.assign(document.createElement('a'), {href: '/page/blank-target', target: '_blank'}); document.body.append(a); a.click(); return true;"})
+gesture(opener, "const a = Object.assign(document.createElement('a'), {href: '/page/blank-target', target: '_blank'}); document.body.append(a); a.click()")
 state = until(lambda s: any(t['url'].endswith('/page/blank-target') and not t['loading'] for t in s['tabs']), 'target=_blank link did not open a tab')
 assert next(t for t in state['tabs'] if t['url'].endswith('/page/blank-target'))['id'] == state['active'], state
 print('PASS: window.open popups keep their opener; target=_blank links open foreground tabs', flush=True)

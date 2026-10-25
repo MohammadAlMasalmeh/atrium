@@ -86,7 +86,7 @@ with tempfile.TemporaryDirectory(prefix='aside-passwords-', dir='/private/tmp') 
     fixture = subprocess.Popen([sys.executable, str(ROOT / 'password_fixture.py'), '--port', str(args.fixture_ports[0]),
                                 '--port', str(args.fixture_ports[1])], stdout=subprocess.DEVNULL)
     browser = subprocess.Popen([str(args.app.resolve()), '--data-dir', str(data / 'profile'), 'run', '--port', str(args.port),
-                                '--opencode-url', 'http://127.0.0.1:1'], stdout=log, stderr=log, env=aside_api.instance_env())
+                                '--opencode-url', 'http://127.0.0.1:1'], stdout=log, stderr=log, env={**aside_api.instance_env(), 'ASIDE_DEBUG_API': '1'})
     watchdog = subprocess.Popen(['/bin/sh', str(args.watchdog), str(browser.pid)], stdout=(data / 'watchdog.log').open('w'))
     step = 'startup'
 
@@ -237,10 +237,16 @@ with tempfile.TemporaryDirectory(prefix='aside-passwords-', dir='/private/tmp') 
         assert 'error' in client.request('/api/passwords/reveal', {'id': edited['id']})
         api('/api/passwords/never', {'origin': B, 'never': False})
         assert B not in api('/api/passwords')['never']
-        assert 'error' in client.request('/api/debug/cdp', {'method': 'Runtime.evaluate', 'params': {'expression': '1'}})
+        assert 'error' in client.request('/api/debug/cdp', {'method': 'Network.getAllCookies', 'params': {}})
 
         step = 'passkey registration and sign-in with a virtual authenticator'
         go(f'{HOST}/passkey')
+        # The fixture's `passkey` helper lives in the page's own world, which the agent's
+        # isolated-world evaluate cannot see; WebAuthn also wants user activation.
+        def page(code):
+            r = api('/api/debug/cdp', {'tab': tab, 'method': 'Runtime.evaluate', 'params': {
+                'expression': f'(async () => {{ {code} }})()', 'awaitPromise': True, 'returnByValue': True, 'userGesture': True}})
+            return r['result']['result'].get('value')
         caps = page('return await passkey.capabilities()')
         assert caps['publicKeyCredential'] and caps['secureContext'], caps
         cdp = lambda method, params=None: api('/api/debug/cdp', {'tab': tab, 'method': method, 'params': params or {}})['result']

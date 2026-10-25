@@ -277,11 +277,11 @@ def run(b, fixture):
     def native_ready():
         tree = native_nodes(b.state(tree=True).get('native'))
         areas = {n.get('title') or n.get('label') for n in tree if n.get('role') == 'AXWebArea'}
-        return tree if {'Aside', titles[1]} <= areas else None
+        return tree if {'Atrium', titles[1]} <= areas else None
 
     tree = wait(native_ready, 20) or native_nodes(b.state(tree=True).get('native'))
     areas = sorted({n.get('title') or n.get('label') or '' for n in tree if n.get('role') == 'AXWebArea'})
-    check({'Aside', titles[1]} <= set(areas), 'the native tree contains web areas for the shell and the page', areas)
+    check({'Atrium', titles[1]} <= set(areas), 'the native tree contains web areas for the shell and the page', areas)
     texts = {n.get('title') or n.get('label') or n.get('value') for n in tree}
     check('Increment' in texts and titles[0] in texts, 'native tree exposes page controls and shell tab names', len(tree))
     check(any(n.get('role') == 'AXTabGroup' for n in tree), 'native tree exposes the tab list as AXTabGroup')

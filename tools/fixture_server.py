@@ -35,6 +35,8 @@ const probe = async (name, run) => {
   attack.popup_file = window.open('file:///etc/hosts') !== null;
   attack.popup_web = window.open(location.origin + '/page/evil-popup') !== null;
   attack.done = true;
+  // Agent scripts run in an isolated world, so results are also left on the DOM.
+  document.documentElement.dataset.attack = JSON.stringify(attack);
 })();
 </script>'''
 
