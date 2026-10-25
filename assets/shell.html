@@ -69,7 +69,7 @@ kbd { font: 11px/16px var(--font); padding: 0 5px; border-radius: 4px; border: .
 body.sb-hidden #sidebar { margin-left: -250px; opacity: 0; }
 body.sb-hidden #app { padding-left: 6px; }
 /* Drawn by AppKit on the window glass instead (ATRIUM_NATIVE_CHROME=1). */
-.native-chrome .sb-top > button, .native-chrome #url { visibility: hidden; }
+.native-chrome .sb-top > button, .native-chrome #url, .native-chrome .sb-scroll { visibility: hidden; }
 .sb-top { height: 40px; flex: none; display: flex; align-items: center; gap: 0; padding-left: 70px; }
 .sb-top .grow { flex: 1; align-self: stretch; }
 #url { height: 34px; flex: none; margin: 2px 0 10px; border-radius: 9px; background: var(--well); display: flex; align-items: center; gap: 7px; padding: 0 6px 0 10px;
@@ -535,6 +535,7 @@ window.atriumShell = {
     $('#frozen-' + slot).src = url; if (slot === 'main') { S.frozenUrl = url; alignBackdrops(); }
   },
   toast,
+  sidebar: (a) => sidebarAction(a),
 };
 function remember(t) {
   if (S.hist[0] && S.hist[0].url === t.url) { S.hist[0].title = t.title; return; }
@@ -601,13 +602,60 @@ function render() {
   layoutSoon();
 }
 
+const livePin = (p) => spaceTabs().find((x) => x.url === p.url || host(x.url) === host(p.url) && x.url.startsWith(p.url));
+function openFav(u) { const open = spaceTabs().find((x) => host(x.url) === host(u)); S.view = 'tab'; if (open) ipc({ cmd: 'activate', id: open.id }); else ipc({ cmd: 'newTab', url: u }); }
+function removeFav(i) { S.favs.splice(i, 1); store.set('favs', S.favs); render(); toast('Removed from Favorites'); }
+function openPin(p) { const live = livePin(p); S.view = 'tab'; if (live) ipc({ cmd: 'activate', id: live.id }); else ipc({ cmd: 'newTab', url: p.url }); }
+function unpin(i) { pinnedHere().splice(i, 1); store.set('pinned', S.pinned); render(); }
+function openNewTab() { S.view = 'tab'; S.ntpMode = 'search'; ipc({ cmd: 'newTab' }); render(); setTimeout(() => $('#ob').focus(), 30); }
+
+// With ATRIUM_NATIVE_CHROME=1 AppKit draws the sidebar list from this model and
+// sends its clicks back through atriumShell.sidebar(); the shell still owns the state.
+const nativeChrome = () => document.documentElement.classList.contains('native-chrome');
+let lastSidebarModel = '';
+function sendSidebarModel() {
+  const t = activeTab(), web = onWeb(), sp = curSpace(), pins = pinnedHere(), agentTab = agentTabOf(chat.id);
+  const pinnedLive = new Set(pins.map((p) => livePin(p)?.id).filter(Boolean));
+  const model = {
+    favs: S.favs.map((u) => ({ url: u, title: siteName(u), icon: favicon(u), active: web && host(t.url) === host(u) })),
+    space: { id: sp.id, name: sp.name, color: spaceColor(sp) },
+    spaces: S.spaces.map((s) => ({ id: s.id, name: s.name })),
+    pinned: pins.map((p) => { const live = livePin(p); return { url: p.url, title: p.title || host(p.url), icon: favicon(p.url, live?.icon), live: !!live, active: !!live && live.id === S.active && S.view === 'tab' }; }),
+    new_tab_active: !web && S.view !== 'chat',
+    tabs: spaceTabs().filter((x) => !pinnedLive.has(x.id)).map((x) => ({
+      id: x.id, title: x.title || host(x.url) || x.url, url: x.url, icon: favicon(x.url, x.icon), loading: !!x.loading, suspended: !!x.suspended,
+      active: (x.id === S.active || x.id === S.split) && S.view === 'tab', split: x.id === S.split, agent: x.id === agentTab && !!chat.busy })),
+    chats: S.sessions.slice(0, 8).map((s) => ({ id: String(s.id), title: s.title || 'New Chat', busy: !!s.busy, active: s.id === chat.id && (S.view === 'chat' || (S.side && web)) })),
+  };
+  const json = JSON.stringify(model);
+  if (json !== lastSidebarModel) { lastSidebarModel = json; ipc({ cmd: 'sidebar', model }); }
+}
+function sidebarAction(a) {
+  const pins = pinnedHere();
+  switch (a.action) {
+    case 'fav': if (S.favs[a.i]) openFav(S.favs[a.i]); break;
+    case 'favRemove': removeFav(a.i); break;
+    case 'pin': if (pins[a.i]) openPin(pins[a.i]); break;
+    case 'unpin': unpin(a.i); break;
+    case 'pinMove': { const [p] = pins.splice(a.from, 1); if (p) pins.splice(Math.min(a.to, pins.length), 0, p); store.set('pinned', S.pinned); render(); break; }
+    case 'pinTab': { const x = tabById(a.id); if (x && !pins.some((p) => p.url === x.url)) { pins.push({ url: x.url, title: x.title }); store.set('pinned', S.pinned); render(); toast(`Pinned to ${curSpace().name}`); } break; }
+    case 'tab': S.view = 'tab'; ipc(a.split ? { cmd: 'split', id: a.id } : { cmd: 'activate', id: a.id }); break;
+    case 'newTab': openNewTab(); break;
+    case 'chat': openChat(a.id, true); break;
+    case 'newChat': newChat(true); break;
+    case 'moveToSpace': S.tabSpace.set(a.id, a.space); if (a.id === S.active) { S.lastTab.set(a.space, a.id); switchSpace(a.space); } else render(); break;
+    case 'renameSpace': { const name = String(a.name || '').trim(); if (name) { curSpace().name = name.slice(0, 30); store.set('spaces3', S.spaces); render(); } break; }
+  }
+}
+
 function renderSidebar() {
+  if (nativeChrome()) sendSidebarModel();
   const t = activeTab(), web = onWeb();
   patch($('#favs'), S.favs.map((u, i) =>
     `<button class="fav ${web && host(t.url) === host(u) ? 'active' : ''}" data-i="${i}" title="${esc(siteName(u))}"><img src="${esc(favicon(u))}" alt=""></button>`).join(''));
   $$('#favs .fav').forEach((b) => {
-    b.onclick = () => { const u = S.favs[b.dataset.i]; const open = spaceTabs().find((x) => host(x.url) === host(u)); S.view = 'tab'; if (open) ipc({ cmd: 'activate', id: open.id }); else ipc({ cmd: 'newTab', url: u }); };
-    b.oncontextmenu = (e) => { e.preventDefault(); S.favs.splice(b.dataset.i, 1); store.set('favs', S.favs); render(); toast('Removed from Favorites'); };
+    b.onclick = () => openFav(S.favs[b.dataset.i]);
+    b.oncontextmenu = (e) => { e.preventDefault(); removeFav(b.dataset.i); };
   });
   const sp = curSpace();
   patch($('#space-head'), `<i style="--c:${spaceColor(sp)}"></i><span>${esc(sp.name)}</span>`);
@@ -621,11 +669,8 @@ function renderSidebar() {
   }).join(''));
   $('#pin-divider').style.display = pins.length ? '' : 'none';
   $$('#pinned .row').forEach((r) => r.onclick = (e) => {
-    const p = pins[+r.dataset.i];
-    if (e.target.closest('.x')) { pins.splice(+r.dataset.i, 1); store.set('pinned', S.pinned); render(); return; }
-    const live = spaceTabs().find((x) => x.url === p.url || host(x.url) === host(p.url) && x.url.startsWith(p.url));
-    S.view = 'tab';
-    if (live) ipc({ cmd: 'activate', id: live.id }); else ipc({ cmd: 'newTab', url: p.url });
+    if (e.target.closest('.x')) return unpin(+r.dataset.i);
+    openPin(pins[+r.dataset.i]);
   });
 
   // Today tabs (live tabs of this space that aren't pinned).
@@ -725,7 +770,7 @@ function layoutSoon() {
 function layoutNow() {
   if (layoutInFlight) { layoutAgain = true; return; }
   const r = (el) => { const b = el.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; };
-  const msg = { cmd: 'layout', main: r($('#pane-main')), sidebar: !document.body.classList.contains('sb-hidden') };
+  const msg = { cmd: 'layout', main: r($('#pane-main')), sidebar: !document.body.classList.contains('sb-hidden'), list: r($('.sb-scroll')) };
   if (document.body.classList.contains('split')) msg.split = r($('#pane-split'));
   if (S.overlay === 'glance') msg.glance = r($('#glance-frame'));
   layoutInFlight = true;
@@ -753,7 +798,7 @@ $('#reload').onclick = () => ipc({ cmd: 'reload' });
 $('#url').onclick = (e) => { if (!e.target.closest('.act')) atriumShell.cmd('editUrl'); };
 $('#url-copy').onclick = copyUrl;
 $('#url-pin').onclick = togglePin;
-$('#new-tab').onclick = () => { S.view = 'tab'; S.ntpMode = 'search'; ipc({ cmd: 'newTab' }); render(); setTimeout(() => $('#ob').focus(), 30); };
+$('#new-tab').onclick = openNewTab;
 $('#sb-toggle').onclick = () => atriumShell.cmd('toggleSidebar');
 $('#cmd-btn').onclick = () => openCmdk('');
 $('#new-chat').onclick = () => newChat(true);

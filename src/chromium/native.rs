@@ -149,6 +149,7 @@ pub(super) fn create(bridge: Bridge, shell_url: &str) {
 
     if super::chrome::enabled() {
         super::chrome::install(&content, bridge.clone());
+        super::sidebar::install(&content, bridge.clone());
     }
 
     let delegate: Retained<WindowEvents> =
