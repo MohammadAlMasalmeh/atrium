@@ -18,6 +18,8 @@ mod mac;
 mod shell_ipc;
 #[path = "chromium/url.rs"]
 mod url;
+#[path = "chromium/commands.rs"]
+mod commands;
 pub use url::normalize_url;
 
 const LIFECYCLE_JS: &str = include_str!("../assets/lifecycle.js");
@@ -124,11 +126,22 @@ pub enum Op {
         reply: Reply<Json>,
     },
     PasswordOffers(Reply<Json>),
+    /// Find, zoom, printing, downloads, and other browser commands (`/api/browser/action`).
+    Action {
+        body: Json,
+        reply: Reply<Result<Json, String>>,
+    },
 }
 use crate::migration::cookies::{Stored as CookieStored, Write as CookieWrite};
 #[derive(Clone)]
 pub struct Handle(Bridge);
 impl Handle {
+    /// Opens pages from the command line or another launch once the window exists.
+    pub fn open_urls(&self, urls: Vec<String>) {
+        if !urls.is_empty() {
+            self.0.send(Event::Commands(commands::Ev::OpenUrls(urls)));
+        }
+    }
     pub async fn op<T>(&self, make: impl FnOnce(Reply<T>) -> Op) -> Result<T> {
         let (tx, rx) = oneshot::channel();
         self.0.send(Event::Operation(make(tx)));
@@ -206,6 +219,7 @@ enum Event {
     TakeFocus(u64, bool),
     Favicon(u64, String),
     FaviconSaved(u64, String),
+    Commands(commands::Ev),
 }
 /// Results of password store work done off the UI thread.
 enum PwEvent {
@@ -353,6 +367,7 @@ struct Manager {
     pw_forms: HashMap<u64, PwForms>,
     pw_pending: HashMap<u64, PwPending>,
     pw_offers: HashMap<u64, Json>,
+    cmds: commands::State,
 }
 impl Manager {
     fn tab(&self, id: u64) -> Option<&Tab> {
@@ -469,6 +484,7 @@ impl Manager {
         self.create_view(id);
         self.layout();
         self.push(true);
+        self.apply_zoom(id);
         // Agent and API tab switches must not pull the window in front of other apps.
         if let Some(view) = self.tab(id).and_then(|t| t.view.as_ref()) {
             view.request_focus();
@@ -487,6 +503,7 @@ impl Manager {
         if id == SHELL {
             return;
         }
+        self.remember_closed(id);
         if let Some(host) = self
             .tab(id)
             .and_then(|t| t.browser.as_ref())
@@ -1039,6 +1056,7 @@ impl Manager {
                 let offers: serde_json::Map<String, Json> = self.pw_offers.iter().map(|(id, o)| (id.to_string(), o.clone())).collect();
                 let _ = reply.send(json!({ "forms": forms, "offers": offers }));
             }
+            Op::Action { body, reply } => self.action(body, Some(reply)),
             Op::Memory(reply) => {
                 let r = &self.main_rect;
                 let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": self.tab(SHELL).is_some_and(|t|t.browser.is_some()), "shell_view": self.tab(SHELL).is_some_and(|t|t.view.is_some()), "shell_record": self.tab(SHELL).is_some(), "live_renderers": self.tabs.iter().filter(|t|t.view.is_some()).count(), "tabs": self.tabs.iter().filter(|t| t.id != SHELL).map(|t| json!({"id":t.id,"live":t.view.is_some(),"suspended":t.suspended})).collect::<Vec<_>>(),
@@ -1065,11 +1083,17 @@ impl Manager {
                         }
                         "new-tab" => {
                             self.new_tab(None, true, false);
+                            if let Some(view) = self.tab(SHELL).and_then(|t| t.view.as_ref()) {
+                                view.request_focus();
+                            }
+                            self.cmd("focusStart");
                         }
                         "about" => self.open_about(),
                         "open-location" => self.cmd("editUrl"),
                         "command-bar" => self.cmd("commandBar"),
                         "back" | "forward" | "reload" => self.command(json!({"cmd":name})),
+                        // DevTools opens a window, which background test instances must never show.
+                        "devtools" | "devtools-shell" if mac::background() => {}
                         "devtools" | "devtools-shell" => {
                             let id = if name == "devtools-shell" {
                                 Some(SHELL)
@@ -1084,7 +1108,11 @@ impl Manager {
                                 host.show_dev_tools(None, None, None, None);
                             }
                         }
-                        other => self.cmd(other),
+                        other => {
+                            if !self.named(other) {
+                                self.cmd(other)
+                            }
+                        }
                     }
                 }
             }
@@ -1256,7 +1284,9 @@ impl Manager {
                     }
                 }
             }
-            _ => {}
+            "drag" => {}
+            "uiReport" => self.cmds.shell = m.clone(),
+            _ => self.action(m.clone(), None),
         }
     }
     fn event(&mut self, event: Event) {
@@ -1293,6 +1323,11 @@ impl Manager {
                 self.restore_session();
                 self.voiceover = mac::voiceover_enabled();
                 self.update_accessibility();
+                self.flush_urls();
+                mac::ensure_delegate();
+                if !mac::delegate_installed() {
+                    eprintln!("URLs opened by other apps will not reach Aside: the app delegate was replaced");
+                }
                 let mut maintenance = Maintenance::new(self.bridge.clone());
                 post_delayed_task(ThreadId::UI, Some(&mut maintenance), 10000);
                 if mac::background() {
@@ -1391,6 +1426,7 @@ impl Manager {
                     t.url = url;
                 }
                 self.session_dirty = true;
+                self.apply_zoom(id);
                 self.push(false);
             }
             Event::Loading(id, loading) => {
@@ -1414,6 +1450,7 @@ impl Manager {
                         self.pw_offer(id, None);
                     }
                     self.cdp(id, "Page.getFrameTree", json!({}), Pending::Pw(id, PwStep::Tree));
+                    self.apply_zoom(id);
                 }
                 self.push(false);
             }
@@ -1502,6 +1539,7 @@ impl Manager {
             }
             Event::Quit => {
                 self.session_dirty = true;
+                mac::release_test_pasteboard();
                 self.save_session();
                 self.closing.store(true, Ordering::Relaxed);
                 for t in &self.tabs {
@@ -1511,6 +1549,7 @@ impl Manager {
                 }
             }
             Event::Maintenance => self.maintain(),
+            Event::Commands(event) => self.on_commands(event),
         }
     }
 }
@@ -1670,6 +1709,8 @@ wrap_client! {struct HostClient {bridge:Bridge,id:u64,base:String,popups:Popups}
     fn download_handler(&self)->Option<DownloadHandler>{Some(HostDownload::new(self.bridge.clone(),self.id))}
     fn keyboard_handler(&self)->Option<KeyboardHandler>{Some(HostKeyboard::new(self.bridge.clone(),self.id))}
     fn focus_handler(&self)->Option<FocusHandler>{Some(HostFocus::new(self.bridge.clone(),self.id))}
+    fn find_handler(&self)->Option<FindHandler>{Some(commands::HostFind::new(self.bridge.clone(),self.id))}
+    fn context_menu_handler(&self)->Option<ContextMenuHandler>{(self.id!=SHELL).then(|| commands::HostMenu::new(self.bridge.clone(),self.id))}
 }}
 // Tabbing past either end of a page or the shell continues in the next BrowserView.
 wrap_focus_handler! {struct HostFocus {bridge:Bridge,id:u64} impl FocusHandler {
@@ -1768,7 +1809,7 @@ wrap_dev_tools_message_observer! {struct DevObserver {bridge:Bridge,id:u64} impl
     }
 }}
 wrap_keyboard_handler! {struct HostKeyboard {bridge:Bridge,id:u64} impl KeyboardHandler {
-    fn on_pre_key_event(&self, _unused28:Option<&mut Browser>,event:Option<&KeyEvent>, _unused29:*mut u8, _unused30:Option<&mut i32>)->i32{
+    fn on_pre_key_event(&self, _unused28:Option<&mut Browser>,event:Option<&KeyEvent>, _unused29:*mut u8, is_shortcut:Option<&mut i32>)->i32{
         let Some(e)=event else{return 0}; if e.type_!=KeyEventType::RAWKEYDOWN {return 0;}
         // F6 moves focus between the browser UI and the page; Escape leaves Glance.
         let plain = e.modifiers & ((1<<2)|(1<<3)|(1<<7)) == 0;
@@ -1780,9 +1821,19 @@ wrap_keyboard_handler! {struct HostKeyboard {bridge:Bridge,id:u64} impl Keyboard
             self.bridge.send(Event::Command(json!({"cmd":"shellCommand","name":"closeOverlay"})));
             return 1;
         }
-        if e.modifiers & (1<<7)==0 {return 0;}
-        let cmd=match e.windows_key_code {84|75=>Some("commandBar"),76=>Some("editUrl"),69=>Some("toggleAssistant"),78=>Some("newChat"),83=>Some("toggleSidebar"),_=>None};
-        if let Some(cmd)=cmd{self.bridge.send(Event::Command(json!({"cmd":"shellCommand","name":cmd})));1}else{0}
+        match commands::shortcut(e.windows_key_code, e.modifiers) {
+            Some((name, true)) => {self.bridge.send(Event::Command(json!({"cmd":"menu","name":name})));1}
+            // The page may handle it first; on_key_event runs the command if it doesn't.
+            Some((_, false)) => {if let Some(s)=is_shortcut{*s=1;}0}
+            None => 0,
+        }
+    }
+    fn on_key_event(&self, _unused50:Option<&mut Browser>,event:Option<&KeyEvent>, _unused51:*mut u8)->i32{
+        let Some(e)=event else{return 0}; if e.type_!=KeyEventType::RAWKEYDOWN {return 0;}
+        match commands::shortcut(e.windows_key_code, e.modifiers) {
+            Some((name, false)) => {self.bridge.send(Event::Command(json!({"cmd":"menu","name":name})));1}
+            _ => 0,
+        }
     }
 }}
 
@@ -1842,9 +1893,11 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
             pw_forms: HashMap::new(),
             pw_pending: HashMap::new(),
             pw_offers: HashMap::new(),
+            cmds: Default::default(),
         })
     });
     let bridge = manager.lock().unwrap().bridge.clone();
+    mac::set_bridge(bridge.clone());
     start(Handle(bridge.clone()));
     let args = cef::args::Args::new();
     let root = crate::data_dir().expect("data directory").join("chromium");
@@ -1880,8 +1933,14 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
 
 wrap_download_handler! {struct HostDownload {bridge:Bridge,id:u64} impl DownloadHandler {
     fn can_download(&self,_browser:Option<&mut Browser>,_url:Option<&CefString>,_method:Option<&CefString>)->i32{1}
-    fn on_before_download(&self,_browser:Option<&mut Browser>,item:Option<&mut DownloadItem>,_name:Option<&CefString>,callback:Option<&mut BeforeDownloadCallback>)->i32{if let Some(item)=item{self.bridge.send(Event::Download(self.id,item.id(),true));}if let Some(callback)=callback{callback.cont(None,1);1}else{0}}
-    fn on_download_updated(&self,_browser:Option<&mut Browser>,item:Option<&mut DownloadItem>,_callback:Option<&mut DownloadItemCallback>){if let Some(item)=item{self.bridge.send(Event::Download(self.id,item.id(),item.is_in_progress()!=0));}}
+    // The download list picks the path (no dialog unless the user chose "Save … As").
+    fn on_before_download(&self,_browser:Option<&mut Browser>,item:Option<&mut DownloadItem>,name:Option<&CefString>,callback:Option<&mut BeforeDownloadCallback>)->i32{
+        let (Some(item),Some(callback))=(item,callback) else {return 0};
+        self.bridge.send(Event::Download(self.id,item.id(),true));
+        self.bridge.send(Event::Commands(commands::Ev::BeforeDownload{item:commands::download_info(self.id,item,name),callback:callback.clone()}));
+        1
+    }
+    fn on_download_updated(&self,_browser:Option<&mut Browser>,item:Option<&mut DownloadItem>,callback:Option<&mut DownloadItemCallback>){if let Some(item)=item{self.bridge.send(Event::Download(self.id,item.id(),item.is_in_progress()!=0));self.bridge.send(Event::Commands(commands::Ev::DownloadUpdated{item:commands::download_info(self.id,item,None),control:callback.map(|c|c.clone())}));}}
 }}
 type Entries = Arc<Mutex<(Vec<String>, usize)>>;
 wrap_navigation_entry_visitor! {struct HistoryVisitor {entries:Entries} impl NavigationEntryVisitor {
