@@ -368,6 +368,8 @@ struct Manager {
     split_rect: Option<Rect>,
     glance_rect: Option<Rect>,
     covered: bool,
+    /// The shell document has loaded and reported `ready`.
+    shell_loaded: bool,
     policy: crate::memory::Policy,
     session_dirty: bool,
     next_id: u64,
@@ -503,7 +505,7 @@ impl Manager {
         self.apply_zoom(id);
         // Agent and API tab switches must not pull the window in front of other apps.
         if let Some(host) = self.host(id) {
-            host.set_focus(1);
+            focus_page(&host);
         }
     }
     fn open_about(&mut self) {
@@ -675,7 +677,7 @@ impl Manager {
     fn take_focus(&self, id: u64, next: bool) {
         match id {
             SHELL => match self.page_visible() {
-                Some(host) => host.set_focus(1),
+                Some(host) => focus_page(&host),
                 None => self.focus_shell(if next { "focusFirst" } else { "focusLast" }),
             },
             GLANCE => self.focus_shell(if next { "focusGlance" } else { "focusGlanceEnd" }),
@@ -1086,7 +1088,7 @@ impl Manager {
             },
             Op::Memory(reply) => {
                 let r = &self.main_rect;
-                let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": native::has_shell(), "native_chrome": chrome::describe(), "native_sidebar": sidebar::describe(), "live_renderers": self.tabs.iter().filter(|t|t.live).count(), "tabs": self.tabs.iter().map(|t| json!({"id":t.id,"live":t.live,"suspended":t.suspended,"view":t.browser.as_ref().filter(|_| !t.detached).and_then(|b| b.host()).and_then(|h| native::frame_of(h.window_handle()))})).collect::<Vec<_>>(),
+                let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": native::has_shell() && self.shell_loaded, "native_chrome": chrome::describe(), "native_sidebar": sidebar::describe(), "live_renderers": self.tabs.iter().filter(|t|t.live).count(), "tabs": self.tabs.iter().map(|t| json!({"id":t.id,"live":t.live,"suspended":t.suspended,"view":t.browser.as_ref().filter(|_| !t.detached).and_then(|b| b.host()).and_then(|h| native::frame_of(h.window_handle()))})).collect::<Vec<_>>(),
                     "layout": { "main": { "x": r.x, "y": r.y, "w": r.width, "h": r.height }, "covered": self.covered, "glance": self.glance_rect.is_some() },
                     "shell_ipc": { "process_messages": SHELL_MESSAGES.load(Ordering::Relaxed), "rejected_messages": REJECTED_MESSAGES.load(Ordering::Relaxed), "http_commands": HTTP_COMMANDS.load(Ordering::Relaxed) } }));
             }
@@ -1141,10 +1143,12 @@ impl Manager {
             }
             "log" => eprintln!("[shell] {}", m["msg"].as_str().unwrap_or("")),
             "ready" => {
+                self.shell_loaded = true;
                 // Onboarding is a shell overlay, and pages under an overlay are hidden,
                 // which defers permission prompts and changes page lifecycle in tests.
+                // onboarding.js loads after the shell reports ready; it opens as it defines itself.
                 if mac::background() {
-                    self.shell("window.atriumOnboarding?.close()");
+                    self.shell("(function close() { if (window.atriumOnboarding) atriumOnboarding.close(); else setTimeout(close, 50); })()");
                 }
                 if self.active.is_none() {
                     self.new_tab(None, true, false);
@@ -1166,14 +1170,14 @@ impl Manager {
                 // A command that opens a page asks for focus before the shell uncovers it.
                 Some("page") => match self.page_visible() {
                     Some(host) => {
-                        host.set_focus(1);
+                        focus_page(&host);
                         self.focus_page_until = None;
                     }
                     None => self.focus_page_until = Some(Instant::now() + Duration::from_secs(2)),
                 },
                 Some("glance") => {
                     if let Some(host) = self.host(GLANCE) {
-                        host.set_focus(1);
+                        focus_page(&host);
                     }
                 }
                 _ => self.focus_shell("focusSidebar"),
@@ -1203,7 +1207,7 @@ impl Manager {
                 self.layout();
                 if self.focus_page_until.take().is_some_and(|until| until > Instant::now()) {
                     if let Some(host) = self.page_visible() {
-                        host.set_focus(1);
+                        focus_page(&host);
                     }
                 }
             }
@@ -1238,6 +1242,19 @@ impl Manager {
                 let result = sidebar::debug_action(m["action"].as_str().unwrap_or(""), m["row"].as_i64().unwrap_or(-1), &m);
                 if let Err(e) = result {
                     eprintln!("[native-chrome] {e}");
+                }
+            }
+            "nativeAppearance" if native::background() => {
+                if let Err(e) = native::set_appearance(m["mode"].as_str().unwrap_or("")) {
+                    eprintln!("[native-appearance] {e}");
+                }
+            }
+            // Test mode: native focus to the shell view without moving its DOM focus.
+            "nativeFocusShell" if native::background() => native::focus_shell(),
+            "nativeKey" if native::background() => {
+                let code = m["keyCode"].as_u64().unwrap_or(0) as u16;
+                if let Err(e) = native::send_key(code, m["characters"].as_str().unwrap_or(""), m["shift"] == true, m["toShell"] == true) {
+                    eprintln!("[native-key] {e}");
                 }
             }
             "nativeChrome" if native::background() => {
@@ -1597,6 +1614,8 @@ impl Manager {
                         host.close_browser(0);
                     }
                 }
+                // With no live browsers, nothing will report closing, so quit now.
+                self.finish_quit();
             }
             Event::Maintenance => self.maintain(),
             Event::Commands(event) => self.on_commands(event),
@@ -1656,6 +1675,11 @@ fn foreign_url(browser: &Browser) -> String {
     browser.main_frame().map(|f| CefString::from(&f.url()).to_string()).unwrap_or_default()
 }
 wrap_task! {struct Sweep {bridge:Bridge} impl Task {fn execute(&self){mac::sweep();if self.bridge.manager.upgrade().is_some(){let mut next=Self::new(self.bridge.clone());post_delayed_task(ThreadId::UI,Some(&mut next),250);}}}}
+/// Keyboard focus to a page: AppKit's first responder and Chromium's own focus.
+fn focus_page(host: &BrowserHost) {
+    native::focus_view(host.window_handle());
+    host.set_focus(1);
+}
 fn is_local_api(url: &str, base: &str) -> bool {
     url.strip_prefix(base).is_some_and(|rest| rest.is_empty() || rest.starts_with(['/', '?', '#']))
 }
@@ -1871,6 +1895,7 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
             split_rect: None,
             glance_rect: None,
             covered: true,
+            shell_loaded: false,
             policy: crate::memory::Policy::default(),
             session_dirty: false,
             next_id: 0,

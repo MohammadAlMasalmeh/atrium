@@ -131,6 +131,14 @@ pub(super) fn create(bridge: Bridge, shell_url: &str) {
     let ipc = bridge.clone();
     let parent = Parent(NonNull::from(&*content).cast());
     let mut shell = WebViewBuilder::new();
+    if background() {
+        // A background test window is never key, so WebKit reports no document focus.
+        // Mirror the shell view's native focus instead, as a key window would.
+        shell = shell.with_initialization_script(
+            "(() => { const real = Document.prototype.hasFocus; \
+             Document.prototype.hasFocus = function () { return window.__nativeFocus ?? real.call(this); }; })();",
+        );
+    }
     if super::chrome::enabled() {
         shell = shell.with_initialization_script(
             "(function mark() { const root = document.documentElement; \
@@ -147,6 +155,30 @@ pub(super) fn create(bridge: Bridge, shell_url: &str) {
         .with_bounds(wry::Rect {
             position: wry::dpi::LogicalPosition::new(0.0, 0.0).into(),
             size: wry::dpi::LogicalSize::new(frame.size.width, frame.size.height).into(),
+        })
+        // The shell stays on its own document. WebKit doesn't say whether a navigation came
+        // from a click, so none of them opens a tab; the shell opens tabs through ipc.
+        .with_navigation_handler({
+            move |url| {
+                let shell = SHELL_URL.get();
+                let session = shell.map(|s| s.trim_end_matches("/shell").to_string() + "/session");
+                if shell.is_some_and(|s| super::shell_ipc::is_shell_url(&url, s))
+                    || session.is_some_and(|s| url == s || url.starts_with(&format!("{s}?")))
+                {
+                    return true;
+                }
+                eprintln!("blocked a shell navigation to {}", url.chars().take(80).collect::<String>());
+                false
+            }
+        })
+        .with_new_window_req_handler({
+            let bridge = bridge.clone();
+            move |url, _features| {
+                if super::url::is_web_url(&url) {
+                    bridge.send(Event::Popup(url));
+                }
+                wry::NewWindowResponse::Deny
+            }
         })
         .with_ipc_handler(move |req| {
             let from = req.uri().to_string();
@@ -205,13 +237,29 @@ fn keep_out_of_sight(window: &NSWindow) {
 /// `ATRIUM_APPEARANCE=light|dark` pins a test instance's appearance (shell, glass and
 /// pages alike) so both modes can be checked without touching the system setting.
 fn test_appearance(mtm: MainThreadMarker) {
+    if let Ok(mode) = std::env::var("ATRIUM_APPEARANCE") {
+        apply_appearance(mtm, &mode);
+    }
+}
+
+/// Test mode only: pin light or dark ("" follows the system), as `ATRIUM_APPEARANCE` does at launch.
+pub(super) fn set_appearance(mode: &str) -> Result<(), String> {
+    if !background() {
+        return Err("Appearance changes are only available with ATRIUM_BACKGROUND_WINDOW=1".into());
+    }
+    let mtm = MainThreadMarker::new().ok_or("not on the main thread")?;
+    apply_appearance(mtm, mode);
+    Ok(())
+}
+
+fn apply_appearance(mtm: MainThreadMarker, mode: &str) {
     use objc2_app_kit::{NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua};
-    let name = match std::env::var("ATRIUM_APPEARANCE").as_deref() {
-        Ok("dark") => unsafe { NSAppearanceNameDarkAqua },
-        Ok("light") => unsafe { NSAppearanceNameAqua },
-        _ => return,
+    let appearance = match mode {
+        "dark" => NSAppearance::appearanceNamed(unsafe { NSAppearanceNameDarkAqua }),
+        "light" => NSAppearance::appearanceNamed(unsafe { NSAppearanceNameAqua }),
+        _ => None,
     };
-    NSApplication::sharedApplication(mtm).setAppearance(NSAppearance::appearanceNamed(name).as_deref());
+    NSApplication::sharedApplication(mtm).setAppearance(appearance.as_deref());
 }
 
 pub(super) fn shown_behind() -> bool {
@@ -412,6 +460,20 @@ pub(super) fn shell_eval_with(js: &str, done: impl FnOnce(String) + Send + 'stat
 pub(super) fn focus_shell() {
     with(|n| {
         let _ = n.shell.focus();
+        if background() {
+            let _ = n.shell.evaluate_script("window.__nativeFocus = true; dispatchEvent(new Event('focus'));");
+        }
+    });
+}
+
+/// Makes a tab's Chromium view the window's first responder, so keys go to the page.
+pub(super) fn focus_view(handle: *mut c_void) {
+    let Some(target) = view(handle) else { return };
+    with(|n| {
+        n.window.makeFirstResponder(Some(target));
+        if background() {
+            let _ = n.shell.evaluate_script("window.__nativeFocus = false; dispatchEvent(new Event('blur'));");
+        }
     });
 }
 
@@ -438,6 +500,37 @@ fn responder_within(window: &NSWindow, target: &NSView) -> bool {
         current = unsafe { c.superview() };
     }
     false
+}
+
+/// Test mode only: one real key press delivered through the window to whatever holds
+/// focus, so WebKit and Chromium handle it as they would a typed key.
+pub(super) fn send_key(key_code: u16, characters: &str, shift: bool, to_shell: bool) -> Result<(), String> {
+    use objc2::runtime::{AnyClass, Bool};
+    use objc2_app_kit::NSEvent;
+    if !background() {
+        return Err("Synthetic keys are only available with ATRIUM_BACKGROUND_WINDOW=1".into());
+    }
+    with(|n| {
+        if to_shell {
+            let _ = n.shell.focus();
+        }
+        let class = AnyClass::get(c"NSEvent").ok_or("NSEvent is missing")?;
+        let chars = objc2_foundation::NSString::from_str(characters);
+        let flags: usize = if shift { 1 << 17 } else { 0 };
+        let number = n.window.windowNumber();
+        for kind in [10usize, 11] {
+            // NSEventTypeKeyDown, NSEventTypeKeyUp
+            let event: Option<Retained<NSEvent>> = unsafe {
+                msg_send![class, keyEventWithType: kind, location: NSPoint::new(0.0, 0.0), modifierFlags: flags,
+                    timestamp: 0.0f64, windowNumber: number, context: std::ptr::null::<AnyObject>(),
+                    characters: &*chars, charactersIgnoringModifiers: &*chars, isARepeat: Bool::NO, keyCode: key_code]
+            };
+            let event = event.ok_or("Could not make a key event")?;
+            n.window.sendEvent(&event);
+        }
+        Ok(())
+    })
+    .unwrap_or_else(|| Err("The window is not open".into()))
 }
 
 pub(super) fn shell_devtools() {

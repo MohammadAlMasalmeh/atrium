@@ -132,9 +132,18 @@ class Instance:
 
 def shell_suite(b):
     ipc = b.shell("const d = Object.getOwnPropertyDescriptor(window, 'ipc'); return { type: typeof window.ipc, native: String(window.ipc.postMessage).includes('[native code]'), writable: d.writable, configurable: d.configurable, url: location.href };")
-    check('shell has a native, non-replaceable window.ipc', ipc == {'type': 'object', 'native': True, 'writable': False, 'configurable': False, 'url': API + '/shell'}, ipc)
-    bad = b.shell("try { window.ipc.postMessage(42); return 'accepted'; } catch (e) { return String(e); }")
-    check('window.ipc rejects non-string messages', 'expects a string' in str(bad), bad)
+    # The shell is a WKWebView: wry defines window.ipc in script, so it is not a native
+    # function, but it can't be replaced, and native.rs accepts messages only from /shell.
+    check('shell has a non-replaceable window.ipc', {k: ipc.get(k) for k in ('type', 'writable', 'configurable', 'url')} == {'type': 'object', 'writable': False, 'configurable': False, 'url': API + '/shell'}, ipc)
+    # WebKit delivers any value as text; native.rs drops anything that isn't a JSON object.
+    # wry drops non-string values before they reach Rust; native.rs rejects text that isn't
+    # a JSON object. Neither may become a command.
+    before = b.memory()['shell_ipc']
+    b.shell("window.ipc.postMessage(42); window.ipc.postMessage('not json'); return true;")
+    rejected = wait(lambda: b.memory()['shell_ipc']['rejected_messages'] >= before['rejected_messages'] + 1)
+    after = b.memory()['shell_ipc']
+    check('window.ipc drops messages that are not JSON objects',
+          bool(rejected) and after['process_messages'] == before['process_messages'], (before, after))
     before = b.memory()['shell_ipc']
 
     post = lambda message: b.shell(f'window.ipc.postMessage({json.dumps(json.dumps(message))}); return true;')

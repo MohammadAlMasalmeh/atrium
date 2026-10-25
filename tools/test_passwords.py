@@ -250,10 +250,13 @@ with tempfile.TemporaryDirectory(prefix='atrium-passwords-', dir='/private/tmp')
         def page(code):
             r = api('/api/debug/cdp', {'tab': tab, 'method': 'Runtime.evaluate', 'params': {
                 'expression': f'(async () => {{ {code} }})()', 'awaitPromise': True, 'returnByValue': True, 'userGesture': True}})
+            assert 'exceptionDetails' not in r['result'], r['result']['exceptionDetails'].get('exception', {}).get('description')
             return r['result']['result'].get('value')
         caps = page('return await passkey.capabilities()')
         assert caps['publicKeyCredential'] and caps['secureContext'], caps
         cdp = lambda method, params=None: api('/api/debug/cdp', {'tab': tab, 'method': method, 'params': params or {}})['result']
+        # A background test window never has focus, and WebAuthn requires a focused document.
+        cdp('Emulation.setFocusEmulationEnabled', {'enabled': True})
         cdp('WebAuthn.enable', {'enableUI': False})
         authenticator = cdp('WebAuthn.addVirtualAuthenticator', {'options': {
             'protocol': 'ctap2', 'transport': 'internal', 'hasResidentKey': True, 'hasUserVerification': True,

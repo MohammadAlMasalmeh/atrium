@@ -204,8 +204,11 @@ try:
     for key in ('notices', 'cefLicense', 'chromiumLicense'):
         page[key] = hashlib.sha256(page[key].strip().encode()).hexdigest()
 
-    # The About page's sandboxed origin has no navigator.userAgentData; the shell runs the same engine.
-    page['runtime'] = api('/api/debug/cdp', {'tab': 'shell', 'method': 'Runtime.evaluate', 'params': {
+    # The About page's sandboxed origin has no navigator.userAgentData and the shell is WebKit,
+    # so the running engine's version is read from an ordinary page.
+    probe = tool('open_tab', {'url': f'http://127.0.0.1:{args.fixture_port}/page/version'})
+    probe_tab = wait(lambda: next((t['id'] for t in api('/api/browser/tabs')['tabs'] if t['url'].endswith('/page/version') and not t['loading']), None), 'the version probe tab')
+    page['runtime'] = api('/api/debug/cdp', {'tab': probe_tab, 'method': 'Runtime.evaluate', 'params': {
         'expression': "navigator.userAgentData.getHighEntropyValues(['fullVersionList']).then((b) => b.fullVersionList.find((x) => x.brand === 'Chromium')?.version ?? null)",
         'awaitPromise': True, 'returnByValue': True}})['result']['result']['value']
     check(page['title'] == f'About {product}' and page['product'] == product, 'About page shows the product name')

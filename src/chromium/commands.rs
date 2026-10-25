@@ -459,7 +459,7 @@ impl Manager {
     }
     fn focus(&self, id: u64) {
         if let Some(host) = self.host(id) {
-            host.set_focus(1);
+            super::focus_page(&host);
         }
     }
 

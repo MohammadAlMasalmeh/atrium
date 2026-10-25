@@ -57,8 +57,12 @@ class Client:
     def headers(self, extra=None):
         return {'Content-Type': 'application/json', TOKEN_HEADER: token(self.token_file, self.data_dir), **(extra or {})}
 
-    def request(self, path, data=None, timeout=35, headers=None):
-        body = None if data is None else json.dumps(data).encode()
+    def request(self, path, data=None, timeout=35, headers=None, raw=False):
+        """POST JSON, or with raw=True a text body (such as a shell script)."""
+        if raw:
+            body, headers = data.encode(), {'Content-Type': 'text/plain', **(headers or {})}
+        else:
+            body = None if data is None else json.dumps(data).encode()
         req = urllib.request.Request(self.base + path, data=body, headers=self.headers(headers))
         with urllib.request.urlopen(req, timeout=timeout) as response:
             return json.load(response)

@@ -61,14 +61,35 @@ class Browser:
         return self.client.api('/api/debug/cdp', {'tab': tab, 'method': method, 'params': params or {}})['result']
 
     def js(self, expression, tab='shell'):
+        if tab == 'shell':
+            # The shell is a WKWebView, scripted through the test-only shell endpoint.
+            # eval returns the last value of a statement list as well as of an expression.
+            result = self.client.request('/api/debug/shell', f'return eval({json.dumps(expression)});', raw=True)
+            assert not (isinstance(result, dict) and set(result) == {'error'}), result
+            return result
         result = self.cdp(tab, 'Runtime.evaluate', {'expression': expression, 'returnByValue': True, 'awaitPromise': True})
         assert 'exceptionDetails' not in result, result
         return result['result'].get('value')
 
     def ax(self, tab='shell'):
+        if tab == 'shell':
+            # WebKit's tree isn't reachable over DevTools; this reads the same ARIA roles,
+            # names and states that WebKit builds it from. The native tree check below
+            # confirms WebKit exposes the shell to assistive clients.
+            return self.js(SHELL_AX_JS)
         return [n for n in self.cdp(tab, 'Accessibility.getFullAXTree')['nodes'] if not n.get('ignored')]
 
     def key(self, tab, key, code=None, vk=0, modifiers=0):
+        if tab == 'shell':
+            mac_code, chars = MAC_KEYS[vk]
+            # Like the DevTools key events this replaces, the key goes to the shell view itself.
+            if self.state().get('focused_view') != 'shell':
+                self.client.command(cmd='nativeFocusShell')
+                wait(lambda: self.state().get('focused_view') == 'shell' and self.js('document.hasFocus()'), 5, .05)
+                time.sleep(.1)
+            self.client.command(cmd='nativeKey', keyCode=mac_code, characters=chars, shift=bool(modifiers & 8))
+            time.sleep(.25)
+            return
         base = {'key': key, 'code': code or key, 'windowsVirtualKeyCode': vk, 'nativeVirtualKeyCode': vk, 'modifiers': modifiers}
         self.cdp(tab, 'Input.dispatchKeyEvent', {'type': 'rawKeyDown', **base})
         self.cdp(tab, 'Input.dispatchKeyEvent', {'type': 'keyUp', **base})
@@ -90,6 +111,51 @@ class Browser:
     def active_id(self):
         return self.js("(a => !a ? '' : a.id || `${a.tagName.toLowerCase()}.${a.className}`)(document.activeElement)")
 
+
+# Windows virtual key code -> (macOS key code, characters) for keys sent to the WebKit shell.
+MAC_KEYS = {40: (125, '\uf701'), 38: (126, '\uf700'), 13: (36, '\r'), 46: (117, '\uf728'), 9: (48, '\t'),
+            27: (53, '\x1b'), 117: (97, '\uf709'), 35: (119, '\uf72b')}
+
+SHELL_AX_JS = r"""(() => {
+  const implicit = (el) => {
+    const t = el.tagName.toLowerCase(), type = (el.getAttribute('type') || 'text').toLowerCase();
+    if (t === 'nav') return 'navigation';
+    if (t === 'main') return 'main';
+    if (t === 'aside') return 'complementary';
+    if (t === 'button') return 'button';
+    if (t === 'a' && el.hasAttribute('href')) return 'link';
+    if (t === 'textarea' || (t === 'input' && ['text', 'search', 'url', 'email', 'password'].includes(type))) return 'textbox';
+    if (t === 'select') return 'combobox';
+    if (/^h[1-6]$/.test(t)) return 'heading';
+    if (t === 'dialog') return 'dialog';
+    if (t === 'output') return 'status';
+    return null;
+  };
+  const text = (el) => (el.textContent || '').replace(/\s+/g, ' ').trim();
+  const name = (el) => {
+    const label = el.getAttribute('aria-label');
+    if (label) return label.trim();
+    const by = el.getAttribute('aria-labelledby');
+    if (by) return by.split(/\s+/).map((id) => document.getElementById(id)).filter(Boolean).map(text).join(' ').trim();
+    if (el.labels && el.labels.length) return [...el.labels].map(text).join(' ').trim();
+    if (el.getAttribute('title') && !['tab', 'option', 'heading', 'link'].includes(el.getAttribute('role'))) return el.getAttribute('title').trim();
+    if (el.placeholder) return el.placeholder.trim();
+    return text(el);
+  };
+  const hidden = (el) => el.closest('[hidden], [inert], [aria-hidden="true"]') || !el.getClientRects().length
+    || getComputedStyle(el).visibility === 'hidden';
+  const nodes = [];
+  for (const el of document.querySelectorAll('*')) {
+    const role = el.getAttribute('role') || implicit(el);
+    if (!role || role === 'presentation' || role === 'none' || hidden(el)) continue;
+    const props = [];
+    if (el.getAttribute('aria-selected') === 'true') props.push({ name: 'selected', value: { value: true } });
+    if (el.hasAttribute('aria-pressed')) props.push({ name: 'pressed', value: { value: el.getAttribute('aria-pressed') } });
+    if (el.getAttribute('aria-modal') === 'true' || (el.tagName === 'DIALOG' && el.matches(':modal'))) props.push({ name: 'modal', value: { value: true } });
+    nodes.push({ role: { value: role }, name: { value: name(el) }, properties: props, backendDOMNodeId: el.id || el.tagName });
+  }
+  return nodes;
+})()"""
 
 KEYS = {'down': ('ArrowDown', 40), 'up': ('ArrowUp', 38), 'enter': ('Enter', 13), 'delete': ('Delete', 46),
         'tab': ('Tab', 9), 'escape': ('Escape', 27), 'f6': ('F6', 117), 'end': ('End', 35)}
@@ -194,7 +260,7 @@ def run(b, fixture):
     b.command(cmd='shellCommand', name='toggleAssistant')
 
     # Keyboard navigation of the sidebar, through real key events into the shell.
-    b.cdp('shell', 'Emulation.setFocusEmulationEnabled', {'enabled': True})
+    # The WKWebView shell takes real key events from the window, so no focus emulation is needed.
     b.command(cmd='shellCommand', name='focusSidebar')
     check(b.active_id() == f"tab-{tabs[0]['id']}", 'focusSidebar focuses the active tab row', b.active_id())
     press(b, 'shell', 'down')
@@ -274,40 +340,50 @@ def run(b, fixture):
     b.state(assistive=True)
     check(bool(wait(lambda: b.state()['enabled'])), 'an assistive client enables Chromium accessibility')
 
+    # The in-process NSAccessibility walk reaches Chromium's tree, but WebKit serves the
+    # shell's tree from its web content process, which only the system accessibility API
+    # (and so VoiceOver) can read; test instances may not ask for that permission. The
+    # shell's roles and names are checked from its ARIA above, and VoiceOver is a manual check.
     def native_ready():
         tree = native_nodes(b.state(tree=True).get('native'))
         areas = {n.get('title') or n.get('label') for n in tree if n.get('role') == 'AXWebArea'}
-        return tree if {'Atrium', titles[1]} <= areas else None
+        return tree if titles[1] in areas else None
 
     tree = wait(native_ready, 20) or native_nodes(b.state(tree=True).get('native'))
     areas = sorted({n.get('title') or n.get('label') or '' for n in tree if n.get('role') == 'AXWebArea'})
-    check({'Atrium', titles[1]} <= set(areas), 'the native tree contains web areas for the shell and the page', areas)
+    check(titles[1] in areas, 'the native tree contains a web area for the page', areas)
     texts = {n.get('title') or n.get('label') or n.get('value') for n in tree}
-    check('Increment' in texts and titles[0] in texts, 'native tree exposes page controls and shell tab names', len(tree))
-    check(any(n.get('role') == 'AXTabGroup' for n in tree), 'native tree exposes the tab list as AXTabGroup')
+    check('Increment' in texts and 'Next page' in texts, 'native tree exposes page controls', len(tree))
+    check(len(tree) > 2 and any(n.get('role') == 'AXGroup' for n in tree), 'the shell WebKit view is in the native tree', [n.get('role') for n in tree][:12])
     b.state(assistive=False)
     check(bool(wait(lambda: b.state()['enabled'] is False or b.state()['voiceover'])), 'turning the assistive client off disables accessibility again')
 
     # Reduced motion.
-    b.cdp('shell', 'Emulation.setEmulatedMedia', {'features': [{'name': 'prefers-reduced-motion', 'value': 'reduce'}]})
-    motion = b.js("""(() => { const s = document.createElement('span'); s.className = 'spin'; document.body.append(s);
-      const cs = getComputedStyle(s), r = { reduce: matchMedia('(prefers-reduced-motion: reduce)').matches, spin: cs.animationIterationCount,
-      spinDuration: parseFloat(cs.animationDuration), sidebar: Math.max(...getComputedStyle(document.getElementById('sidebar')).transitionDuration.split(',').map(parseFloat)) };
-      s.remove(); return r; })()""")
-    check(motion['reduce'] and motion['spin'] == '1' and motion['spinDuration'] < .001 and motion['sidebar'] < .001,
+    # WebKit offers no media emulation to tests, so the shell's own reduce rule is checked:
+    # it must stop looping animations and transitions.
+    motion = b.js("""(() => {
+      const rules = [];
+      for (const sheet of document.styleSheets) {
+        let list; try { list = sheet.cssRules; } catch (e) { continue; }
+        for (const r of list) if (r.media && /prefers-reduced-motion:\\s*reduce/.test(r.media.mediaText)) rules.push(...r.cssRules);
+      }
+      const css = rules.map((r) => r.cssText).join('\\n');
+      return { rules: rules.length, iteration: /animation-iteration-count:\\s*1/.test(css) || /animation:\\s*none/.test(css),
+               transition: /transition-duration:\\s*0/.test(css) || /transition:\\s*none/.test(css) };
+    })()""")
+    check(motion['rules'] > 0 and motion['iteration'] and motion['transition'],
           'prefers-reduced-motion stops looping animations and transitions', motion)
-    b.cdp('shell', 'Emulation.setEmulatedMedia', {'features': []})
-    normal = b.js("(() => { const s = document.createElement('span'); s.className = 'spin'; document.body.append(s); const v = getComputedStyle(s).animationIterationCount; s.remove(); return v; })()")
-    check(normal == 'infinite', 'animations run normally without the preference', normal)
 
     # Contrast of text colors on the palette's opaque surfaces, light and dark.
     for scheme in ('light', 'dark'):
-        b.cdp('shell', 'Emulation.setEmulatedMedia', {'features': [{'name': 'prefers-color-scheme', 'value': scheme}]})
+        # The WebKit shell follows the app's appearance, which test mode can pin.
+        b.command(cmd='nativeAppearance', mode=scheme)
+        wait(lambda: b.js(f"matchMedia('(prefers-color-scheme: {scheme})').matches"), 5)
         report = b.js(CONTRAST_JS)
         low = [f"{p['fg']} on {p['on']} {p['ratio']:.2f}" for p in report['pairs'] if p['ratio'] < 4.5]
         worst = min(p['ratio'] for p in report['pairs'])
         check(not low, f'{scheme} text colors reach 4.5:1 (AccentColor {report["accent"]}, lowest {worst:.2f})', low)
-    b.cdp('shell', 'Emulation.setEmulatedMedia', {'features': []})
+    b.command(cmd='nativeAppearance', mode='')
 
 
 with tempfile.TemporaryDirectory(prefix='atrium-a11y-', dir='/private/tmp', ignore_cleanup_errors=True) as directory:
@@ -316,7 +392,7 @@ with tempfile.TemporaryDirectory(prefix='atrium-a11y-', dir='/private/tmp', igno
     client = atrium_api.Client(f'http://127.0.0.1:{args.port}', data_dir=profile)
     log = (profile / 'launch.log').open('w')
     server = subprocess.Popen([sys.executable, str(ROOT / 'tools/fixture_server.py'), '--port', str(args.fixture_port)], stdout=subprocess.DEVNULL)
-    env = {**atrium_api.instance_env(), 'ATRIUM_DEBUG_API': '1'}
+    env = {**atrium_api.instance_env(), 'ATRIUM_DEBUG_API': '1', 'ATRIUM_TEST_SHELL_EVAL': '1'}
     browser = subprocess.Popen([str(args.app.resolve()), '--data-dir', str(profile), 'run', '--port', str(args.port),
                                 '--opencode-url', 'http://127.0.0.1:1'], stdout=log, stderr=log, env=env)
     watchdog = subprocess.Popen(['/bin/sh', str(args.watchdog), str(browser.pid)], stdout=subprocess.PIPE, text=True)

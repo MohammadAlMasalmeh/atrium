@@ -61,7 +61,7 @@ with tempfile.TemporaryDirectory(prefix='atrium-persistence-', dir='/private/tmp
             memory, tabs = wait_ready()
             assert len(tabs['tabs']) == 2, tabs
             assert sum(t['suspended'] for t in tabs['tabs']) == 1, tabs
-            assert memory['live_renderers'] == 2, memory  # one shell and one active page
+            assert memory['live_renderers'] == 1, memory  # only the active page; the shell is WebKit
             index = next(i for i, tab in enumerate(tabs['tabs']) if tab['id'] == tabs['active'])
             tool('switch_tab', {'index': index})
             result = tool('evaluate', {'code': "return { cookie: document.cookie.includes('atrium_fixture=persisted'), storage: localStorage.getItem('atrium_fixture') };"})

@@ -568,7 +568,8 @@ const ICON = {
 const icon = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICON[n] || ICON.globe}</svg>`;
 let toastTimer;
 // Live regions only announce changes, so a repeated message is cleared first.
-function speak(el, msg) { el.textContent = ''; setTimeout(() => { el.textContent = msg; }, 30); }
+// Cleared first so screen readers announce a repeat; the message is recorded at once for reports.
+function speak(el, msg) { el.dataset.message = msg; el.textContent = ''; setTimeout(() => { el.textContent = msg; }, 30); }
 function toast(msg) { const el = $('#toast'); speak(el, msg); el.classList.add('on'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('on'), 1600); }
 function announce(msg) { speak($('#announcer'), msg); }
 async function post(url, body) {
@@ -723,12 +724,22 @@ function patch(el, html) {
   want.forEach((c, i) => { if (el.children[i] !== c) el.insertBefore(c, el.children[i] || null); });
   while (el.children.length > want.length) el.lastElementChild.remove();
 }
+let pendingFocus = null;
+window.addEventListener('focus', () => {
+  const el = pendingFocus && document.getElementById(pendingFocus);
+  pendingFocus = null;
+  if (el && (!document.activeElement || document.activeElement === document.body)) el.focus({ preventScroll: true });
+});
 function render() {
   // Re-rendered rows replace focused ones; focus follows the row's id.
   const focusedEl = document.activeElement, focusedId = focusedEl && focusedEl.id;
   renderView();
   const again = focusedId && !focusedEl.isConnected && document.getElementById(focusedId);
-  if (again) { if (again.getAttribute('role') === 'tab') rove(again); again.focus({ preventScroll: true }); }
+  if (again && again.getAttribute('role') === 'tab') rove(again);
+  // Focusing an element in WebKit takes native focus from the page, so while the shell
+  // doesn't hold focus the row is restored when it next gets it.
+  if (again && document.hasFocus()) again.focus({ preventScroll: true });
+  else if (again) pendingFocus = again.id;
 }
 function renderView() {
   const t = activeTab();
@@ -983,7 +994,7 @@ function reportUi() {
     findText: $('#find-input').value,
     zoom: z.textContent,
     zoomOn: z.classList.contains('on'),
-    toast: $('#toast').textContent,
+    toast: $('#toast').dataset.message ?? $('#toast').textContent,
     downloads: $$('#downloads .row').map((r) => ({
       name: r.querySelector('.t')?.textContent || '',
       status: r.querySelector('.s')?.textContent || '',
@@ -1065,9 +1076,11 @@ $('#url-zoom').onclick = () => ipc({ cmd: 'menu', name: 'zoom-reset' });
 
 /* ── Layout sync ──────────────────────────────────── */
 let layoutQueued = false;
+// Next frame, or soon if frames are held back: hidden and busy windows may not get one.
 function layoutSoon() {
   if (layoutQueued) return; layoutQueued = true;
-  requestAnimationFrame(() => { layoutQueued = false; layoutNow(); });
+  const run = () => { if (!layoutQueued) return; layoutQueued = false; layoutNow(); };
+  requestAnimationFrame(run); setTimeout(run, 50);
 }
 // IPC messages are delivered in order, so the newest rect is always applied last.
 function layoutNow() {
@@ -1172,7 +1185,9 @@ function focusSidebar() {
 // Focus leaves the shell for the page when one is showing, otherwise the main column.
 function leaveShell() { if (onWeb()) focusPage(); else focusEdge($('#main'), false); }
 function restoreFocus() {
-  const prev = S.returnFocus; S.returnFocus = null;
+  // A re-render while the overlay was open may have replaced the element; its id still finds it.
+  const saved = S.returnFocus; S.returnFocus = null;
+  const prev = saved && (saved.isConnected ? saved : saved.id && document.getElementById(saved.id));
   const usable = prev && prev.isConnected && prev !== document.body && !prev.closest('[inert], [hidden]')
     && prev.getClientRects().length && getComputedStyle(prev).visibility !== 'hidden';
   if (!usable) { leaveShell(); return; }
@@ -1184,6 +1199,11 @@ document.addEventListener('keydown', (e) => {
   const el = e.target, role = el.getAttribute && el.getAttribute('role');
   if (e.defaultPrevented || !role || el.matches(FOCUSABLE.replace('[tabindex], ', ''))) return;
   if ((role === 'button' && (e.key === 'Enter' || e.key === ' ')) || (role === 'link' && e.key === 'Enter')) { e.preventDefault(); el.click(); }
+});
+// F6 moves between the shell and the page; Chromium handles it inside pages.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'F6' || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+  if (onWeb() && !S.overlay) { e.preventDefault(); focusPage(); }
 });
 // Tab order: sidebar, then the page view, then the assistant; dialogs keep focus inside.
 document.addEventListener('keydown', (e) => {
