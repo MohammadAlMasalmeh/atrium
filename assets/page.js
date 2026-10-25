@@ -1,4 +1,5 @@
-// Injected into every page. Defines window.__aside, the agent's view of and
+// Injected into every page's isolated world, so page scripts cannot see it.
+// Defines window.__aside, the agent's view of and
 // hands on the page. Modeled on Aside's agent: a compact accessibility tree
 // where actionable elements carry refs (e12) that stay stable while the
 // element lives, so successive snapshots can be diffed.

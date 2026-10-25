@@ -189,7 +189,14 @@ enum Pending {
     Screenshot(Reply<Result<String, String>>),
     Frozen(&'static str),
     Probe(u64),
+    Unload(u64),
+    Inject,
+    /// Steps toward running `expression` in the tab's isolated world, then `then`.
+    Frame { expression: String, then: Box<Pending> },
+    World { expression: String, then: Box<Pending> },
 }
+/// DevTools isolated world for injected scripts, so pages never see their globals.
+const WORLD: &str = "aside";
 struct Manager {
     rx: mpsc::Receiver<Event>,
     bridge: Bridge,
@@ -444,17 +451,12 @@ impl Manager {
             .and_then(|t| t.browser.as_ref())
             .and_then(|b| b.host())
         else {
-            match pending {
-                Pending::Eval(r) => {
-                    let _ = r.send(Err(
-                        "The tab is still loading. Try again in a moment.".into()
-                    ));
-                }
-                Pending::Screenshot(r) => {
-                    let _ = r.send(Err("The tab is not ready to capture".into()));
-                }
-                _ => {}
-            }
+            let message = if matches!(pending, Pending::Screenshot(_)) {
+                "The tab is not ready to capture"
+            } else {
+                "The tab is still loading. Try again in a moment."
+            };
+            self.fail(pending, message.into());
             return;
         };
         let capture = matches!(&pending, Pending::Screenshot(_) | Pending::Frozen(_));
@@ -484,15 +486,46 @@ impl Manager {
             }
         }
         let expression = format!("{PAGE_JS}\n(async () => {{ {js}\n }})()");
+        if tab == SHELL {
+            self.cdp(
+                tab,
+                "Runtime.evaluate",
+                json!({ "expression": expression, "awaitPromise": true, "returnByValue": true }),
+                Pending::Eval(reply),
+            );
+        } else {
+            self.isolated(tab, expression, Pending::Eval(reply));
+        }
+    }
+    /// Runs `expression` in the main frame's isolated world. Its globals persist for
+    /// the document's lifetime and are invisible to the page's own scripts.
+    fn isolated(&mut self, tab: u64, expression: String, then: Pending) {
         self.cdp(
             tab,
-            "Runtime.evaluate",
-            json!({ "expression": expression, "awaitPromise": true, "returnByValue": true }),
-            Pending::Eval(reply),
+            "Page.getFrameTree",
+            json!({}),
+            Pending::Frame { expression, then: Box::new(then) },
         );
     }
+    fn fail(&mut self, pending: Pending, message: String) {
+        match pending {
+            Pending::Eval(reply) => {
+                let _ = reply.send(Err(message));
+            }
+            Pending::Screenshot(reply) => {
+                let _ = reply.send(Err(message));
+            }
+            Pending::Probe(id) | Pending::Unload(id) => {
+                if let Some(tab) = self.tab_mut(id) {
+                    tab.page_protected_until = Instant::now() + Duration::from_secs(180);
+                }
+            }
+            Pending::Frame { then, .. } | Pending::World { then, .. } => self.fail(*then, message),
+            Pending::Frozen(_) | Pending::Inject => {}
+        }
+    }
     fn finish(&mut self, id: i32, success: bool, data: Json) {
-        let Some((_, _tab_id, pending)) = self.pending.remove(&id) else {
+        let Some((_, tab_id, pending)) = self.pending.remove(&id) else {
             return;
         };
         let error = if !success {
@@ -546,7 +579,48 @@ impl Manager {
                     }
                 }
             }
+            Pending::Frame { expression, then } => {
+                match (error, data["frameTree"]["frame"]["id"].as_str()) {
+                    (None, Some(frame)) => self.cdp(
+                        tab_id,
+                        "Page.createIsolatedWorld",
+                        json!({ "frameId": frame, "worldName": WORLD }),
+                        Pending::World { expression, then },
+                    ),
+                    (error, _) => self.fail(*then, error.unwrap_or_else(|| "The page has no main frame".into())),
+                }
+            }
+            Pending::World { expression, then } => {
+                match (error, data["executionContextId"].as_i64()) {
+                    (None, Some(context)) => {
+                        // Agent actions count as user activation, as the user's own click would,
+                        // so buttons that open sign-in popups work.
+                        let gesture = matches!(*then, Pending::Eval(_));
+                        self.cdp(
+                            tab_id,
+                            "Runtime.evaluate",
+                            json!({ "expression": expression, "contextId": context, "awaitPromise": true, "returnByValue": true, "userGesture": gesture }),
+                            *then,
+                        )
+                    }
+                    (error, _) => self.fail(*then, error.unwrap_or_else(|| "The page is not ready for scripts".into())),
+                }
+            }
+            Pending::Inject => {}
             Pending::Probe(id) => {
+                // `onbeforeunload` is per world, so it is read statelessly in the page's own world.
+                if error.is_none() && data["result"]["value"] == true {
+                    self.cdp(
+                        id,
+                        "Runtime.evaluate",
+                        json!({ "expression": "!window.onbeforeunload", "returnByValue": true }),
+                        Pending::Unload(id),
+                    );
+                } else if let Some(tab) = self.tab_mut(id) {
+                    tab.page_protected_until = Instant::now() + Duration::from_secs(180);
+                }
+            }
+            Pending::Unload(id) => {
                 if error.is_some() || data["result"]["value"] != true {
                     if let Some(tab) = self.tab_mut(id) {
                         tab.page_protected_until = Instant::now() + Duration::from_secs(180);
@@ -874,20 +948,8 @@ impl Manager {
                 self.push(false);
             }
             Event::Loaded(id) => {
-                if id != SHELL {
-                    if let Some(frame) = self
-                        .tab(id)
-                        .and_then(|t| t.browser.as_ref())
-                        .and_then(|b| b.main_frame())
-                    {
-                        frame.execute_java_script(
-                            Some(&CefString::from(
-                                format!("{LIFECYCLE_JS}\n{PAGE_JS}").as_str(),
-                            )),
-                            None,
-                            0,
-                        );
-                    }
+                if id != SHELL && self.tab(id).is_some_and(|t| t.browser.is_some()) {
+                    self.isolated(id, format!("{LIFECYCLE_JS}\n{PAGE_JS}"), Pending::Inject);
                 }
                 self.push(false);
             }
@@ -1141,7 +1203,7 @@ impl Manager {
             if self.pending.values().any(|(_, tab, _)| *tab == id) {
                 continue;
             }
-            self.cdp(id,"Runtime.evaluate",json!({"expression":format!("{LIFECYCLE_JS}; window.__asideLifecycle.canSuspend()"),"returnByValue":true}),Pending::Probe(id));
+            self.isolated(id, format!("{LIFECYCLE_JS}; window.__asideLifecycle.canSuspend()"), Pending::Probe(id));
         }
         let expired = self
             .pending
