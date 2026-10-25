@@ -1013,6 +1013,11 @@ function renderSidebar() {
     S.view = 'tab';
     ipc(e.altKey ? { cmd: 'split', id } : { cmd: 'activate', id });
   });
+  // A sleeping tab starts loading while the pointer rests on it, so the click shows it sooner.
+  $$('#tabs .row').forEach((r) => {
+    r.onmouseenter = () => { clearTimeout(r._warm); const t = tabById(Number(r.dataset.id)); if (t?.suspended) r._warm = setTimeout(() => ipc({ cmd: 'prewarm', id: t.id }), 150); };
+    r.onmouseleave = () => clearTimeout(r._warm);
+  });
 
   // Chats
   $('#chats-label').classList.toggle('folded', S.chatsFolded);

@@ -1301,6 +1301,14 @@ impl Manager {
                 }
             }
             "activate" => self.activate(m["id"].as_u64().unwrap_or(0)),
+            // The pointer is resting on a sleeping tab: start loading it so selecting it is instant.
+            "prewarm" => {
+                let id = m["id"].as_u64().unwrap_or(0);
+                if let Some(t) = self.tab_mut(id).filter(|t| t.suspended && !t.live) {
+                    t.last_used = Instant::now();
+                    self.create_view(id);
+                }
+            }
             "close" => self.close(m["id"].as_u64().unwrap_or(0)),
             "split" => {
                 self.split = m["id"].as_u64().filter(|id| Some(*id) != self.active);
