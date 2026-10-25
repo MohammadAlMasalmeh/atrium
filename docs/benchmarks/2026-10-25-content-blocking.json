@@ -1,0 +1,272 @@
+{
+ "date": "2026-10-25",
+ "method": "Memory and load times of ad-heavy sites with built-in ad blocking on and off.\n\nEach condition starts this build as a background test instance with a fresh data\ndirectory, opens the sites one at a time in foreground tabs, and samples the process\ntree once every page has loaded and sat live for --settle seconds. The site count\nstays within the live-tab budget, so no page is evicted during the measurement.\n",
+ "summary": {
+  "off": {
+   "footprint_mib": 4774.9,
+   "processes": 74.0,
+   "renderers": 68.0,
+   "load_ms_median": 1406,
+   "fcp_ms_median": 480.0,
+   "frames": 185.5
+  },
+  "on": {
+   "footprint_mib": 1775.1999999999998,
+   "processes": 18.5,
+   "renderers": 12.5,
+   "load_ms_median": 832.0,
+   "fcp_ms_median": 328.0,
+   "frames": 30.0
+  }
+ },
+ "runs": [
+  {
+   "blocking": false,
+   "pages": [
+    {
+     "url": "https://www.bbc.com/news",
+     "fcp": 208,
+     "frames": 10,
+     "load": 1566,
+     "ready": "complete",
+     "resources": 156
+    },
+    {
+     "url": "https://stackoverflow.com/questions/11227809",
+     "fcp": null,
+     "frames": 1,
+     "load": 185,
+     "ready": "complete",
+     "resources": 6
+    },
+    {
+     "url": "https://edition.cnn.com",
+     "fcp": 856,
+     "frames": 6,
+     "load": 2241,
+     "ready": "complete",
+     "resources": 79
+    },
+    {
+     "url": "https://weather.com",
+     "fcp": 2080,
+     "frames": 253,
+     "load": 28589,
+     "ready": "complete",
+     "resources": 439
+    },
+    {
+     "url": "https://www.dailymail.co.uk/home/index.html",
+     "fcp": null,
+     "frames": 1,
+     "load": 752,
+     "ready": "complete",
+     "resources": 3
+    },
+    {
+     "url": "https://www.forbes.com",
+     "fcp": 428,
+     "frames": 32,
+     "load": 4814,
+     "ready": "complete",
+     "resources": 236
+    }
+   ],
+   "footprint_mib": 4479.8,
+   "rss_mib": 7135.9,
+   "processes": 72,
+   "renderers": 66,
+   "live_tabs": 6,
+   "content_blocking": {
+    "blocked_requests": 0,
+    "enabled": false
+   }
+  },
+  {
+   "blocking": true,
+   "pages": [
+    {
+     "url": "https://www.bbc.com/news",
+     "fcp": 156,
+     "frames": 10,
+     "load": 1546,
+     "ready": "complete",
+     "resources": 147
+    },
+    {
+     "url": "https://stackoverflow.com/questions/11227809",
+     "fcp": null,
+     "frames": 1,
+     "load": 178,
+     "ready": "complete",
+     "resources": 6
+    },
+    {
+     "url": "https://edition.cnn.com",
+     "fcp": 424,
+     "frames": 5,
+     "load": 2813,
+     "ready": "complete",
+     "resources": 82
+    },
+    {
+     "url": "https://weather.com",
+     "fcp": 580,
+     "frames": 1,
+     "load": 719,
+     "ready": "complete",
+     "resources": 90
+    },
+    {
+     "url": "https://www.dailymail.co.uk/home/index.html",
+     "fcp": null,
+     "frames": 1,
+     "load": 610,
+     "ready": "complete",
+     "resources": 3
+    },
+    {
+     "url": "https://www.forbes.com",
+     "fcp": 604,
+     "frames": 15,
+     "load": 3605,
+     "ready": "complete",
+     "resources": 195
+    }
+   ],
+   "footprint_mib": 1685.6,
+   "rss_mib": 2820.0,
+   "processes": 18,
+   "renderers": 12,
+   "live_tabs": 6,
+   "content_blocking": {
+    "blocked_requests": 57,
+    "enabled": true
+   }
+  },
+  {
+   "blocking": true,
+   "pages": [
+    {
+     "url": "https://www.bbc.com/news",
+     "fcp": 188,
+     "frames": 10,
+     "load": 1509,
+     "ready": "complete",
+     "resources": 146
+    },
+    {
+     "url": "https://stackoverflow.com/questions/11227809",
+     "fcp": null,
+     "frames": 1,
+     "load": 197,
+     "ready": "complete",
+     "resources": 6
+    },
+    {
+     "url": "https://edition.cnn.com",
+     "fcp": 372,
+     "frames": 5,
+     "load": 945,
+     "ready": "complete",
+     "resources": 74
+    },
+    {
+     "url": "https://weather.com",
+     "fcp": 284,
+     "frames": 1,
+     "load": 369,
+     "ready": "complete",
+     "resources": 87
+    },
+    {
+     "url": "https://www.dailymail.co.uk/home/index.html",
+     "fcp": null,
+     "frames": 1,
+     "load": 355,
+     "ready": "complete",
+     "resources": 3
+    },
+    {
+     "url": "https://www.forbes.com",
+     "fcp": 892,
+     "frames": 9,
+     "load": 4702,
+     "ready": "complete",
+     "resources": 202
+    }
+   ],
+   "footprint_mib": 1864.8,
+   "rss_mib": 2877.5,
+   "processes": 19,
+   "renderers": 13,
+   "live_tabs": 6,
+   "content_blocking": {
+    "blocked_requests": 56,
+    "enabled": true
+   }
+  },
+  {
+   "blocking": false,
+   "pages": [
+    {
+     "url": "https://www.bbc.com/news",
+     "fcp": 176,
+     "frames": 10,
+     "load": 1462,
+     "ready": "complete",
+     "resources": 156
+    },
+    {
+     "url": "https://stackoverflow.com/questions/11227809",
+     "fcp": null,
+     "frames": 1,
+     "load": 223,
+     "ready": "complete",
+     "resources": 6
+    },
+    {
+     "url": "https://edition.cnn.com",
+     "fcp": 392,
+     "frames": 5,
+     "load": 1406,
+     "ready": "complete",
+     "resources": 76
+    },
+    {
+     "url": "https://weather.com",
+     "fcp": 568,
+     "frames": 3,
+     "load": 744,
+     "ready": "complete",
+     "resources": 100
+    },
+    {
+     "url": "https://www.dailymail.co.uk/home/index.html",
+     "fcp": null,
+     "frames": 1,
+     "load": 636,
+     "ready": "complete",
+     "resources": 1
+    },
+    {
+     "url": "https://www.forbes.com",
+     "fcp": 2476,
+     "frames": 48,
+     "load": null,
+     "ready": "interactive",
+     "resources": 250
+    }
+   ],
+   "footprint_mib": 5070.0,
+   "rss_mib": 8031.0,
+   "processes": 76,
+   "renderers": 70,
+   "live_tabs": 6,
+   "content_blocking": {
+    "blocked_requests": 0,
+    "enabled": false
+   }
+  }
+ ]
+}

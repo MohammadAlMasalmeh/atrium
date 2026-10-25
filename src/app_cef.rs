@@ -1112,7 +1112,7 @@ impl Manager {
                 let r = &self.main_rect;
                 let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": native::has_shell() && self.shell_loaded, "native_chrome": chrome::describe(), "native_sidebar": sidebar::describe(), "live_renderers": self.tabs.iter().filter(|t|t.live).count(), "tabs": self.tabs.iter().map(|t| json!({"id":t.id,"live":t.live,"suspended":t.suspended,"view":t.browser.as_ref().filter(|_| !t.detached).and_then(|b| b.host()).and_then(|h| native::frame_of(h.window_handle()))})).collect::<Vec<_>>(),
                     "layout": { "main": { "x": r.x, "y": r.y, "w": r.width, "h": r.height }, "covered": self.covered, "glance": self.glance_rect.is_some() },
-                    "shell_ipc": { "process_messages": SHELL_MESSAGES.load(Ordering::Relaxed), "rejected_messages": REJECTED_MESSAGES.load(Ordering::Relaxed), "http_commands": HTTP_COMMANDS.load(Ordering::Relaxed) } }));
+                    "shell_ipc": { "process_messages": SHELL_MESSAGES.load(Ordering::Relaxed), "rejected_messages": REJECTED_MESSAGES.load(Ordering::Relaxed), "http_commands": HTTP_COMMANDS.load(Ordering::Relaxed) }, "content_blocking": { "enabled": crate::blocking::enabled(), "blocked_requests": crate::blocking::blocked_count() } }));
             }
             Op::WindowShot(reply) => { let _ = reply.send(native::window_png()); }
         }
@@ -1751,6 +1751,15 @@ wrap_request_handler! {struct TabRequests {bridge:Bridge,id:u64,base:String} imp
             is_local_api(&url, &self.base) && !is_about(&url, &self.base)
         }).into()
     }
+    fn resource_request_handler(&self, _browser:Option<&mut Browser>, _frame:Option<&mut Frame>, request:Option<&mut Request>, _is_navigation:i32, _is_download:i32, request_initiator:Option<&CefString>, _disable_default_handling:Option<&mut i32>)->Option<ResourceRequestHandler>{
+        let r = request?;
+        if r.resource_type() == ResourceType::MAIN_FRAME { return None; }
+        let initiator = request_initiator.map(|i| i.to_string());
+        crate::blocking::should_block(&CefString::from(&r.url()).to_string(), initiator.as_deref()).then(BlockedRequest::new)
+    }
+}}
+wrap_resource_request_handler! {struct BlockedRequest; impl ResourceRequestHandler {
+    fn on_before_resource_load(&self, _browser:Option<&mut Browser>, _frame:Option<&mut Frame>, _request:Option<&mut Request>, _callback:Option<&mut Callback>)->ReturnValue{ReturnValue::CANCEL}
 }}
 type Popups = Arc<Mutex<HashMap<i32, u64>>>;
 static NEXT_POPUP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1 << 32);

@@ -652,9 +652,33 @@ So the 45 renderers came from live pages' subframes, not from closed views.
 The unchanged count after eviction is consistent with this: evicting a page
 frees its subframe processes only when no other live page uses those sites,
 and ad pages keep adding frames. That run's exact sequence was not reproduced.
-Site isolation is left on. Reducing these processes needs fewer subframes
-(for example content blocking) or evicting ad-heavy background pages sooner;
-neither is implemented.
+Site isolation is left on. Reducing these processes needs fewer subframes,
+which built-in ad blocking provides (below).
+
+### Ad blocking
+
+`src/blocking.rs` refuses third-party subresource and subframe requests to a short
+list of ad exchanges, ad servers, and their ID-sync endpoints, so header-bidding
+pages never create most of their ad frames. Top-level navigations are never
+blocked (following an ad link still works), a listed company's own pages load
+normally, and analytics and tag managers are left alone because pages call into
+them. `ATRIUM_CONTENT_BLOCKING=0` turns it off; `/api/browser/memory` reports
+`content_blocking.blocked_requests`.
+
+`tools/bench_content_blocking.py` opens six ad-heavy sites (BBC News, Stack
+Overflow, CNN, weather.com, Daily Mail, Forbes) in a background instance with
+blocking off and on and samples the process tree after 30 s. Two alternating runs
+on 2026-10-25 (`docs/benchmarks/2026-10-25-content-blocking.json`), medians:
+
+| | Off | On |
+|---|---|---|
+| Physical footprint | 4775 MiB | 1775 MiB |
+| Processes | 74 | 18.5 |
+| Page load event | 1406 ms | 832 ms |
+| First contentful paint | 480 ms | 328 ms |
+| Frames, all six pages | 185.5 | 30 |
+
+Stack Overflow and the Daily Mail served a short interstitial in both conditions.
 Run benchmark instances with `ATRIUM_MOCK_KEYCHAIN=1`.
 
 ## Migration and extensions

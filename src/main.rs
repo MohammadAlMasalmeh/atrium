@@ -7,6 +7,8 @@
 mod about;
 mod agent;
 mod app;
+#[cfg(feature = "chromium")]
+mod blocking;
 mod brand;
 mod crx;
 mod extension_store;
@@ -182,6 +184,8 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
         extensions.push(path);
     }
     extensions::record_review(&dir, &extensions);
+    #[cfg(feature = "chromium")]
+    blocking::set_enabled(std::env::var_os("ATRIUM_CONTENT_BLOCKING").is_none_or(|v| v != "0"));
     migration::search::load(&dir.join("import"));
     let _ = CHROME_EXTENSIONS.set(extensions);
     let _ = INSTALLED_EXTENSIONS.set(extension_store::init(&dir));
