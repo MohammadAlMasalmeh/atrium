@@ -375,6 +375,8 @@ struct Manager {
     split_rect: Option<Rect>,
     glance_rect: Option<Rect>,
     covered: bool,
+    /// The cover is the sidebar peeking over the page: the page stays painted, just off screen.
+    parked: bool,
     /// The shell document has loaded and reported `ready`.
     shell_loaded: bool,
     policy: crate::memory::Policy,
@@ -382,8 +384,6 @@ struct Manager {
     next_id: u64,
     next_call: i32,
     pending: HashMap<i32, (Instant, u64, Pending)>,
-    /// The cover is the sidebar peeking over the page: the page stays painted, just off screen.
-    parked: bool,
     adopted: std::collections::HashSet<i32>,
     closing: Arc<AtomicBool>,
     voiceover: bool,
@@ -1215,6 +1215,7 @@ impl Manager {
                     native::focus_shell();
                 }
                 self.covered = m["on"] == true;
+                self.parked = self.covered && m["peek"] == true;
                 chrome::shell_state(chrome::ShellState {
                     overlay: m["overlay"].as_bool(),
                     web: m["web"].as_bool(),
@@ -1223,7 +1224,6 @@ impl Manager {
                 self.layout();
                 if self.focus_page_until.take().is_some_and(|until| until > Instant::now()) {
                     if let Some(host) = self.page_visible() {
-                self.parked = self.covered && m["peek"] == true;
                         focus_page(&host);
                     }
                 }
@@ -1941,6 +1941,7 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
             split_rect: None,
             glance_rect: None,
             covered: true,
+            parked: false,
             shell_loaded: false,
             policy: crate::memory::Policy::default(),
             session_dirty: false,
@@ -1949,7 +1950,6 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
             pending: HashMap::new(),
             adopted: Default::default(),
             closing,
-            parked: false,
             voiceover: false,
             assistive: Default::default(),
             accessibility: false,
