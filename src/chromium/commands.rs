@@ -454,7 +454,7 @@ impl Manager {
     fn active_page(&self) -> Option<u64> {
         self.active.filter(|id| self.tab(*id).is_some_and(|t| !t.scratch && t.url != "about:blank"))
     }
-    fn toast(&self, message: &str) {
+    pub(super) fn toast(&self, message: &str) {
         self.shell(&format!("window.atriumShell?.toast({})", json!(message)));
     }
     fn focus(&self, id: u64) {
@@ -843,7 +843,7 @@ impl Manager {
         let html = matches!(ext.as_str(), "html" | "htm");
         let (tx, rx) = tokio::sync::oneshot::channel();
         if html {
-            self.evaluate(tab, "return (document.doctype ? new XMLSerializer().serializeToString(document.doctype) + '\\n' : '') + document.documentElement.outerHTML".into(), tx);
+            self.evaluate(tab, "return (document.doctype ? new XMLSerializer().serializeToString(document.doctype) + '\\n' : '') + document.documentElement.outerHTML".into(), tx, false);
         } else {
             self.cdp(tab, "Page.captureSnapshot", json!({ "format": "mhtml" }), Pending::Raw(tx));
         }
@@ -936,7 +936,7 @@ impl Manager {
                 let (tx, rx) = tokio::sync::oneshot::channel();
                 self.evaluate(menu.tab, format!(
                     "const src = {src}; const img = [...document.images].find((i) => i.currentSrc === src || i.src === src); if (!img || !img.naturalWidth) return null; const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0); return c.toDataURL('image/png');"
-                ), tx);
+                ), tx, false);
                 let bridge = self.bridge.clone();
                 std::thread::spawn(move || {
                     let png = (|| {
