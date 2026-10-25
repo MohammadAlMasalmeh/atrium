@@ -697,8 +697,8 @@ const S = {
   pw: new Map(),                     // tab id -> password offer (origin and usernames only)
   chatsFolded: store.get('chatsFolded', false),
   peek: false,                       // the hidden sidebar is floating over the page
-};
   peekFrozen: false, peekCover: false, // its page snapshot is drawn; the live page is parked
+};
 const spaceColor = (sp) => SPACE_COLORS[(sp?.color || 0) % SPACE_COLORS.length];
 const curSpace = () => S.spaces.find((s) => s.id === S.space) || S.spaces[0];
 const tabById = (id) => S.tabs.find((t) => t.id === id);
@@ -1341,12 +1341,12 @@ const peek = {
     if (S.peek || S.peekFrozen || this.waiting || S.overlay || nativeChrome() || !document.body.classList.contains('sb-hidden')) return;
     this.timer = setTimeout(() => {
       if (!onWeb()) { this.show(); return; }
+      // Without a snapshot there is nothing to show in the page's place, so the peek is dropped.
       this.waiting = true; freeze();
       this.fallback = setTimeout(() => { this.waiting = false; }, 800);
     }, 120);
   },
   frozen() {
-      // Without a snapshot there is nothing to show in the page's place, so the peek is dropped.
     if (!this.waiting) return;
     const img = $('#frozen-main'), go = () => this.show();
     img.decode ? img.decode().then(go, go) : go();
