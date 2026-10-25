@@ -90,7 +90,7 @@ pub(crate) fn mock_keychain() -> bool {
 }
 
 /// Test instances never read the user's Chrome data; they may point at a synthetic profile.
-fn chrome_root() -> Result<PathBuf> {
+pub(crate) fn chrome_root() -> Result<PathBuf> {
     if mock_keychain() {
         return Ok(std::env::var_os("ATRIUM_TEST_CHROME_ROOT").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/nonexistent/atrium-test-chrome")));
     }
@@ -106,7 +106,7 @@ fn valid_profile(id: &str) -> bool {
             .is_some_and(|n| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()))
 }
 
-fn profile_at(root: &Path, id: &str) -> Result<PathBuf> {
+pub(crate) fn profile_at(root: &Path, id: &str) -> Result<PathBuf> {
     if !valid_profile(id) {
         bail!("Choose a detected Chrome profile.");
     }

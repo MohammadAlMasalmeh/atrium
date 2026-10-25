@@ -15,6 +15,7 @@ mod migration;
 mod memory;
 mod opencode;
 mod permissions;
+mod passwords;
 mod server;
 mod setup;
 
