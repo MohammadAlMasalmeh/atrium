@@ -9,17 +9,20 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 /// Ad exchanges, ad servers, and the ID-sync endpoints they chain through. Analytics and
 /// tag managers are left out: pages call into them and some break when they are missing.
 const DOMAINS: &[&str] = &[
-    "33across.com", "3lift.com", "adform.net", "adnxs.com", "adroll.com", "adsafeprotected.com",
-    "adservice.google.com", "adsrvr.org", "advertising.com", "agkn.com", "amazon-adsystem.com",
-    "bidswitch.net", "bluekai.com", "casalemedia.com", "contextweb.com", "criteo.com", "criteo.net",
+    "33across.com", "3lift.com", "adform.net", "adhese.com", "adition.com", "adkernel.com",
+    "adnxs.com", "adroll.com", "adsafeprotected.com", "adservice.google.com", "adsrvr.org",
+    "advertising.com", "adzerk.net", "agkn.com", "amazon-adsystem.com", "bidr.io", "bidswitch.net",
+    "bluekai.com", "casalemedia.com", "connectad.io", "contextweb.com", "criteo.com", "criteo.net",
     "crwdcntrl.net", "demdex.net", "districtm.io", "doubleclick.net", "doubleverify.com",
-    "everesttech.net", "exelator.com", "eyeota.net", "googleadservices.com",
-    "googlesyndication.com", "gumgum.com", "id5-sync.com", "indexww.com", "krxd.net", "liadm.com",
-    "lijit.com", "mathtag.com", "media.net", "mgid.com", "moatads.com", "onetag-sys.com",
-    "openx.net", "outbrain.com", "pubmatic.com", "quantserve.com", "revcontent.com", "rlcdn.com",
-    "rubiconproject.com", "scorecardresearch.com", "serving-sys.com", "sharethrough.com",
-    "smartadserver.com", "sovrn.com", "spotxchange.com", "springserve.com", "taboola.com",
-    "tapad.com", "teads.tv", "turn.com", "yieldmo.com", "zemanta.com",
+    "emxdgt.com", "everesttech.net", "exelator.com", "eyeota.net", "googleadservices.com",
+    "googlesyndication.com", "googletagservices.com", "gumgum.com", "id5-sync.com", "indexww.com",
+    "kargo.com", "krxd.net", "liadm.com", "lijit.com", "mathtag.com", "media.net", "mgid.com",
+    "moatads.com", "nativo.com", "onetag-sys.com", "onetag.com", "openx.net", "outbrain.com",
+    "pubmatic.com", "quantserve.com", "revcontent.com", "rhythmone.com", "richaudience.com",
+    "rlcdn.com", "rubiconproject.com", "scorecardresearch.com", "seedtag.com", "serving-sys.com",
+    "sharethrough.com", "smaato.net", "smartadserver.com", "sonobi.com", "sovrn.com",
+    "spotxchange.com", "springserve.com", "taboola.com", "tapad.com", "teads.tv", "turn.com",
+    "undertone.com", "yieldlab.net", "yieldmo.com", "zemanta.com",
 ];
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
