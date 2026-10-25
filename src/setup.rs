@@ -30,7 +30,7 @@ pub(crate) async fn shell_only(State(app): State<Arc<App>>, req: Request, next: 
     if host != app.ui_origin.strip_prefix("http://") || origin.is_some_and(|o| o != app.ui_origin) {
         return (
             StatusCode::FORBIDDEN,
-            "Setup is only available inside Aside.",
+            format!("Setup is only available inside {}.", crate::brand::PRODUCT_NAME),
         )
             .into_response();
     }
@@ -40,8 +40,8 @@ pub(crate) async fn shell_only(State(app): State<Arc<App>>, req: Request, next: 
 /// Host/Origin checks stop websites; the per-launch token also stops other local processes.
 pub(crate) async fn require_token(req: Request, next: Next) -> Response {
     let provided = req.headers().get(crate::TOKEN_HEADER).map(|h| h.as_bytes());
-    if req.uri().path() != "/shell" && !token_matches(crate::API_TOKEN.get().map(String::as_bytes), provided) {
-        return (StatusCode::UNAUTHORIZED, "A valid Aside API token is required.").into_response();
+    if !crate::about::is_public(req.uri().path()) && !token_matches(crate::API_TOKEN.get().map(String::as_bytes), provided) {
+        return (StatusCode::UNAUTHORIZED, format!("A valid {} API token is required.", crate::brand::PRODUCT_NAME)).into_response();
     }
     next.run(req).await
 }

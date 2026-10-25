@@ -18,6 +18,8 @@ use tokio_stream::wrappers::BroadcastStream;
 use crate::{agent::Agent, app::Op, opencode::OpenCode};
 
 const SHELL_HTML: &str = include_str!("../assets/shell.html");
+static SHELL: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| SHELL_HTML.replace("{{PRODUCT_NAME}}", crate::brand::PRODUCT_NAME));
 
 pub struct App {
     pub agent: Agent,
@@ -34,7 +36,10 @@ type Shared = State<Arc<App>>;
 
 pub fn router(app: Arc<App>) -> Router {
     Router::new()
-        .route("/shell", get(|| async { Html(SHELL_HTML) }))
+        .route("/shell", get(|| async { Html(SHELL.as_str()) }))
+        .route(crate::about::PATH, get(crate::about::page))
+        .route(crate::about::CREDITS_PATH, get(crate::about::chromium_credits))
+        .route("/favicon/:key", get(crate::favicons::serve))
         .route("/frozen/:slot", get(frozen))
         .route("/api/state", get(state))
         .route("/api/browser/command", post(browser_command))

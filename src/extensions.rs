@@ -123,7 +123,7 @@ pub fn record_review(dir: &Path, paths: &[PathBuf]) {
     let _ = REVIEW.set(json!({
         "extensions": extensions,
         "enforced": false,
-        "note": "Unpacked extensions receive every permission their manifest declares. Aside records them for review; it does not prompt for or restrict them.",
+        "note": format!("Unpacked extensions receive every permission their manifest declares. {} records them for review; it does not prompt for or restrict them.", crate::brand::PRODUCT_NAME),
     }));
 }
 

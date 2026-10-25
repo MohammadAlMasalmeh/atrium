@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Aside</title>
+<title>{{PRODUCT_NAME}}</title>
 <style>
 /* Browser chrome in the established shape: an Arc/Zen sidebar (navigation,
    address, Favorites, per-space Pinned + Today tabs, space switcher), the page
@@ -454,8 +454,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const store = { get(k, d) { try { const v = localStorage.getItem('aside.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
                 set(k, v) { try { localStorage.setItem('aside.' + k, JSON.stringify(v)); } catch {} } };
 const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
-const ICON_OVERRIDES = { 'mail.google.com': 'https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico' };
-const favicon = (u, icon) => icon || ICON_OVERRIDES[host(u)] || (host(u) ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host(u))}&sz=64` : '');
+// Icons come from the local cache of page-provided favicons; unknown sites get a generic icon.
+const favicon = (u, icon) => icon || (host(u) ? `/favicon/${encodeURIComponent(host(u))}` : '');
 const ago = (t) => { const s = (Date.now() - t) / 1000; if (s < 60) return 'now'; if (s < 3600) return Math.floor(s / 60) + 'm';
   if (s < 86400) return Math.floor(s / 3600) + 'h'; return Math.floor(s / 86400) + 'd'; };
 const ICON = {
