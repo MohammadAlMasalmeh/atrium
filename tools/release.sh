@@ -84,9 +84,9 @@ SIGN_TOOL=target/release/atrium_sign_update
 if [ -n "${ATRIUM_UPDATE_SECRET_KEY:-}" ] || [ -n "${ATRIUM_UPDATE_SECRET_KEY_B64:-}" ]; then
     [ -x "$SIGN_TOOL" ] || cargo build --locked --release --bin atrium_sign_update
     if [ -n "${ATRIUM_UPDATE_SECRET_KEY:-}" ]; then
-        "$SIGN_TOOL" sign --secret "$ATRIUM_UPDATE_SECRET_KEY" --version "$VERSION" "$ZIP" >/dev/null
+        "$SIGN_TOOL" sign --private-key "$ATRIUM_UPDATE_SECRET_KEY" --version "$VERSION" "$ZIP" >/dev/null
     else
-        "$SIGN_TOOL" sign --secret-env ATRIUM_UPDATE_SECRET_KEY_B64 --version "$VERSION" "$ZIP" >/dev/null
+        "$SIGN_TOOL" sign --private-key-env ATRIUM_UPDATE_SECRET_KEY_B64 --version "$VERSION" "$ZIP" >/dev/null
     fi
     echo "update archive signed: $ZIP.sig"
 else

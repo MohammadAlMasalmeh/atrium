@@ -1,12 +1,12 @@
 //! Release signing tool for the auto-updater.
 //!
-//!   atrium_sign_update keygen --secret <path-to-secret-key> [--public <path-to-public-key>]
-//!   atrium_sign_update public --secret <path-to-secret-key>                          (prints the public key)
-//!   atrium_sign_update sign --secret <path-to-secret-key> --version 1.2.3 ARCHIVE   (writes ARCHIVE.sig)
-//!   atrium_sign_update verify --public <path-to-public-key> --version 1.2.3 ARCHIVE [--signature FILE]
+//!   atrium_sign_update keygen --private-key <file> [--public <file>]
+//!   atrium_sign_update public --private-key <file>                          (prints the public key)
+//!   atrium_sign_update sign --private-key <file> --version 1.2.3 ARCHIVE   (writes ARCHIVE.sig)
+//!   atrium_sign_update verify --public <file> --version 1.2.3 ARCHIVE [--signature FILE]
 //!
 //! The secret key is a base64 PKCS#8 Ed25519 document; keep it out of the repository.
-//! `--secret-env NAME` reads it from an environment variable instead (CI secrets).
+//! `--private-key-env NAME` reads it from an environment variable instead (CI secrets).
 #[path = "../update_sig.rs"]
 mod update_sig;
 
@@ -41,10 +41,10 @@ fn parse() -> Result<Args> {
 }
 
 fn secret(args: &Args) -> Result<Ed25519KeyPair> {
-    let text = match (args.options.get("secret"), args.options.get("secret-env")) {
+    let text = match (args.options.get("private-key"), args.options.get("private-key-env")) {
         (Some(path), _) => std::fs::read_to_string(path).with_context(|| format!("cannot read {path}"))?,
         (None, Some(name)) => std::env::var(name).with_context(|| format!("{name} is not set"))?,
-        _ => bail!("pass --secret FILE or --secret-env NAME"),
+        _ => bail!("pass --private-key FILE or --private-key-env NAME"),
     };
     let der = b64().decode(text.trim()).context("the secret key is not base64")?;
     Ed25519KeyPair::from_pkcs8(&der).map_err(|_| anyhow::anyhow!("the secret key is not an Ed25519 PKCS#8 key"))
@@ -71,7 +71,7 @@ fn main() -> Result<()> {
     let args = parse()?;
     match args.command.as_str() {
         "keygen" => {
-            let path = args.options.get("secret").context("pass --secret FILE for the new secret key")?;
+            let path = args.options.get("private-key").context("pass --private-key FILE for the new private key")?;
             let pkcs8 = Ed25519KeyPair::generate_pkcs8(&ring::rand::SystemRandom::new())
                 .map_err(|_| anyhow::anyhow!("key generation failed"))?;
             let pair = Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).map_err(|_| anyhow::anyhow!("key generation failed"))?;

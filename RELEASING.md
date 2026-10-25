@@ -8,7 +8,7 @@ Details and test evidence are in [docs/chromium.md](docs/chromium.md#releases-si
 
    ```sh
    cargo build --release --bin atrium_sign_update
-   target/release/atrium_sign_update keygen --secret ~/atrium-update.pk8 --public atrium-update.pub
+   target/release/atrium_sign_update keygen --private-key ~/atrium-update.pk8 --public atrium-update.pub
    ```
 
    Put the public key line into `assets/update-public-key.txt` and commit it (or set the
@@ -52,11 +52,11 @@ Both tests start background-only copies under `/private/tmp` and never touch
 `/Applications`. They still start the app, so run them when that is acceptable.
 
 ```sh
-target/release/atrium_sign_update keygen --secret /private/tmp/test.pk8 --public /private/tmp/test.pub
+target/release/atrium_sign_update keygen --private-key /private/tmp/test.pk8 --public /private/tmp/test.pub
 ATRIUM_UPDATE_PUBLIC_KEY=$(cat /private/tmp/test.pub) ./tools/build-chromium.sh --release
 python3 tools/fixture_server.py --port 7801 &
 python3 tools/test_crash_reports.py --fixture http://127.0.0.1:7801
-python3 tools/test_updater.py --secret /private/tmp/test.pk8
+python3 tools/test_updater.py --private-key /private/tmp/test.pk8
 ```
 
 Rebuild without `ATRIUM_UPDATE_PUBLIC_KEY` afterwards.

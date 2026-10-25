@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """End-to-end updater test against a local release feed.
 
-Needs a bundle built with ATRIUM_UPDATE_PUBLIC_KEY set to the public half of --secret
+Needs a bundle built with ATRIUM_UPDATE_PUBLIC_KEY set to the public half of --private-key
 (see docs/chromium.md). Everything runs on copies under --root in /private/tmp:
 
 1. a release signed with another key, and a tampered archive, are rejected;
@@ -23,7 +23,7 @@ import background_app
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--app', type=Path, default=Path('target/bundle/atrium.app'))
-parser.add_argument('--secret', type=Path, required=True, help='Ed25519 secret key matching the build')
+parser.add_argument('--private-key', type=Path, required=True, help='Ed25519 private key matching the build')
 parser.add_argument('--sign-tool', type=Path, default=Path('target/release/atrium_sign_update'))
 parser.add_argument('--port', type=int, default=7802)
 parser.add_argument('--feed-port', type=int, default=7803)
@@ -50,7 +50,7 @@ def release(version, secret, executable=None, tamper=False):
     archive = out / name
     background_app.run('/usr/bin/ditto', '-c', '-k', '--keepParent', app, archive)
     shutil.rmtree(out / 'stage')
-    tool('sign', '--secret', secret, '--version', version, archive)
+    tool('sign', '--private-key', secret, '--version', version, archive)
     if tamper:
         with open(archive, 'ab') as f:
             f.write(b'\0')
@@ -94,14 +94,14 @@ instance = None
 try:
     step('preparing the installed copy and fake releases')
     other_key = args.root / 'other.pk8'
-    tool('keygen', '--secret', other_key)
+    tool('keygen', '--private-key', other_key)
     installed = background_app.prepare(args.app.resolve(), args.root / 'Apps/Atrium.app')
     base_version = background_app.info(installed, 'CFBundleVersion')
     assert base_version == '0.1.0', base_version
     wrong_key = release('0.3.0', other_key)
-    tampered = release('0.3.1', args.secret, tamper=True)
-    good = release('0.2.0', args.secret)
-    broken = release('0.4.0', args.secret, executable='/usr/bin/false')
+    tampered = release('0.3.1', args.private_key, tamper=True)
+    good = release('0.2.0', args.private_key)
+    broken = release('0.4.0', args.private_key, executable='/usr/bin/false')
 
     profile = args.root / 'profile'
     profile.mkdir()
@@ -117,7 +117,7 @@ try:
         return result
 
     status = update('/api/update/status')
-    assert status['public_key'] == tool('public', '--secret', args.secret), 'the build does not embed the test public key'
+    assert status['public_key'] == tool('public', '--private-key', args.private_key), 'the build does not embed the test public key'
     assert status['enabled'] and status['current_version'] == '0.1.0' and status['phase'] == 'idle', status
 
     for bad, why in ((wrong_key, 'signed with another key'), (tampered, 'tampered after signing')):

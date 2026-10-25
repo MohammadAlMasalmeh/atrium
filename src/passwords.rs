@@ -648,6 +648,10 @@ pub fn import(store: &Store, data: chrome::Imported) -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
+    /// Per-run test credentials, so the source holds no password literals.
+    fn fake(tag: &str) -> String {
+        format!("{tag}-{}", std::process::id())
+    }
     use super::*;
 
     fn temp() -> PathBuf {
@@ -685,19 +689,19 @@ mod tests {
         let dir = temp();
         let store = Store::open(&dir, true).unwrap();
         assert_eq!(store.kind(), "test-vault");
-        let (login, how) = store.save("http://127.0.0.1:7831", "ada", "s3cret-one").unwrap();
+        let (login, how) = store.save("http://127.0.0.1:7831", "ada", &fake("one")).unwrap();
         assert_eq!(how, Saved::New);
-        assert_eq!(store.check("http://127.0.0.1:7831", "ada", "s3cret-one").unwrap(), Saved::Unchanged);
+        assert_eq!(store.check("http://127.0.0.1:7831", "ada", &fake("one")).unwrap(), Saved::Unchanged);
         assert_eq!(store.check("http://127.0.0.1:7831", "ada", "other").unwrap(), Saved::Updated);
-        assert_eq!(store.check("http://127.0.0.1:7832", "ada", "s3cret-one").unwrap(), Saved::New);
-        assert_eq!(store.save("http://127.0.0.1:7831", "ada", "s3cret-two").unwrap().1, Saved::Updated);
+        assert_eq!(store.check("http://127.0.0.1:7832", "ada", &fake("one")).unwrap(), Saved::New);
+        assert_eq!(store.save("http://127.0.0.1:7831", "ada", &fake("two")).unwrap().1, Saved::Updated);
         let listed = store.list().unwrap();
         assert_eq!(listed.len(), 1);
         assert!(listed[0].password.is_empty());
-        assert_eq!(store.get(&login.id).unwrap().password, "s3cret-two");
+        assert_eq!(store.get(&login.id).unwrap().password, fake("two"));
         assert!(store.for_origin("http://127.0.0.1:7832").unwrap().is_empty());
         let raw = std::fs::read(dir.join(VAULT)).unwrap();
-        assert!(!raw.windows(10).any(|w| w == b"s3cret-two"));
+        assert!(!raw.windows(fake("two").len()).any(|w| w == fake("two").as_bytes()));
         assert_eq!(std::fs::metadata(dir.join(VAULT_KEY)).unwrap().permissions().mode() & 0o777, 0o600);
         // Reopening with the same key reads the vault; tampering is detected.
         assert_eq!(Store::open(&dir, true).unwrap().list().unwrap().len(), 1);
@@ -717,12 +721,12 @@ mod tests {
         let (a, _) = store.save("https://example.com", "ada", "pw\"1").unwrap();
         store.save("https://example.com", "bob", "=cmd").unwrap();
         assert!(store.edit(&a.id, Some("bob"), None).is_err());
-        let edited = store.edit(&a.id, Some("ada2"), Some("pw2")).unwrap();
+        let edited = store.edit(&a.id, Some("ada2"), Some(fake("edit").as_str())).unwrap();
         assert!(edited.password.is_empty());
-        assert_eq!(store.get(&a.id).unwrap().password, "pw2");
+        assert_eq!(store.get(&a.id).unwrap().password, fake("edit"));
         let csv = store.export_csv().unwrap();
         assert!(csv.starts_with("name,url,username,password,note\n"));
-        assert!(csv.contains("\"example.com\",\"https://example.com\",\"ada2\",\"pw2\",\"\""));
+        assert!(csv.contains(&format!("\"example.com\",\"https://example.com\",\"ada2\",\"{}\",\"\"", fake("edit"))));
         assert!(csv.contains("\"'=cmd\""));
         store.delete(&a.id).unwrap();
         assert!(store.get(&a.id).is_err());
@@ -751,9 +755,9 @@ mod tests {
              INSERT INTO logins VALUES ('https://blocked.example/','https://blocked.example/','',X'',1);
              INSERT INTO logins VALUES ('android://hash@com.example/','android://hash@com.example/','x',X'{}',0);
              INSERT INTO logins VALUES ('https://bad.example/','https://bad.example/','x',X'763130DEADBEEF',0);",
-            hex(chrome::encrypt(&key, "chrome-pass-1")),
-            hex(chrome::encrypt(&key, "chrome-pass-2")),
-            hex(chrome::encrypt(&key, "android")),
+            hex(chrome::encrypt(&key, &fake("chrome-1"))),
+            hex(chrome::encrypt(&key, &fake("chrome-2"))),
+            hex(chrome::encrypt(&key, &fake("android"))),
         );
         let db = profile.join("Login Data");
         assert!(std::process::Command::new("/usr/bin/sqlite3").arg(&db).arg(sql).status().unwrap().success());
@@ -761,8 +765,8 @@ mod tests {
         let data = chrome::read(&profile, secret).await.unwrap();
         assert_eq!(std::fs::read(&db).unwrap(), before);
         assert_eq!(data.logins, vec![
-            ("https://example.com".into(), "ada".into(), "chrome-pass-1".into()),
-            ("http://127.0.0.1:7831".into(), "bob".into(), "chrome-pass-2".into()),
+            ("https://example.com".into(), "ada".into(), fake("chrome-1")),
+            ("http://127.0.0.1:7831".into(), "bob".into(), fake("chrome-2")),
         ]);
         assert_eq!(data.never, vec!["https://blocked.example".to_string()]);
         assert_eq!(data.skipped, 2);
@@ -788,13 +792,13 @@ mod tests {
         let service = format!("Atrium Passwords Test {}", uuid::Uuid::new_v4());
         let store = Store::keychain_for_test(&dir, &service);
         assert!(store.list().unwrap().is_empty());
-        let (login, _) = store.save("https://example.com", "ada", "kc-secret").unwrap();
+        let (login, _) = store.save("https://example.com", "ada", &fake("keychain")).unwrap();
         let listed = store.list().unwrap();
         assert_eq!(listed.len(), 1);
         assert!(listed[0].password.is_empty());
-        assert_eq!(store.get(&login.id).unwrap().password, "kc-secret");
-        assert_eq!(store.save("https://example.com", "ada", "kc-secret-2").unwrap().1, Saved::Updated);
-        assert_eq!(store.get(&login.id).unwrap().password, "kc-secret-2");
+        assert_eq!(store.get(&login.id).unwrap().password, fake("keychain"));
+        assert_eq!(store.save("https://example.com", "ada", &fake("keychain-2")).unwrap().1, Saved::Updated);
+        assert_eq!(store.get(&login.id).unwrap().password, fake("keychain-2"));
         store.delete(&login.id).unwrap();
         assert!(store.list().unwrap().is_empty());
         std::fs::remove_dir_all(dir).unwrap();

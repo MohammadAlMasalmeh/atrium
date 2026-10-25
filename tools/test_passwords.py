@@ -21,6 +21,10 @@ from pathlib import Path
 import atrium_api
 
 ROOT = Path(__file__).resolve().parent
+import uuid
+# Credentials are generated per run; the suite holds no password literals.
+V = {name: f'{name}-{uuid.uuid4().hex[:8]}' for name in ('login-one', 'login-two', 'import-one', 'import-two', 'edited', 'storage')}
+
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--app', type=Path, default=ROOT.parent / 'target/bundle/atrium.app/Contents/MacOS/atrium')
 parser.add_argument('--port', type=int, default=7830)
@@ -67,8 +71,8 @@ def chrome_profile(directory, secret):
     db.execute('CREATE TABLE logins (origin_url TEXT, action_url TEXT, username_element TEXT, username_value TEXT, '
                'password_element TEXT, password_value BLOB, signon_realm TEXT, blacklisted_by_user INTEGER)')
     rows = [
-        (f'{A}/login', 'imported@example.test', encrypt('imported-pass-1'), 0),
-        ('https://example.org/signin', 'org-user', encrypt('imported-pass-2'), 0),
+        (f'{A}/login', 'imported@example.test', encrypt(V['import-one']), 0),
+        ('https://example.org/signin', 'org-user', encrypt(V['import-two']), 0),
         ('https://blocked.example/', '', b'', 1),
     ]
     for url, user, value, never in rows:
@@ -129,14 +133,14 @@ with tempfile.TemporaryDirectory(prefix='atrium-passwords-', dir='/private/tmp')
             'The password script and binding must not be visible to page JavaScript'
 
         step = 'offer to save on submit'
-        submit('login', 'ada@example.test', 'correct horse 1')
+        submit('login', 'ada@example.test', V['login-one'])
         offer = wait('save offer', lambda: offer_of(tab))
         assert offer == {'kind': 'save', 'origin': A, 'username': 'ada@example.test'}, offer
         client.command(cmd='passwordSave', tab=tab, action='save')
         saved = wait('saved login', lambda: [l for l in logins() if l['origin'] == A])
         assert len(saved) == 1 and saved[0]['username'] == 'ada@example.test' and 'password' not in saved[0], saved
         ada = saved[0]['id']
-        assert api('/api/passwords/reveal', {'id': ada}) == {'password': 'correct horse 1'}
+        assert api('/api/passwords/reveal', {'id': ada}) == {'password': V['login-one']}
         assert offer_of(tab) is None
 
         step = 'fill only on explicit request when revisiting the same origin'
@@ -146,7 +150,7 @@ with tempfile.TemporaryDirectory(prefix='atrium-passwords-', dir='/private/tmp')
         assert page("return document.querySelector('#password').value") == '', 'Nothing may be filled before the user asks'
         client.command(cmd='passwordFill', tab=tab, id=ada)
         wait('filled fields', lambda: page("return [document.querySelector('#username').value, document.querySelector('#password').value]")
-             == ['ada@example.test', 'correct horse 1'])
+             == ['ada@example.test', V['login-one']])
 
         step = 'no fill on another port or host'
         for other in (B, HOST):
@@ -173,14 +177,14 @@ with tempfile.TemporaryDirectory(prefix='atrium-passwords-', dir='/private/tmp')
         step = 'unchanged submit is silent, changed password offers update'
         go(f'{A}/login')
         wait('fill offer', lambda: (offer_of(tab) or {}).get('kind') == 'fill')
-        submit('login', 'ada@example.test', 'correct horse 1')
+        submit('login', 'ada@example.test', V['login-one'])
         stays('no offer for an unchanged password', lambda: (offer_of(tab) or {}).get('kind') not in ('save', 'update'), 2.5)
         go(f'{A}/login')
         wait('fill offer', lambda: (offer_of(tab) or {}).get('kind') == 'fill')
-        submit('login', 'ada@example.test', 'correct horse 2')
+        submit('login', 'ada@example.test', V['login-two'])
         assert wait('update offer', lambda: (offer_of(tab) or {}).get('kind') == 'update' and offer_of(tab))['username'] == 'ada@example.test'
         client.command(cmd='passwordSave', tab=tab, action='save')
-        wait('updated password', lambda: api('/api/passwords/reveal', {'id': ada}) == {'password': 'correct horse 2'})
+        wait('updated password', lambda: api('/api/passwords/reveal', {'id': ada}) == {'password': V['login-two']})
 
         step = 'formless single-page login is captured'
         go(f'{A}/spa-login')
@@ -210,29 +214,29 @@ with tempfile.TemporaryDirectory(prefix='atrium-passwords-', dir='/private/tmp')
         assert api('/api/passwords/reveal', {'id': grace}) == {'password': generated}
 
         step = 'import from a synthetic Chrome profile'
-        profile = chrome_profile(data, 'synthetic-safe-storage-secret')
+        profile = chrome_profile(data, V['storage'])
         before = (profile / 'Login Data').read_bytes()
         rejected = client.request('/api/passwords/import-chrome', {'profile_path': str(profile), 'safe_storage': 'wrong'})
         assert rejected.get('added') == 0 and rejected.get('skipped') == 2, rejected
-        summary = api('/api/passwords/import-chrome', {'profile_path': str(profile), 'safe_storage': 'synthetic-safe-storage-secret'})
+        summary = api('/api/passwords/import-chrome', {'profile_path': str(profile), 'safe_storage': V['storage']})
         assert summary == {'added': 2, 'updated': 0, 'unchanged': 0, 'never': 1, 'skipped': 0}, summary
         assert (profile / 'Login Data').read_bytes() == before, 'Import must not modify the Chrome profile'
         imported = {l['username']: l for l in logins()}
         assert imported['imported@example.test']['origin'] == A and imported['org-user']['origin'] == 'https://example.org'
-        assert api('/api/passwords/reveal', {'id': imported['org-user']['id']}) == {'password': 'imported-pass-2'}
+        assert api('/api/passwords/reveal', {'id': imported['org-user']['id']}) == {'password': V['import-two']}
         assert 'https://blocked.example' in api('/api/passwords')['never']
         go(f'{A}/login')
         offer = wait('fill offer with both accounts', lambda: (lambda o: o if o and len(o.get('accounts', [])) == 3 else None)(offer_of(tab)))
         assert {a['username'] for a in offer['accounts']} == {'ada@example.test', 'grace@example.test', 'imported@example.test'}
         client.command(cmd='passwordFill', tab=tab, id=imported['imported@example.test']['id'])
-        wait('imported login filled', lambda: page("return document.querySelector('#password').value") == 'imported-pass-1')
+        wait('imported login filled', lambda: page("return document.querySelector('#password').value") == V['import-one'])
 
         step = 'management API'
         csv = api('/api/passwords/export', {})['csv']
-        assert csv.splitlines()[0] == 'name,url,username,password,note' and '"correct horse 2"' in csv and generated in csv
-        edited = api('/api/passwords/edit', {'id': imported['org-user']['id'], 'username': 'org-renamed', 'password': 'new-org-pass'})['login']
+        assert csv.splitlines()[0] == 'name,url,username,password,note' and f'"{V["login-two"]}"' in csv and generated in csv
+        edited = api('/api/passwords/edit', {'id': imported['org-user']['id'], 'username': 'org-renamed', 'password': V['edited']})['login']
         assert edited['username'] == 'org-renamed' and 'password' not in edited
-        assert api('/api/passwords/reveal', {'id': edited['id']}) == {'password': 'new-org-pass'}
+        assert api('/api/passwords/reveal', {'id': edited['id']}) == {'password': V['edited']}
         api('/api/passwords/delete', {'id': edited['id']})
         assert 'error' in client.request('/api/passwords/reveal', {'id': edited['id']})
         api('/api/passwords/never', {'origin': B, 'never': False})
@@ -270,7 +274,7 @@ with tempfile.TemporaryDirectory(prefix='atrium-passwords-', dir='/private/tmp')
         client.command(cmd='quit')
         browser.wait(timeout=20)
         vault = (data / 'profile' / 'passwords-test.vault').read_bytes()
-        for secret in (b'correct horse 2', generated.encode(), b'imported-pass-1'):
+        for secret in (V['login-two'].encode(), generated.encode(), V['import-one'].encode()):
             assert secret not in vault, 'The test vault must be encrypted'
         assert 'FRONTMOST' not in (data / 'watchdog.log').read_text()
         print('PASS: isolated detection, save, explicit fill, origin and port isolation, never, update, SPA capture, '
