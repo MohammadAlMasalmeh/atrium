@@ -1,6 +1,7 @@
 //! Sandboxed CEF subprocess entry point. See cef-rs's MIT/Apache-2.0 cefsimple helper.
 //! In renderer processes it exposes `window.ipc` to the Atrium shell's main frame only,
-//! and watches website frames for media this Chromium build can't play.
+//! watches website frames for media this Chromium build can't play, and clears the
+//! invisible click-catching layers popunder ads put over them.
 use cef::{args::Args, *};
 use std::{
     collections::HashMap,
@@ -10,6 +11,10 @@ use std::{
 mod shell_ipc;
 
 const MEDIA_JS: &str = include_str!("../../assets/media.js");
+const OVERLAYS_JS: &str = include_str!("../../assets/overlays.js");
+
+/// Set by the browser process's environment, which helpers inherit; see main.rs.
+static BLOCKING: LazyLock<bool> = LazyLock::new(|| std::env::var_os("ATRIUM_CONTENT_BLOCKING").is_none_or(|v| v != "0"));
 
 /// Shell browsers hosted by this renderer process: browser id to shell URL. Only the
 /// browser process can mark a browser as the shell, through its creation extra info.
@@ -62,6 +67,9 @@ wrap_render_process_handler! {
             }
             if !is_shell_frame(frame) {
                 watch_media(context);
+                if *BLOCKING {
+                    clear_overlays(context);
+                }
                 return;
             }
             let Some(global) = context.global() else { return };
@@ -94,6 +102,18 @@ fn watch_media(context: &mut V8Context) {
         }
     } else if let Some(e) = exception {
         eprintln!("[media] watcher failed: {}", CefString::from(&e.message()));
+    }
+    context.exit();
+}
+
+/// Runs assets/overlays.js, which leaves nothing on the page's globals.
+fn clear_overlays(context: &mut V8Context) {
+    context.enter();
+    let (mut result, mut exception) = (None, None);
+    if context.eval(Some(&CefString::from(OVERLAYS_JS)), None, 0, Some(&mut result), Some(&mut exception)) == 0 {
+        if let Some(e) = exception {
+            eprintln!("[blocking] overlay guard failed: {}", CefString::from(&e.message()));
+        }
     }
     context.exit();
 }

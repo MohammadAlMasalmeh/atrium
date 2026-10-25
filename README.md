@@ -136,7 +136,8 @@ methodology is in [docs/chromium.md](docs/chromium.md).
   cookies. `ATRIUM_SEARCH_SUGGESTIONS=0` keeps suggestions local.
 - Built-in ad blocking: third-party requests to about 60 ad exchanges, ad servers,
   and ID-sync endpoints are refused, so ad frames never get their own renderer
-  processes. Top-level navigations and analytics scripts are left alone.
+  processes. Invisible full-page layers that popunder ads use to catch clicks are
+  removed. Top-level navigations and analytics scripts are left alone.
   `ATRIUM_CONTENT_BLOCKING=0` turns it off.
 - Limits background assistant reads to three concurrent operations, with page cleanup on cancellation.
 - Browser automation through CEF's DevTools protocol: navigation, page reading,

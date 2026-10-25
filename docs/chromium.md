@@ -770,6 +770,15 @@ normally, and analytics and tag managers are left alone because pages call into
 them. `ATRIUM_CONTENT_BLOCKING=0` turns it off; `/api/browser/memory` reports
 `content_blocking.blocked_requests`.
 
+Popunder scripts on streaming sites slip past the list: they are served from the
+site's own CDN and fall back to fresh domains when theirs are refused. They lay an
+empty, transparent, full-page layer at the top of the stacking order so the first
+click anywhere opens an ad. The renderer helper runs `assets/overlays.js` in every
+website frame before page scripts; it removes such layers as they are added to
+`<body>`, and catches any other one when it takes a click, swallowing that click.
+Only layers covering most of the viewport with a z-index of at least a million
+that show nothing qualify, so dimmed modal backdrops are left alone.
+
 `tools/bench_content_blocking.py` opens six ad-heavy sites (BBC News, Stack
 Overflow, CNN, weather.com, Daily Mail, Forbes) in a background instance with
 blocking off and on and samples the process tree after 30 s. Two alternating runs
