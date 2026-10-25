@@ -21,15 +21,68 @@ struct Connection {
     password: Option<String>,
 }
 
+/// Password for an OpenCode server this app starts, unless the user configured one.
+/// Without it any local account could drive the assistant, and through it the browser.
+fn local_password() -> String {
+    static PASSWORD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    PASSWORD
+        .get_or_init(|| {
+            std::env::var("OPENCODE_SERVER_PASSWORD")
+                .ok()
+                .filter(|p| !p.is_empty())
+                .unwrap_or_else(|| format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple()))
+        })
+        .clone()
+}
+
+/// Credentials embedded in an address are moved out of it, so the shown and logged base never contains them.
+fn split_credentials(base: &str) -> (String, Option<(String, Option<String>)>) {
+    let base = base.trim_end_matches('/');
+    match reqwest::Url::parse(base) {
+        Ok(mut url) if !url.username().is_empty() || url.password().is_some() => {
+            let decode = |s: &str| {
+                let bytes = s.as_bytes();
+                let mut out = Vec::with_capacity(bytes.len());
+                let mut i = 0;
+                while i < bytes.len() {
+                    match (bytes[i], bytes.get(i + 1..i + 3).and_then(|h| u8::from_str_radix(std::str::from_utf8(h).ok()?, 16).ok())) {
+                        (b'%', Some(b)) => { out.push(b); i += 3; }
+                        (b, _) => { out.push(b); i += 1; }
+                    }
+                }
+                String::from_utf8_lossy(&out).into_owned()
+            };
+            let user = decode(url.username());
+            let password = url.password().map(decode);
+            let _ = url.set_username("");
+            let _ = url.set_password(None);
+            (url.as_str().trim_end_matches('/').to_string(), Some((user, password)))
+        }
+        _ => (base.to_string(), None),
+    }
+}
+
 impl OpenCode {
     pub fn new(base: impl Into<String>) -> Self {
         Self::with_auth(base.into(), std::env::var("OPENCODE_SERVER_USERNAME").unwrap_or_else(|_| "opencode".into()),
             std::env::var("OPENCODE_SERVER_PASSWORD").ok())
     }
 
+    /// The loopback server on `port`, authenticated with the password a server we start uses.
+    /// A server started without a password ignores these credentials.
+    pub fn local(port: u16) -> Self {
+        Self::with_auth(format!("http://127.0.0.1:{port}"),
+            std::env::var("OPENCODE_SERVER_USERNAME").unwrap_or_else(|_| "opencode".into()), Some(local_password()))
+    }
+
     pub fn with_auth(base: String, username: String, password: Option<String>) -> Self {
+        let (base, embedded) = split_credentials(&base);
+        let (username, password) = match embedded {
+            Some((user, embedded_password)) => (if user.is_empty() { username } else { user }, embedded_password.or(password)),
+            None => (username, password),
+        };
         Self {
-            connection: Arc::new(RwLock::new(Connection { base: base.trim_end_matches('/').into(), username, password })),
+            connection: Arc::new(RwLock::new(Connection { base, username, password })),
             changed: Arc::new(tokio::sync::Notify::new()),
             http: reqwest::Client::builder().no_proxy().connect_timeout(Duration::from_secs(3))
                 .redirect(reqwest::redirect::Policy::none()).build().expect("http client"),
@@ -68,13 +121,14 @@ impl OpenCode {
         let bin = which_opencode();
         let child = Command::new(&bin)
             .args(["serve", "--hostname", "127.0.0.1", "--port", &port.to_string()])
+            .env("OPENCODE_SERVER_PASSWORD", local_password())
             .current_dir(workdir)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .kill_on_drop(true)
             .spawn()
             .with_context(|| format!("could not start `{bin} serve` (is opencode installed?)"))?;
-        let oc = Self::new(format!("http://127.0.0.1:{port}"));
+        let oc = Self::local(port);
         for _ in 0..80 {
             if oc.healthy().await {
                 return Ok((oc, child));
@@ -269,4 +323,24 @@ fn which_opencode() -> String {
         }
     }
     "opencode".into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn embedded_credentials_never_stay_in_the_base_url() {
+        let oc = OpenCode::with_auth("http://alice:p%40ss@127.0.0.1:4097/".into(), "opencode".into(), None);
+        assert_eq!(oc.base(), "http://127.0.0.1:4097");
+        let c = oc.connection.read().unwrap().clone();
+        assert_eq!((c.username.as_str(), c.password.as_deref()), ("alice", Some("p@ss")));
+        let plain = OpenCode::with_auth("https://oc.example/".into(), "opencode".into(), Some("pw".into()));
+        assert_eq!(plain.base(), "https://oc.example");
+        assert_eq!(plain.connection.read().unwrap().password.as_deref(), Some("pw"));
+    }
+    #[test]
+    fn a_started_server_gets_a_password() {
+        let local = OpenCode::local(4097);
+        assert!(local.connection.read().unwrap().password.as_ref().is_some_and(|p| p.len() >= 32 || std::env::var("OPENCODE_SERVER_PASSWORD").is_ok()));
+    }
 }
