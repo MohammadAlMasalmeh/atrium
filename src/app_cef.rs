@@ -12,6 +12,8 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::oneshot;
+#[path = "chromium/chrome.rs"]
+mod chrome;
 #[path = "chromium/mac.rs"]
 mod mac;
 #[path = "chromium/native.rs"]
@@ -240,6 +242,19 @@ impl Manager {
             .map(|t| json!({ "title": t.title, "url": t.url, "loading": t.loading }))
             .unwrap_or(Json::Null);
         self.shell(&format!("window.atriumShell?.state({state})"));
+        self.sync_chrome();
+    }
+    fn sync_chrome(&self) {
+        let Some(t) = self.active.and_then(|id| self.tab(id)) else {
+            return chrome::update(chrome::Page::default());
+        };
+        let browser = t.browser.as_ref();
+        chrome::update(chrome::Page {
+            url: t.url.clone(),
+            can_back: browser.is_some_and(|b| b.can_go_back() == 1),
+            can_forward: browser.is_some_and(|b| b.can_go_forward() == 1),
+            loading: t.loading,
+        });
     }
     fn shell(&self, js: &str) {
         native::shell_eval(js);
@@ -574,7 +589,7 @@ impl Manager {
             Op::InspectGoogle { tab, reply } => self.evaluate(tab, "return location.hostname === 'mail.google.com' && location.pathname.startsWith('/mail/u/') && !!document.querySelector('[gh=cm],[role=navigation]')".into(), reply),
             Op::Screenshot { tab, reply } => { if let Some(tab) = tab.or(self.active) { self.cdp(tab, "Page.captureScreenshot", json!({ "format": "jpeg", "quality": 80 }), Pending::Screenshot(reply)); } else { let _ = reply.send(Err("No page is open".into())); } }
             Op::Shell { body, reply } => { self.command(body); let _ = reply.send(()); }
-            Op::Memory(reply) => { let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": native::has_shell(), "live_renderers": self.tabs.iter().filter(|t|t.live).count(), "tabs": self.tabs.iter().map(|t| json!({"id":t.id,"live":t.live,"suspended":t.suspended,"view":t.browser.as_ref().filter(|_| !t.detached).and_then(|b| b.host()).and_then(|h| native::frame_of(h.window_handle()))})).collect::<Vec<_>>() })); }
+            Op::Memory(reply) => { let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": native::has_shell(), "native_chrome": chrome::describe(), "live_renderers": self.tabs.iter().filter(|t|t.live).count(), "tabs": self.tabs.iter().map(|t| json!({"id":t.id,"live":t.live,"suspended":t.suspended,"view":t.browser.as_ref().filter(|_| !t.detached).and_then(|b| b.host()).and_then(|h| native::frame_of(h.window_handle()))})).collect::<Vec<_>>() })); }
             Op::WindowShot(reply) => { let _ = reply.send(native::window_png()); }
         }
     }
@@ -628,6 +643,7 @@ impl Manager {
                 }
                 self.split_rect = rect(&m["split"]);
                 self.glance_rect = rect(&m["glance"]);
+                chrome::shell_state(chrome::ShellState { sidebar: m["sidebar"].as_bool(), ..Default::default() });
                 self.layout();
             }
             "cover" => {
@@ -635,7 +651,27 @@ impl Manager {
                     native::focus_shell();
                 }
                 self.covered = m["on"] == true;
+                chrome::shell_state(chrome::ShellState {
+                    overlay: m["overlay"].as_bool(),
+                    web: m["web"].as_bool(),
+                    ..Default::default()
+                });
                 self.layout();
+            }
+            "addressBar" => {
+                if let Some(text) = m["text"].as_str().filter(|t| !t.trim().is_empty()) {
+                    if chrome::on_web() {
+                        self.navigate(self.active, text.into());
+                    } else {
+                        self.new_tab(Some(text.into()), true, false);
+                    }
+                }
+            }
+            "nativeChrome" if native::background() => {
+                let result = chrome::debug_action(m["action"].as_str().unwrap_or(""), m["text"].as_str().unwrap_or(""));
+                if let Err(e) = result {
+                    eprintln!("[native-chrome] {e}");
+                }
             }
             "newTab" => {
                 self.new_tab(

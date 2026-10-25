@@ -3,10 +3,13 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 import argparse
+import time
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
+        if path.startswith('/slow'):
+            time.sleep(3)  # long enough to observe loading indicators
         draft = 'draft' in path
         body = f'''<!doctype html><meta charset="utf-8"><title>Fixture {path}</title>
         <h1>Chromium fixture</h1><button id="increment">Increment</button><output id="count">0</output>

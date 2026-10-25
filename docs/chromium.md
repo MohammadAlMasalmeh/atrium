@@ -3,33 +3,64 @@
 ## Engine and process ownership
 
 The default Cargo feature is `chromium`, using the pinned `cef` Rust bindings
-(156.1.0 / CEF 156.0.8). The native application embeds CEF BrowserViews in a
-CEF window. Websites, the shell, and helpers use Chromium; there is no Node.js
-runtime exposed to page JavaScript. The renderer sandbox stays enabled and no
-remote DevTools port is opened by the browser.
+(156.1.0 / CEF 156.0.8). The window belongs to the app, not CEF: a transparent
+NSWindow with one Liquid Glass surface (`NSGlassEffectView`, tinted with
+`windowBackgroundColor` at 0.55) behind everything. The shell UI runs in a
+transparent WKWebView over the glass, and each Chromium tab is a windowed
+(Alloy) browser whose NSView is a child of the window's content view, placed
+over the shell's content area. CEF can't draw see-through windows, so Chromium
+only paints the opaque pages. Websites and helpers use Chromium; there is no
+Node.js runtime exposed to page JavaScript. The renderer sandbox stays enabled
+and no remote DevTools port is opened by the browser.
 
 The Rust process owns the tab registry and communicates with CEF on its UI thread
 through queued tasks. OpenCode startup runs independently of the window. Only an
 OpenCode child started by this app is stopped on exit. An existing server is reused.
 The shell calls a loopback Axum server. Requests must use the expected Host and,
 when present, the shell's Origin. Every route except `/shell` also requires a
-per-launch secret in the `x-atrium-token` header. The browser writes it to
-`<data dir>/api-token` (mode 0600) at startup and removes it on exit. The native
-side attaches the header only to requests from the shell's own browser for the
-local API origin, so website tabs and external requests never carry it. `atrium
+per-launch secret, sent as the `x-atrium-token` header or the `atrium_token`
+cookie. The browser writes it to `<data dir>/api-token` (mode 0600) at startup
+and removes it on exit. WebKit can't add headers to EventSource or image loads,
+so the shell starts at `/session?t=<token>`, which sets the token as an HttpOnly,
+SameSite=Strict cookie for the loopback origin and redirects to `/shell`. The
+shell's WebKit storage is separate from Chromium's, so website tabs never carry
+the cookie, and it is kept per data directory. `atrium
 mcp` and `atrium ask` read the token from the data directory or `ATRIUM_API_TOKEN`.
 Any process running as the same user can still read that file, so this stops
-websites and other users rather than hostile local software. The shell currently
-shares the persistent request context with website views; it is not a separate
-Chromium storage partition.
+websites and other users rather than hostile local software.
+
+### Native browser chrome (in progress, `ATRIUM_NATIVE_CHROME=1`)
+
+The browser controls are moving from the web shell to real AppKit controls on
+the window glass, one piece at a time behind this flag. The web shell remains
+the default until the native version covers everything. Done so far:
+
+- Toolbar: sidebar toggle, back, forward and reload are `NSButton`s with SF
+  Symbols; back and forward follow Chromium's `can_go_back`/`can_go_forward`;
+  a small `NSProgressIndicator` spins while the active tab loads.
+- Address field: an `NSTextField` that shows the host and switches to the full
+  address when focused. Enter loads in the current tab on a web page or opens
+  a new tab from the start page or chat (as the shell's command bar does), and
+  Escape cancels. Copy Link and Pin buttons sit inside it on web pages and call
+  the same shell commands as ⇧⌘C and ⌘D.
+- The shell hides only the controls it no longer draws, keeping its layout,
+  and reports whether its sidebar is shown and whether a full overlay (command
+  bar, onboarding) is open. The native controls hide in both cases, because
+  they sit above the shell.
+
+Still web-drawn: the tab list, spaces, pinned tabs and favorites, the start
+page search box, and (by design) chat and onboarding. ⌘L still opens the
+command bar. Not yet verified with real input: clicking, typing with an input
+method, dragging the window from the toolbar's empty area, and VoiceOver.
+`tools/test_native_chrome.py` drives the real controls through a test-only hook
+(`nativeChrome` command, background mode only) and checks the results.
 
 ### Layout stability
 
-Tab BrowserViews are children of the CEF window, whose default fill layout sizes
-every child to the full window on each layout pass. The window delegate's
-`on_layout_changed` re-applies tab bounds synchronously in that same pass, so
-pages are never painted at full-window size between a resize, view creation,
-or eviction and the next shell layout message. The shell's IPC is one `fetch`
+Tab views are child NSViews of the window's content view, and only `layout()`
+moves or shows them. New views start hidden until their first placement, and a
+closed tab's view is removed from the window before CEF frees it, so pages are
+never drawn at the wrong place or after close. The shell's IPC is one `fetch`
 per message, so layout messages are kept to one in flight (the newest rect
 wins) to prevent stale rects being applied out of order. Sidebar lists replace
 only rows whose markup changed, so state pushes from any tab don't re-create
@@ -102,6 +133,20 @@ parsing, path validation, and endpoint validation:
 ```sh
 CEF_PATH="$PWD/target/cef" PATH="$PWD/target/build-tools/bin:$PATH" cargo test --locked
 ```
+
+The app-owned window and the native chrome have their own end-to-end checks.
+Each starts its own instances (ports 7900 and 7909, fresh data directories under
+`/private/tmp/atrium-native-*`) in background mode, which never activates or
+shows the window, and stops only what it started:
+
+```sh
+python3 tools/spike_native_window.py
+python3 tools/test_native_chrome.py --screenshots /private/tmp/native-chrome/shots
+```
+
+`--screenshots` captures the window in light and dark mode (`ATRIUM_APPEARANCE`).
+For those two runs the window sits on screen behind every other window, because
+glass needs something behind it to render; it still can't activate or take clicks.
 
 For a repeatable RAM comparison, start a **fresh, empty**, extension-free release
 profile on port 7783 and keep the fixture server on 7789. Then run:

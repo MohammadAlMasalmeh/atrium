@@ -68,6 +68,8 @@ kbd { font: 11px/16px var(--font); padding: 0 5px; border-radius: 4px; border: .
   transition: margin-left .22s cubic-bezier(.3,.7,.2,1), opacity .18s; }
 body.sb-hidden #sidebar { margin-left: -250px; opacity: 0; }
 body.sb-hidden #app { padding-left: 6px; }
+/* Drawn by AppKit on the window glass instead (ATRIUM_NATIVE_CHROME=1). */
+.native-chrome .sb-top > button, .native-chrome #url { visibility: hidden; }
 .sb-top { height: 40px; flex: none; display: flex; align-items: center; gap: 0; padding-left: 70px; }
 .sb-top .grow { flex: 1; align-self: stretch; }
 #url { height: 34px; flex: none; margin: 2px 0 10px; border-radius: 9px; background: var(--well); display: flex; align-items: center; gap: 7px; padding: 0 6px 0 10px;
@@ -594,7 +596,8 @@ function render() {
   renderSidebar();
   if (S.overlay) requestAnimationFrame(alignBackdrops);
   if (S.overlay === 'glance') layoutGlance();
-  ipc({ cmd: 'cover', on: !web || (!!S.overlay && S.overlay !== 'glance') });
+  const overlay = !!S.overlay && S.overlay !== 'glance';
+  ipc({ cmd: 'cover', on: !web || overlay, web, overlay });
   layoutSoon();
 }
 
@@ -722,7 +725,7 @@ function layoutSoon() {
 function layoutNow() {
   if (layoutInFlight) { layoutAgain = true; return; }
   const r = (el) => { const b = el.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; };
-  const msg = { cmd: 'layout', main: r($('#pane-main')) };
+  const msg = { cmd: 'layout', main: r($('#pane-main')), sidebar: !document.body.classList.contains('sb-hidden') };
   if (document.body.classList.contains('split')) msg.split = r($('#pane-split'));
   if (S.overlay === 'glance') msg.glance = r($('#glance-frame'));
   layoutInFlight = true;

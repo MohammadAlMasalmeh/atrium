@@ -44,7 +44,7 @@ define_class!(
     /// Top-left origin, matching the shell's layout rects and CEF's bounds.
     #[unsafe(super(NSView))]
     #[thread_kind = MainThreadOnly]
-    struct FlippedView;
+    pub(super) struct FlippedView;
     impl FlippedView {
         #[unsafe(method(isFlipped))]
         fn is_flipped(&self) -> bool {
@@ -83,6 +83,9 @@ impl HasWindowHandle for Parent {
 
 pub(super) fn create(bridge: Bridge, shell_url: &str) {
     let mtm = MainThreadMarker::new().expect("CEF's UI thread is the main thread on macOS");
+    if background() {
+        test_appearance(mtm);
+    }
     let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1280.0, 820.0));
     let style = NSWindowStyleMask::Titled
         | NSWindowStyleMask::Closable
@@ -121,7 +124,15 @@ pub(super) fn create(bridge: Bridge, shell_url: &str) {
 
     let ipc = bridge.clone();
     let parent = Parent(NonNull::from(&*content).cast());
-    let shell = WebViewBuilder::new()
+    let mut shell = WebViewBuilder::new();
+    if super::chrome::enabled() {
+        shell = shell.with_initialization_script(
+            "(function mark() { const root = document.documentElement; \
+             if (root) root.classList.add('native-chrome'); \
+             else document.addEventListener('readystatechange', mark, { once: true }); })();",
+        );
+    }
+    let shell = shell
         .with_data_store_identifier(store_id())
         .with_url(shell_url)
         .with_transparent(true)
@@ -135,6 +146,10 @@ pub(super) fn create(bridge: Bridge, shell_url: &str) {
         .build_as_child(&parent)
         .expect("shell webview");
     shell.webview().setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
+
+    if super::chrome::enabled() {
+        super::chrome::install(&content, bridge.clone());
+    }
 
     let delegate: Retained<WindowEvents> =
         unsafe { msg_send![super(WindowEvents::alloc(mtm).set_ivars(bridge)), init] };
@@ -175,6 +190,18 @@ fn keep_out_of_sight(window: &NSWindow) {
         }
         window.orderBack(None);
     }
+}
+
+/// `ATRIUM_APPEARANCE=light|dark` pins a test instance's appearance (shell, glass and
+/// pages alike) so both modes can be checked without touching the system setting.
+fn test_appearance(mtm: MainThreadMarker) {
+    use objc2_app_kit::{NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua};
+    let name = match std::env::var("ATRIUM_APPEARANCE").as_deref() {
+        Ok("dark") => unsafe { NSAppearanceNameDarkAqua },
+        Ok("light") => unsafe { NSAppearanceNameAqua },
+        _ => return,
+    };
+    NSApplication::sharedApplication(mtm).setAppearance(NSAppearance::appearanceNamed(name).as_deref());
 }
 
 pub(super) fn shown_behind() -> bool {
@@ -292,9 +319,8 @@ fn place_lights(window: &NSWindow) {
     bar.setFrame(rect);
     let gap = mini.frame().origin.x - close.frame().origin.x;
     for (i, b) in [close, mini, zoom].iter().enumerate() {
-        let mut origin = b.frame().origin;
-        origin.x = LIGHTS.0 + i as f64 * gap;
-        b.setFrameOrigin(origin);
+        // The container is `height` tall and not flipped: y = 0 puts the buttons LIGHTS.1 from the top.
+        b.setFrameOrigin(NSPoint::new(LIGHTS.0 + i as f64 * gap, 0.0));
     }
 }
 
