@@ -13,6 +13,6 @@ fi
 # A stable runtime cache avoids downloading a new CEF copy for each Cargo profile.
 CEF_PATH="${CEF_PATH:-$PWD/target/cef}"
 export CEF_PATH
-cargo build --locked --bin atrium --bin atrium_helper "$@"
+cargo build --locked --bin atrium --bin atrium_helper --bin atrium_sign_update "$@"
 # Build the bundler with the same profile; otherwise it recompiles CEF and the app in debug.
 cargo run --locked "$@" --bin atrium_bundle -- "$@"

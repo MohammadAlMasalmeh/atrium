@@ -12,6 +12,7 @@ fn main() -> anyhow::Result<()> {
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| root.join("target"));
         let profile = if release { "release" } else { "debug" };
+        const IDENTIFIER: &str = brand::BUNDLE_ID;
         let info = cef::build_util::mac::BundleInfo::new(
             brand::PRODUCT_NAME,
             brand::BUNDLE_ID,
@@ -30,8 +31,31 @@ fn main() -> anyhow::Result<()> {
             None,
             info,
         )?;
+        let plutil = |args: &[&str], plist: &std::path::Path| -> anyhow::Result<()> {
+            let status = std::process::Command::new("/usr/bin/plutil")
+                .args(args)
+                .arg(plist)
+                .status()?;
+            anyhow::ensure!(status.success(), "plutil {args:?} failed for {}", plist.display());
+            Ok(())
+        };
+        // Every helper needs its own identifier; the bundler copies the main app's.
+        for (helper, suffix) in [
+            ("atrium Helper.app", "helper"),
+            ("atrium Helper (Renderer).app", "helper.renderer"),
+            ("atrium Helper (GPU).app", "helper.gpu"),
+            ("atrium Helper (Plugin).app", "helper.plugin"),
+            ("atrium Helper (Alerts).app", "helper.alerts"),
+        ] {
+            let plist = path.join("Contents/Frameworks").join(helper).join("Contents/Info.plist");
+            plutil(&["-replace", "CFBundleIdentifier", "-string", &format!("{IDENTIFIER}.{suffix}")], &plist)?;
+        }
         let resources = path.join("Contents/Resources");
         std::fs::create_dir_all(&resources)?;
+        std::fs::write(
+            resources.join("crash_reporter.cfg"),
+            include_str!("../../assets/crash_reporter.cfg"),
+        )?;
         let cef_root = cef::sys::get_cef_dir()
             .or_else(|| std::env::var_os("CEF_PATH").map(std::path::PathBuf::from))
             .unwrap_or_else(|| target.join("cef"));
@@ -65,19 +89,11 @@ fn main() -> anyhow::Result<()> {
                 .status()?;
             anyhow::ensure!(status.success(), "Could not set {key} in Info.plist");
         }
-        let status = std::process::Command::new("/usr/bin/codesign")
-            .args(["--force", "--deep", "--sign", "-"])
+        // Uses ATRIUM_SIGN_IDENTITY when set, otherwise signs ad hoc, and verifies the result.
+        let status = std::process::Command::new(root.join("tools/sign-app.sh"))
             .arg(&path)
             .status()?;
-        anyhow::ensure!(status.success(), "Development app signing failed");
-        let verified = std::process::Command::new("/usr/bin/codesign")
-            .args(["--verify", "--deep", "--strict"])
-            .arg(&path)
-            .status()?;
-        anyhow::ensure!(
-            verified.success(),
-            "Development app signature verification failed"
-        );
+        anyhow::ensure!(status.success(), "App signing or signature verification failed");
         let final_path = output.join(format!("{}.app", brand::EXECUTABLE));
         let backup = output.join(format!(".previous-{}.app", brand::EXECUTABLE));
         if backup.exists() {

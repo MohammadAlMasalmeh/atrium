@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      CEF_PATH: ${{ github.workspace }}/target/cef
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target/cef
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install build tools
+        run: brew install ninja
+
+      - name: Check scripts
+        run: |
+          for script in tools/*.sh; do sh -n "$script"; done
+          python3 -m py_compile tools/*.py
+
+      - name: Rust tests
+        run: cargo test --locked
+
+      - name: Build the app bundle (ad hoc signed)
+        run: ./tools/build-chromium.sh --release
+
+      - name: Verify signatures and entitlements
+        run: |
+          app=target/bundle/atrium.app
+          codesign --verify --deep --strict --verbose=2 "$app"
+          for bundle in "$app" "$app"/Contents/Frameworks/*.app; do
+            echo "== $bundle"
+            codesign -d --entitlements - --xml "$bundle" | plutil -p - || true
+          done
+          test -f "$app/Contents/Resources/crash_reporter.cfg"
+          ! grep -q '^[[:space:]]*ServerURL' "$app/Contents/Resources/crash_reporter.cfg"

@@ -10,6 +10,7 @@ mod app;
 mod brand;
 mod crx;
 mod extension_store;
+mod crash_reports;
 mod extensions;
 mod favicons;
 mod mcp;
@@ -20,6 +21,8 @@ mod permissions;
 mod passwords;
 mod server;
 mod setup;
+mod update_sig;
+mod updater;
 
 use std::{collections::HashMap, io::Write, path::PathBuf, sync::Arc};
 
@@ -161,6 +164,7 @@ fn data_dir() -> Result<PathBuf> {
 fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
     let dir = data_dir()?;
     restrict_data_dir(&dir).context("could not restrict access to the data directory")?;
+    updater::on_launch(&dir);
     let mut extensions = Vec::new();
     for extension in &args.extensions {
         let path = extension.canonicalize().context("Extension directory does not exist")?;
@@ -206,6 +210,18 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
             server::spawn_event_pump(app.clone());
             let router = server::router(app.clone());
             tokio::spawn(async move { axum::serve(listener, router).await });
+            let started = app.clone();
+            tokio::spawn(async move {
+                for _ in 0..240 {
+                    if let Ok(memory) = started.agent.browser.op(app::Op::Memory).await {
+                        if memory["shell_ready"] == true || memory["engine"] == "WebKit" {
+                            return updater::confirm_started();
+                        }
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+            });
+            updater::spawn_auto(app.clone());
 
             // Serialize automatic startup with the onboarding's retry/connect actions.
             let _setup = app.setup_lock.lock().await;
@@ -233,6 +249,9 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
             let _ = c.start_kill();
         }
         let _ = std::fs::remove_file(token_dir.join(TOKEN_FILE));
+        if updater::relaunch_requested() {
+            updater::relaunch();
+        }
     })
 }
 
