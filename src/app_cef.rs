@@ -20,6 +20,10 @@ pub use url::normalize_url;
 
 const LIFECYCLE_JS: &str = include_str!("../assets/lifecycle.js");
 const PAGE_JS: &str = include_str!("../assets/page.js");
+const PASSWORDS_JS: &str = include_str!("../assets/passwords.js");
+/// Isolated world for password forms; page scripts cannot reach its globals or binding.
+const PW_WORLD: &str = "aside-passwords";
+const PW_BINDING: &str = "__asidePasswords";
 pub const SHELL: u64 = u64::MAX - 1;
 const GLANCE: u64 = u64::MAX - 2;
 pub static FROZEN: std::sync::LazyLock<Mutex<HashMap<String, Vec<u8>>>> =
@@ -80,6 +84,14 @@ pub enum Op {
         reply: Reply<()>,
     },
     Memory(Reply<Json>),
+    /// A raw DevTools method on one tab's own session; callers restrict which methods.
+    Cdp {
+        tab: Option<u64>,
+        method: String,
+        params: Json,
+        reply: Reply<Result<Json, String>>,
+    },
+    PasswordOffers(Reply<Json>),
 }
 #[derive(Clone)]
 pub struct Handle(Bridge);
@@ -145,7 +157,34 @@ enum Event {
     Command(Json),
     Quit,
     DevResult(i32, bool, Json),
+    Binding(u64, Json),
+    Password(PwEvent),
     Maintenance,
+}
+/// Results of password store work done off the UI thread.
+enum PwEvent {
+    Found { tab: u64, ctx: i64, login: bool, signup: bool, accounts: Vec<crate::passwords::Login> },
+    Submitted { tab: u64, origin: String, username: String, password: String, status: crate::passwords::Saved },
+    Fill { tab: u64, ctx: i64, login: crate::passwords::Login },
+    Done { message: String },
+}
+#[derive(Clone)]
+struct PwForms {
+    ctx: i64,
+    origin: String,
+    login: bool,
+    signup: bool,
+}
+struct PwPending {
+    origin: String,
+    username: String,
+    password: String,
+}
+enum PwStep {
+    Tree,
+    World,
+    Done,
+    Fill(&'static str),
 }
 struct Tab {
     id: u64,
@@ -189,6 +228,8 @@ enum Pending {
     Screenshot(Reply<Result<String, String>>),
     Frozen(&'static str),
     Probe(u64),
+    Raw(Reply<Result<Json, String>>),
+    Pw(u64, PwStep),
 }
 struct Manager {
     rx: mpsc::Receiver<Event>,
@@ -208,6 +249,9 @@ struct Manager {
     next_call: i32,
     pending: HashMap<i32, (Instant, u64, Pending)>,
     closing: Arc<AtomicBool>,
+    pw_forms: HashMap<u64, PwForms>,
+    pw_pending: HashMap<u64, PwPending>,
+    pw_offers: HashMap<u64, Json>,
 }
 impl Manager {
     fn tab(&self, id: u64) -> Option<&Tab> {
@@ -353,6 +397,11 @@ impl Manager {
             self.split = None;
         }
         self.pending.retain(|_, (_, tab, _)| *tab != id);
+        self.pw_forms.remove(&id);
+        self.pw_pending.remove(&id);
+        if self.pw_offers.remove(&id).is_some() {
+            self.shell(&format!("window.asideShell?.password?.({id}, null)"));
+        }
         self.session_dirty = true;
         if let Some(id) = self.active {
             self.create_view(id);
@@ -445,7 +494,7 @@ impl Manager {
             .and_then(|b| b.host())
         else {
             match pending {
-                Pending::Eval(r) => {
+                Pending::Eval(r) | Pending::Raw(r) => {
                     let _ = r.send(Err(
                         "The tab is still loading. Try again in a moment.".into()
                     ));
@@ -546,6 +595,10 @@ impl Manager {
                     }
                 }
             }
+            Pending::Raw(reply) => {
+                let _ = reply.send(error.map_or_else(|| Ok(data), Err));
+            }
+            Pending::Pw(tab, step) => self.pw_step(tab, step, error, data),
             Pending::Probe(id) => {
                 if error.is_some() || data["result"]["value"] != true {
                     if let Some(tab) = self.tab_mut(id) {
@@ -578,6 +631,15 @@ impl Manager {
             Op::InspectGoogle { tab, reply } => self.evaluate(tab, "return location.hostname === 'mail.google.com' && location.pathname.startsWith('/mail/u/') && !!document.querySelector('[gh=cm],[role=navigation]')".into(), reply),
             Op::Screenshot { tab, reply } => { if let Some(tab) = tab.or(self.active) { self.cdp(tab, "Page.captureScreenshot", json!({ "format": "jpeg", "quality": 80 }), Pending::Screenshot(reply)); } else { let _ = reply.send(Err("No page is open".into())); } }
             Op::Shell { body, reply } => { self.command(body); let _ = reply.send(()); }
+            Op::Cdp { tab, method, params, reply } => match tab.or(self.active) {
+                Some(tab) => self.cdp(tab, &method, params, Pending::Raw(reply)),
+                None => { let _ = reply.send(Err("No page is open".into())); }
+            },
+            Op::PasswordOffers(reply) => {
+                let forms: serde_json::Map<String, Json> = self.pw_forms.iter().map(|(id, f)| (id.to_string(), json!({ "origin": f.origin, "login": f.login, "signup": f.signup }))).collect();
+                let offers: serde_json::Map<String, Json> = self.pw_offers.iter().map(|(id, o)| (id.to_string(), o.clone())).collect();
+                let _ = reply.send(json!({ "forms": forms, "offers": offers }));
+            }
             Op::Memory(reply) => { let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": self.tab(SHELL).is_some_and(|t|t.browser.is_some()), "shell_view": self.tab(SHELL).is_some_and(|t|t.view.is_some()), "shell_record": self.tab(SHELL).is_some(), "live_renderers": self.tabs.iter().filter(|t|t.view.is_some()).count(), "tabs": self.tabs.iter().filter(|t| t.id != SHELL).map(|t| json!({"id":t.id,"live":t.view.is_some(),"suspended":t.suspended})).collect::<Vec<_>>() })); }
         }
     }
@@ -627,6 +689,14 @@ impl Manager {
                     self.new_tab(None, true, false);
                 }
                 self.push(false);
+                for (id, offer) in &self.pw_offers {
+                    self.shell(&format!("window.asideShell?.password?.({id}, {offer})"));
+                }
+            }
+            "passwordFill" | "passwordGenerate" | "passwordSave" | "passwordDismiss" => {
+                if let Some(tab) = m["tab"].as_u64().or(self.active) {
+                    self.pw_command(tab, &m);
+                }
             }
             "layout" => {
                 if let Some(r) = rect(&m["main"]) {
@@ -799,7 +869,7 @@ impl Manager {
                 post_delayed_task(ThreadId::UI, Some(&mut maintenance), 10000);
             }
             Event::Created(id, browser) => {
-                let mut observer = DevObserver::new(self.bridge.clone());
+                let mut observer = DevObserver::new(self.bridge.clone(), id);
                 let reg = browser
                     .host()
                     .and_then(|h| h.add_dev_tools_message_observer(Some(&mut observer)));
@@ -807,8 +877,21 @@ impl Manager {
                     t.browser = Some(browser);
                     t.registration = reg;
                 }
+                if id != SHELL {
+                    // Binding calls are only reported while the Runtime domain is enabled.
+                    self.cdp(id, "Runtime.enable", json!({}), Pending::Pw(id, PwStep::Done));
+                    self.cdp(id, "Runtime.addBinding", json!({ "name": PW_BINDING, "executionContextName": PW_WORLD }), Pending::Pw(id, PwStep::Done));
+                }
                 self.layout();
             }
+            Event::Binding(id, params) => {
+                if params["name"] == PW_BINDING {
+                    if let (Some(ctx), Some(Ok(msg))) = (params["executionContextId"].as_i64(), params["payload"].as_str().map(serde_json::from_str::<Json>)) {
+                        self.pw_message(id, ctx, msg);
+                    }
+                }
+            }
+            Event::Password(event) => self.pw_event(event),
             Event::Detach(id) => {
                 let view = self.tab_mut(id).and_then(|t| t.view.take());
                 if let (Some(window), Some(view)) = (&self.window, view) {
@@ -888,6 +971,11 @@ impl Manager {
                             0,
                         );
                     }
+                    self.pw_forms.remove(&id);
+                    if self.pw_offers.get(&id).is_some_and(|o| matches!(o["kind"].as_str(), Some("fill" | "generate"))) {
+                        self.pw_offer(id, None);
+                    }
+                    self.cdp(id, "Page.getFrameTree", json!({}), Pending::Pw(id, PwStep::Tree));
                 }
                 self.push(false);
             }
@@ -1008,8 +1096,13 @@ wrap_load_handler! {struct HostLoad {bridge:Bridge,id:u64} impl LoadHandler {
     fn on_loading_state_change(&self, _unused22:Option<&mut Browser>,loading:i32, _unused23:i32, _unused24:i32){self.bridge.send(Event::Loading(self.id,loading!=0));}
     fn on_load_end(&self, _unused25:Option<&mut Browser>,frame:Option<&mut Frame>, _unused26:i32){if frame.is_some_and(|f|f.is_main()!=0){self.bridge.send(Event::Loaded(self.id));}}
 }}
-wrap_dev_tools_message_observer! {struct DevObserver {bridge:Bridge} impl DevToolsMessageObserver {
+wrap_dev_tools_message_observer! {struct DevObserver {bridge:Bridge,id:u64} impl DevToolsMessageObserver {
     fn on_dev_tools_method_result(&self, _unused27:Option<&mut Browser>,id:i32,success:i32,result:Option<&[u8]>){self.bridge.send(Event::DevResult(id,success!=0,result.and_then(|r|serde_json::from_slice(r).ok()).unwrap_or(Json::Null)));}
+    fn on_dev_tools_event(&self, _unused50:Option<&mut Browser>,method:Option<&CefString>,params:Option<&[u8]>){
+        if method.is_some_and(|m|m.to_string()=="Runtime.bindingCalled") {
+            if let Some(params)=params.and_then(|p|serde_json::from_slice(p).ok()) {self.bridge.send(Event::Binding(self.id,params));}
+        }
+    }
 }}
 wrap_keyboard_handler! {struct HostKeyboard {bridge:Bridge} impl KeyboardHandler {
     fn on_pre_key_event(&self, _unused28:Option<&mut Browser>,event:Option<&KeyEvent>, _unused29:*mut u8, _unused30:Option<&mut i32>)->i32{
@@ -1061,6 +1154,9 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
             next_call: 0,
             pending: HashMap::new(),
             closing,
+            pw_forms: HashMap::new(),
+            pw_pending: HashMap::new(),
+            pw_offers: HashMap::new(),
         })
     });
     let bridge = manager.lock().unwrap().bridge.clone();
@@ -1233,4 +1329,182 @@ impl Manager {
             self.create_view(id);
         }
     }
+}
+impl Manager {
+    fn toast(&self, message: &str) {
+        self.shell(&format!("window.asideShell?.toast({})", json!(message)));
+    }
+    /// What the shell shows for a tab. Offers carry origins and usernames, never passwords.
+    fn pw_offer(&mut self, tab: u64, offer: Option<Json>) {
+        match &offer {
+            Some(o) => self.pw_offers.insert(tab, o.clone()),
+            None => self.pw_offers.remove(&tab),
+        };
+        self.shell(&format!("window.asideShell?.password?.({tab}, {})", offer.unwrap_or(Json::Null)));
+    }
+    fn pw_store(&self, work: impl FnOnce() -> anyhow::Result<PwEvent> + Send + 'static) {
+        let bridge = self.bridge.clone();
+        std::thread::spawn(move || {
+            let event = work().unwrap_or_else(|e| PwEvent::Done { message: e.to_string() });
+            bridge.send(Event::Password(event));
+        });
+    }
+    fn pw_step(&mut self, tab: u64, step: PwStep, error: Option<String>, data: Json) {
+        if let Some(e) = error.clone().or_else(|| error_of(&data)) {
+            eprintln!("[passwords] tab {tab}: {e}");
+        }
+        match step {
+            PwStep::Tree => {
+                if let Some(frame) = data["frameTree"]["frame"]["id"].as_str() {
+                    self.cdp(tab, "Page.createIsolatedWorld", json!({ "frameId": frame, "worldName": PW_WORLD }), Pending::Pw(tab, PwStep::World));
+                }
+            }
+            PwStep::World => {
+                if let Some(ctx) = data["executionContextId"].as_i64() {
+                    self.cdp(tab, "Runtime.evaluate", json!({ "expression": PASSWORDS_JS, "contextId": ctx }), Pending::Pw(tab, PwStep::Done));
+                }
+            }
+            PwStep::Done => {}
+            PwStep::Fill(what) => {
+                let value = &data["result"]["value"];
+                let message = match (error, value["filled"].as_u64()) {
+                    (None, Some(n)) if n > 0 => if what == "fill" { "Filled saved password" } else { "Filled a generated password" },
+                    _ if value["error"] == "origin" => "This page changed sites; nothing was filled",
+                    _ => "No password field to fill on this page",
+                };
+                self.toast(message);
+            }
+        }
+    }
+    /// Messages from the isolated world. Its `location.origin` must match the tab's committed URL.
+    fn pw_message(&mut self, tab: u64, ctx: i64, msg: Json) {
+        let Some(origin) = self.tab(tab).and_then(|t| crate::passwords::origin_of(&t.url)) else { return };
+        if msg["origin"].as_str() != Some(origin.as_str()) {
+            return;
+        }
+        match msg["type"].as_str() {
+            Some("forms") => {
+                let (login, signup) = (msg["login"] == true, msg["signup"] == true);
+                self.pw_forms.insert(tab, PwForms { ctx, origin: origin.clone(), login, signup });
+                if !login && !signup {
+                    if self.pw_offers.get(&tab).is_some_and(|o| matches!(o["kind"].as_str(), Some("fill" | "generate"))) {
+                        self.pw_offer(tab, None);
+                    }
+                    return;
+                }
+                self.pw_store(move || Ok(PwEvent::Found { tab, ctx, login, signup, accounts: crate::passwords::with(|s| s.for_origin(&origin))? }));
+            }
+            Some("submit") => {
+                let username = msg["username"].as_str().unwrap_or("").chars().take(1024).collect::<String>();
+                let Some(password) = msg["password"].as_str().filter(|p| !p.is_empty() && p.len() <= 4096).map(str::to_string) else { return };
+                self.pw_store(
+                    move || {
+                        let status = crate::passwords::with(|s| {
+                            Ok(if s.never().contains(&origin) { crate::passwords::Saved::Unchanged } else { s.check(&origin, &username, &password)? })
+                        })?;
+                        Ok(PwEvent::Submitted { tab, origin, username, password, status })
+                    }
+                );
+            }
+            _ => {}
+        }
+    }
+    fn pw_event(&mut self, event: PwEvent) {
+        use crate::passwords::Saved;
+        match event {
+            PwEvent::Found { tab, ctx, login, signup, accounts } => {
+                let Some(forms) = self.pw_forms.get(&tab).filter(|f| f.ctx == ctx) else { return };
+                if self.pw_offers.get(&tab).is_some_and(|o| matches!(o["kind"].as_str(), Some("save" | "update"))) {
+                    return;
+                }
+                let offer = if login && !accounts.is_empty() {
+                    Some(json!({ "kind": "fill", "origin": forms.origin, "accounts": accounts.iter().map(|l| json!({ "id": l.id, "username": l.username })).collect::<Vec<_>>() }))
+                } else if signup {
+                    Some(json!({ "kind": "generate", "origin": forms.origin }))
+                } else {
+                    None
+                };
+                self.pw_offer(tab, offer);
+            }
+            PwEvent::Submitted { tab, origin, username, password, status } => {
+                if status == Saved::Unchanged {
+                    return;
+                }
+                let kind = if status == Saved::New { "save" } else { "update" };
+                self.pw_offer(tab, Some(json!({ "kind": kind, "origin": origin, "username": username })));
+                self.pw_pending.insert(tab, PwPending { origin, username, password });
+            }
+            PwEvent::Fill { tab, ctx, login } => {
+                let Some(forms) = self.pw_forms.get(&tab).filter(|f| f.ctx == ctx && f.origin == login.origin) else {
+                    return self.toast("This page changed; nothing was filled");
+                };
+                let args = json!({ "origin": forms.origin, "username": login.username, "password": login.password });
+                self.cdp(tab, "Runtime.evaluate", json!({ "expression": format!("window.__asidePw.fill({args})"), "contextId": ctx, "returnByValue": true }), Pending::Pw(tab, PwStep::Fill("fill")));
+            }
+            PwEvent::Done { message } => self.toast(&message),
+        }
+    }
+    fn pw_command(&mut self, tab: u64, m: &Json) {
+        let forms = self.pw_forms.get(&tab).cloned().filter(|f| self.tab(tab).and_then(|t| crate::passwords::origin_of(&t.url)).as_ref() == Some(&f.origin));
+        match m["cmd"].as_str().unwrap_or("") {
+            "passwordFill" => {
+                let Some(forms) = forms.filter(|f| f.login) else { return self.toast("No login form on this page") };
+                let id = m["id"].as_str().map(str::to_string);
+                self.pw_store(
+                    move || {
+                        let login = crate::passwords::with(|s| {
+                            let id = match id {
+                                Some(id) => id,
+                                None => s.for_origin(&forms.origin)?.first().map(|l| l.id.clone()).ok_or_else(|| anyhow!("No password is saved for this site"))?,
+                            };
+                            let login = s.get(&id)?;
+                            anyhow::ensure!(login.origin == forms.origin, "That password is saved for a different site");
+                            Ok(login)
+                        })?;
+                        Ok(PwEvent::Fill { tab, ctx: forms.ctx, login })
+                    }
+                );
+            }
+            "passwordGenerate" => {
+                let Some(forms) = forms.filter(|f| f.signup) else { return self.toast("No new-password field on this page") };
+                let password = match crate::passwords::generate() {
+                    Ok(p) => p,
+                    Err(e) => return self.toast(&e.to_string()),
+                };
+                self.pw_offer(tab, None);
+                let args = json!({ "origin": forms.origin, "password": password });
+                self.cdp(tab, "Runtime.evaluate", json!({ "expression": format!("window.__asidePw.generate({args})"), "contextId": forms.ctx, "returnByValue": true }), Pending::Pw(tab, PwStep::Fill("generate")));
+            }
+            "passwordSave" => {
+                let pending = self.pw_pending.remove(&tab);
+                if self.pw_offers.get(&tab).is_some_and(|o| matches!(o["kind"].as_str(), Some("save" | "update"))) {
+                    self.pw_offer(tab, None);
+                }
+                let Some(p) = pending else { return };
+                match m["action"].as_str() {
+                    Some("save") => self.pw_store(
+                        move || {
+                            let (_, how) = crate::passwords::with(|s| s.save(&p.origin, &p.username, &p.password))?;
+                            Ok(PwEvent::Done { message: if how == crate::passwords::Saved::Updated { "Password updated" } else { "Password saved" }.into() })
+                        }
+                    ),
+                    Some("never") => self.pw_store(
+                        move || {
+                            crate::passwords::with(|s| s.set_never(&p.origin, true))?;
+                            Ok(PwEvent::Done { message: "Passwords for this site won't be saved".into() })
+                        }
+                    ),
+                    _ => {}
+                }
+            }
+            _ => {
+                if self.pw_offers.get(&tab).is_some_and(|o| matches!(o["kind"].as_str(), Some("fill" | "generate"))) {
+                    self.pw_offer(tab, None);
+                }
+            }
+        }
+    }
+}
+fn error_of(data: &Json) -> Option<String> {
+    data["exceptionDetails"]["exception"]["description"].as_str().or(data["exceptionDetails"]["text"].as_str()).map(str::to_string)
 }
