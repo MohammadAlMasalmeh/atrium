@@ -102,6 +102,23 @@ fn read_api_token() -> Option<String> {
     })
 }
 
+/// Scripting the shell is for debug builds and test instances started with
+/// `ASIDE_TEST_SHELL_EVAL=1`; it still requires the API token.
+fn shell_eval_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| cfg!(debug_assertions) || std::env::var_os("ASIDE_TEST_SHELL_EVAL").is_some_and(|v| v == "1"))
+}
+
+/// Session URLs, the server address, and the Chromium profile stay private to this user.
+fn restrict_data_dir(dir: &std::path::Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    if dirs::home_dir().and_then(|h| h.canonicalize().ok()).as_deref() == Some(dir) {
+        return Ok(());
+    }
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    Ok(())
+}
+
 /// The MCP bridge reads the token from the data directory so it never appears in process arguments.
 fn mcp_command(dir: &std::path::Path, api: &str) -> Vec<String> {
     let exe = std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| "aside".into());
@@ -131,6 +148,7 @@ fn data_dir() -> Result<PathBuf> {
 
 fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
     let dir = data_dir()?;
+    restrict_data_dir(&dir).context("could not restrict access to the data directory")?;
     let mut extensions = Vec::new();
     for extension in &args.extensions {
         let path = extension.canonicalize().context("Extension directory does not exist")?;
@@ -157,7 +175,7 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
         .and_then(|saved| saved["url"].as_str().map(str::to_string));
     let endpoint = args.opencode_url.clone().or(saved_url).unwrap_or_else(|| local_url.clone());
     let auto_start = args.opencode_url.is_none() && endpoint == local_url;
-    let oc = OpenCode::new(endpoint);
+    let oc = if endpoint == local_url { OpenCode::local(args.opencode_port) } else { OpenCode::new(endpoint) };
     let oc_child = Arc::new(std::sync::Mutex::new(None));
     let app_child = oc_child.clone();
 
