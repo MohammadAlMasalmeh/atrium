@@ -14,6 +14,8 @@ use std::{
 use tokio::sync::oneshot;
 #[path = "chromium/mac.rs"]
 mod mac;
+#[path = "chromium/native.rs"]
+mod native;
 #[path = "chromium/url.rs"]
 mod url;
 pub use url::normalize_url;
@@ -80,6 +82,7 @@ pub enum Op {
         reply: Reply<()>,
     },
     Memory(Reply<Json>),
+    WindowShot(Reply<Result<Vec<u8>, String>>),
 }
 #[derive(Clone)]
 pub struct Handle(Bridge);
@@ -129,7 +132,6 @@ wrap_task! {
 }
 enum Event {
     Init,
-    Window(Window),
     Resize,
     Operation(Op),
     Created(u64, Browser),
@@ -146,7 +148,6 @@ enum Event {
     Quit,
     DevResult(i32, bool, Json),
     Maintenance,
-    DragRegions(Vec<DraggableRegion>),
 }
 struct Tab {
     id: u64,
@@ -155,7 +156,10 @@ struct Tab {
     loading: bool,
     icon: Option<String>,
     scratch: bool,
-    view: Option<BrowserView>,
+    /// A Chromium browser exists or is being created for this tab.
+    live: bool,
+    /// The browser's view has left the window and may already be freed; never touch it.
+    detached: bool,
     browser: Option<Browser>,
     registration: Option<Registration>,
     last_used: Instant,
@@ -195,7 +199,6 @@ struct Manager {
     rx: mpsc::Receiver<Event>,
     bridge: Bridge,
     base: String,
-    window: Option<Window>,
     tabs: Vec<Tab>,
     active: Option<u64>,
     split: Option<u64>,
@@ -239,39 +242,38 @@ impl Manager {
         self.shell(&format!("window.atriumShell?.state({state})"));
     }
     fn shell(&self, js: &str) {
-        if let Some(frame) = self
-            .tab(SHELL)
-            .and_then(|t| t.browser.as_ref())
-            .and_then(|b| b.main_frame())
-        {
-            frame.execute_java_script(Some(&CefString::from(js)), None, 0);
-        }
+        native::shell_eval(js);
     }
     fn cmd(&self, command: &str) {
         self.shell(&format!("window.atriumShell?.cmd({})", json!(command)));
     }
     fn create_view(&mut self, id: u64) {
-        let Some(window) = &self.window else { return };
+        let Some(parent) = native::content() else { return };
         let Some(tab) = self.tab(id) else { return };
-        if tab.view.is_some() || tab.url == "about:blank" {
+        if tab.live || tab.url == "about:blank" {
             return;
         }
-        let mut client = HostClient::new(self.bridge.clone(), id, self.base.clone());
-        let mut delegate = HostView::new();
-        let mut context: Option<RequestContext> = None;
-        let view = browser_view_create(
+        let mut client = HostClient::new(self.bridge.clone(), id);
+        // Hidden until layout() places it, so it never flashes at the wrong spot.
+        let info = WindowInfo {
+            parent_view: parent,
+            bounds: self.main_rect.clone(),
+            hidden: 1,
+            runtime_style: RuntimeStyle::ALLOY,
+            ..Default::default()
+        };
+        let created = browser_host_create_browser(
+            Some(&info),
             Some(&mut client),
             Some(&CefString::from(tab.url.as_str())),
             Some(&BrowserSettings::default()),
             None,
-            context.as_mut(),
-            Some(&mut delegate),
+            None,
         );
-        if let Some(view) = view {
-            let mut child = View::from(&view);
-            window.add_child_view(Some(&mut child));
+        if created != 0 {
             if let Some(tab) = self.tab_mut(id) {
-                tab.view = Some(view);
+                tab.live = true;
+                tab.detached = false;
                 tab.suspended = false;
                 tab.loading = true;
             }
@@ -290,7 +292,8 @@ impl Manager {
             loading: false,
             icon: None,
             scratch,
-            view: None,
+            live: false,
+            detached: false,
             browser: None,
             registration: None,
             last_used: now,
@@ -323,8 +326,8 @@ impl Manager {
         self.layout();
         self.push(true);
         // Agent and API tab switches must not pull the window in front of other apps.
-        if let Some(view) = self.tab(id).and_then(|t| t.view.as_ref()) {
-            view.request_focus();
+        if let Some(host) = self.tab(id).and_then(|t| t.browser.as_ref()).and_then(|b| b.host()) {
+            host.set_focus(1);
         }
     }
     fn close(&mut self, id: u64) {
@@ -381,23 +384,10 @@ impl Manager {
         id
     }
     fn layout(&self) {
-        let size = self.window.as_ref().map(|w| w.size()).unwrap_or(Size {
-            width: 1200,
-            height: 800,
-        });
-        for t in &self.tabs {
-            let Some(view) = &t.view else { continue };
-            let (bounds, visible) = if t.id == SHELL {
-                (
-                    Rect {
-                        x: 0,
-                        y: 0,
-                        width: size.width,
-                        height: size.height,
-                    },
-                    true,
-                )
-            } else if t.id == GLANCE {
+        let (width, _) = native::size().unwrap_or((1200, 800));
+        for t in self.tabs.iter().filter(|t| !t.detached) {
+            let Some(host) = t.browser.as_ref().and_then(|b| b.host()) else { continue };
+            let (bounds, visible) = if t.id == GLANCE {
                 (
                     self.glance_rect
                         .clone()
@@ -421,7 +411,7 @@ impl Manager {
             let (bounds, visible) = if !visible && self.capturing(t.id) {
                 (
                     Rect {
-                        x: size.width + 64,
+                        x: width + 64,
                         ..self.main_rect.clone()
                     },
                     true,
@@ -429,8 +419,7 @@ impl Manager {
             } else {
                 (bounds, visible)
             };
-            view.set_bounds(Some(&bounds));
-            view.set_visible(visible.into());
+            native::place(host.window_handle(), &bounds, visible);
         }
     }
     fn capturing(&self, tab: u64) -> bool {
@@ -575,11 +564,18 @@ impl Manager {
                     Some(b) => { match action { "back" => b.go_back(), "forward" => b.go_forward(), _ => b.reload() }; Ok(()) }, None => Err("No page is open".into())
                 }; let _ = reply.send(result);
             }
+            Op::Eval { tab: Some(SHELL), js, reply } => {
+                // WebKit can't return a Promise here, so shell evaluation is synchronous.
+                native::shell_eval_with(&format!("(() => {{ {js}\n }})()"), move |result| {
+                    let _ = reply.send(serde_json::from_str(&result).map_err(|e| e.to_string()));
+                });
+            }
             Op::Eval { tab, js, reply } => { if let Some(tab) = tab.or(self.active) { self.evaluate(tab, js, reply); } else { let _ = reply.send(Err("No page is open".into())); } }
             Op::InspectGoogle { tab, reply } => self.evaluate(tab, "return location.hostname === 'mail.google.com' && location.pathname.startsWith('/mail/u/') && !!document.querySelector('[gh=cm],[role=navigation]')".into(), reply),
             Op::Screenshot { tab, reply } => { if let Some(tab) = tab.or(self.active) { self.cdp(tab, "Page.captureScreenshot", json!({ "format": "jpeg", "quality": 80 }), Pending::Screenshot(reply)); } else { let _ = reply.send(Err("No page is open".into())); } }
             Op::Shell { body, reply } => { self.command(body); let _ = reply.send(()); }
-            Op::Memory(reply) => { let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": self.tab(SHELL).is_some_and(|t|t.browser.is_some()), "shell_view": self.tab(SHELL).is_some_and(|t|t.view.is_some()), "shell_record": self.tab(SHELL).is_some(), "live_renderers": self.tabs.iter().filter(|t|t.view.is_some()).count(), "tabs": self.tabs.iter().filter(|t| t.id != SHELL).map(|t| json!({"id":t.id,"live":t.view.is_some(),"suspended":t.suspended})).collect::<Vec<_>>() })); }
+            Op::Memory(reply) => { let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": native::has_shell(), "live_renderers": self.tabs.iter().filter(|t|t.live).count(), "tabs": self.tabs.iter().map(|t| json!({"id":t.id,"live":t.live,"suspended":t.suspended,"view":t.browser.as_ref().filter(|_| !t.detached).and_then(|b| b.host()).and_then(|h| native::frame_of(h.window_handle()))})).collect::<Vec<_>>() })); }
+            Op::WindowShot(reply) => { let _ = reply.send(native::window_png()); }
         }
     }
     fn command(&mut self, m: Json) {
@@ -604,13 +600,10 @@ impl Manager {
                         "open-location" => self.cmd("editUrl"),
                         "command-bar" => self.cmd("commandBar"),
                         "back" | "forward" | "reload" => self.command(json!({"cmd":name})),
-                        "devtools" | "devtools-shell" => {
-                            let id = if name == "devtools-shell" {
-                                Some(SHELL)
-                            } else {
-                                self.active
-                            };
-                            if let Some(host) = id
+                        "devtools-shell" => native::shell_devtools(),
+                        "devtools" => {
+                            if let Some(host) = self
+                                .active
                                 .and_then(|id| self.tab(id))
                                 .and_then(|t| t.browser.as_ref())
                                 .and_then(|b| b.host())
@@ -639,9 +632,7 @@ impl Manager {
             }
             "cover" => {
                 if m["on"] == true && !self.covered {
-                    if let Some(view) = self.tab(SHELL).and_then(|t| t.view.as_ref()) {
-                        view.request_focus();
-                    }
+                    native::focus_shell();
                 }
                 self.covered = m["on"] == true;
                 self.layout();
@@ -746,57 +737,26 @@ impl Manager {
                         .spawn();
                 }
             }
-            "zoom" => {
-                if let Some(w) = &self.window {
-                    if w.is_maximized() != 0 {
-                        w.restore();
-                    } else {
-                        w.maximize();
-                    }
-                }
-            }
             _ => {}
         }
     }
     fn event(&mut self, event: Event) {
         match event {
-            Event::DragRegions(regions) => {
-                if let Some(w) = &self.window { w.set_draggable_regions(Some(&regions)); }
-            }
             Event::Init => {
-                let mut delegate = HostWindow::new(self.bridge.clone(), self.closing.clone());
-                window_create_top_level(Some(&mut delegate));
-            }
-            Event::Window(window) => {
-                window.set_title(Some(&CefString::from("Atrium")));
-                self.window = Some(window.clone());
-                let now = Instant::now();
-                self.tabs.push(Tab {
-                    id: SHELL,
-                    title: "Atrium".into(),
-                    url: format!("{}/shell", self.base),
-                    loading: true,
-                    icon: None,
-                    scratch: false,
-                    view: None,
-                    browser: None,
-                    registration: None,
-                    last_used: now,
-                    capture: false,
-                    page_protected_until: now,
-                    agent_until: now,
-                    suspended: false,
-                    suspending: false,
-                    downloads: Default::default(),
-                });
-                self.create_view(SHELL);
-                self.layout();
-                window.show();
+                // The shell trades the per-launch token for a cookie, since WebKit
+                // can't add headers to its EventSource and image requests.
+                let token = crate::API_TOKEN.get().map(String::as_str).unwrap_or_default();
+                native::create(self.bridge.clone(), &format!("{}/session?t={token}", self.base));
                 self.restore_session();
                 let mut maintenance = Maintenance::new(self.bridge.clone());
                 post_delayed_task(ThreadId::UI, Some(&mut maintenance), 10000);
             }
             Event::Created(id, browser) => {
+                if self.closing.load(Ordering::Relaxed) {
+                    if let Some(host) = browser.host() {
+                        host.close_browser(1);
+                    }
+                }
                 let mut observer = DevObserver::new(self.bridge.clone());
                 let reg = browser
                     .host()
@@ -808,9 +768,11 @@ impl Manager {
                 self.layout();
             }
             Event::Detach(id) => {
-                let view = self.tab_mut(id).and_then(|t| t.view.take());
-                if let (Some(window), Some(view)) = (&self.window, view) {
-                    window.remove_child_view(Some(&mut View::from(&view)));
+                if let Some(t) = self.tab_mut(id).filter(|t| !t.detached) {
+                    t.detached = true;
+                    if let Some(host) = t.browser.as_ref().and_then(|b| b.host()) {
+                        native::detach(host.window_handle());
+                    }
                 }
             }
             Event::Closed(id) => {
@@ -818,15 +780,12 @@ impl Manager {
                 if !self.closing.load(Ordering::Relaxed)
                     && self.tab(id).is_some_and(|t| t.suspending)
                 {
-                    let view = self.tab_mut(id).and_then(|t| {
+                    if let Some(t) = self.tab_mut(id) {
                         t.browser = None;
                         t.registration = None;
                         t.suspended = true;
                         t.suspending = false;
-                        t.view.take()
-                    });
-                    if let (Some(w), Some(v)) = (&self.window, view) {
-                        w.remove_child_view(Some(&mut View::from(&v)));
+                        t.live = false;
                     }
                     if self.active == Some(id) || self.split == Some(id) {
                         self.create_view(id);
@@ -839,15 +798,10 @@ impl Manager {
                 if self.closing.load(Ordering::Relaxed) {
                     if let Some(t) = self.tab_mut(id) {
                         t.browser = None;
-                        t.view = None;
+                        t.live = false;
                         t.registration = None;
                     }
-                    if self.tabs.iter().all(|t| t.browser.is_none()) {
-                        if let Some(window) = &self.window {
-                            window.close();
-                        }
-                        quit_message_loop();
-                    }
+                    self.finish_quit();
                 }
             }
             Event::Resize => self.layout(),
@@ -915,6 +869,7 @@ impl Manager {
                         host.close_browser(0);
                     }
                 }
+                self.finish_quit();
             }
             Event::Maintenance => self.maintain(),
         }
@@ -939,6 +894,11 @@ fn on_before_command_line_processing(&self, process_type:Option<&CefString>,comm
         if let (Some(command), true) = (command_line.as_deref(), mock) {
             command.append_switch(Some(&CefString::from("use-mock-keychain")));
         }
+        // An off-screen window counts as occluded; keep its pages painting for tests.
+        if let (Some(command), true) = (command_line.as_deref(), native::background()) {
+            command.append_switch_with_value(Some(&CefString::from("disable-features")), Some(&CefString::from("MacWebContentsOcclusion")));
+            command.append_switch(Some(&CefString::from("disable-backgrounding-occluded-windows")));
+        }
         if let (Some(paths),Some(command))=(crate::CHROME_EXTENSIONS.get(),command_line) {
             if !paths.is_empty(){let value=paths.iter().map(|p|p.to_string_lossy()).collect::<Vec<_>>().join(",");command.append_switch_with_value(Some(&CefString::from("load-extension")),Some(&CefString::from(value.as_str())));}
         }
@@ -946,54 +906,7 @@ fn on_before_command_line_processing(&self, process_type:Option<&CefString>,comm
 }
 fn browser_process_handler(&self)->Option<BrowserProcessHandler>{Some(HostProcess::new(self.bridge.clone()))}} }
 wrap_browser_process_handler! {struct HostProcess {bridge:Bridge} impl BrowserProcessHandler {fn on_context_initialized(&self){self.bridge.send(Event::Init);}}}
-wrap_browser_view_delegate! {struct HostView {} impl ViewDelegate {} impl BrowserViewDelegate {fn browser_runtime_style(&self)->RuntimeStyle{RuntimeStyle::ALLOY} fn chrome_toolbar_type(&self, _unused0:Option<&mut BrowserView>)->ChromeToolbarType{ChromeToolbarType::NONE}}}
-wrap_window_delegate! {
-    struct HostWindow {bridge:Bridge,closing:Arc<AtomicBool>}
-    impl ViewDelegate {fn preferred_size(&self, _unused1:Option<&mut View>)->Size{Size{width:1280,height:820}} fn minimum_size(&self, _unused2:Option<&mut View>)->Size{Size{width:760,height:480}}
-        // The window's default fill layout stretches every tab to the full window on each
-        // layout pass. Restore tab bounds in the same pass, before Chromium paints.
-        fn on_layout_changed(&self, _unused31:Option<&mut View>, _unused32:Option<&Rect>){
-            match self.bridge.manager.upgrade().as_deref().map(Mutex::try_lock) {
-                Some(Ok(manager)) => manager.layout(),
-                _ => self.bridge.send(Event::Resize),
-            }
-        }
-    }
-    impl PanelDelegate {}
-    impl WindowDelegate {
-        fn on_window_created(&self,window:Option<&mut Window>){if let Some(w)=window{self.bridge.send(Event::Window(w.clone()));}}
-        fn on_window_bounds_changed(&self, _unused3:Option<&mut Window>, _unused4:Option<&Rect>){self.bridge.send(Event::Resize);}
-        fn can_close(&self, _unused5:Option<&mut Window>)->i32{if self.closing.load(Ordering::Relaxed){1}else{self.bridge.send(Event::Quit);0}}
-        fn window_runtime_style(&self)->RuntimeStyle{RuntimeStyle::ALLOY}
-        // Frameless with the standard traffic lights, centred in the shell's 40px top bar.
-        fn is_frameless(&self, _unused62:Option<&mut Window>)->i32{1}
-        fn with_standard_window_buttons(&self, _unused63:Option<&mut Window>)->i32{1}
-        fn titlebar_height(&self, _unused64:Option<&mut Window>, height:Option<&mut f32>)->i32{if let Some(h)=height{*h=40.0;} 1}
-    }
-}
-// Only the shell's own browser carries the local API token; website tabs never see it.
-wrap_request_handler! {struct ShellRequests {base:String} impl RequestHandler {
-    fn resource_request_handler(&self, _unused40:Option<&mut Browser>, _unused41:Option<&mut Frame>, _unused42:Option<&mut Request>, _unused43:i32, _unused44:i32, _unused45:Option<&CefString>, _unused46:Option<&mut i32>)->Option<ResourceRequestHandler>{Some(ShellResources::new(self.base.clone()))}
-}}
-wrap_resource_request_handler! {struct ShellResources {base:String} impl ResourceRequestHandler {
-    fn on_before_resource_load(&self, _unused47:Option<&mut Browser>, _unused48:Option<&mut Frame>, request:Option<&mut Request>, _unused49:Option<&mut Callback>)->ReturnValue{
-        if let (Some(request), Some(token)) = (request, crate::API_TOKEN.get()) {
-            if CefString::from(&request.url()).to_string().starts_with(&format!("{}/", self.base)) {
-                request.set_header_by_name(Some(&CefString::from(crate::TOKEN_HEADER)), Some(&CefString::from(token.as_str())), 1);
-            }
-        }
-        ReturnValue::CONTINUE
-    }
-}}
-// The window is frameless; the shell's -webkit-app-region areas move it.
-wrap_drag_handler! {struct ShellDrag {bridge:Bridge} impl DragHandler {
-    fn on_draggable_regions_changed(&self, _unused60:Option<&mut Browser>, _unused61:Option<&mut Frame>, regions:Option<&[DraggableRegion]>){
-        self.bridge.send(Event::DragRegions(regions.map(<[DraggableRegion]>::to_vec).unwrap_or_default()));
-    }
-}}
-wrap_client! {struct HostClient {bridge:Bridge,id:u64,base:String} impl Client {
-    fn request_handler(&self)->Option<RequestHandler>{(self.id==SHELL).then(|| ShellRequests::new(self.base.clone()))}
-    fn drag_handler(&self)->Option<DragHandler>{(self.id==SHELL).then(|| ShellDrag::new(self.bridge.clone()))}
+wrap_client! {struct HostClient {bridge:Bridge,id:u64} impl Client {
     fn life_span_handler(&self)->Option<LifeSpanHandler>{Some(HostLife::new(self.bridge.clone(),self.id))}
     fn display_handler(&self)->Option<DisplayHandler>{Some(HostDisplay::new(self.bridge.clone(),self.id))}
     fn load_handler(&self)->Option<LoadHandler>{Some(HostLoad::new(self.bridge.clone(),self.id))}
@@ -1049,7 +962,6 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
                 queued,
             },
             base,
-            window: None,
             tabs: Vec::new(),
             active: None,
             split: None,
@@ -1110,9 +1022,16 @@ wrap_download_handler! {struct HostDownload {bridge:Bridge,id:u64} impl Download
 }}
 wrap_task! {struct Maintenance {bridge:Bridge} impl Task {fn execute(&self){self.bridge.send(Event::Maintenance);if self.bridge.manager.upgrade().is_some(){let mut next=Self::new(self.bridge.clone());post_delayed_task(ThreadId::UI,Some(&mut next),10000);}}}}
 impl Manager {
+    /// Chromium must release every browser before the window and message loop go.
+    fn finish_quit(&self) {
+        if self.tabs.iter().all(|t| t.browser.is_none() && !t.live) {
+            native::close();
+            quit_message_loop();
+        }
+    }
     fn can_suspend(&self, id: u64) -> bool {
         self.tab(id).is_some_and(|t| {
-            t.view.is_some()
+            t.live
                 && !t.suspending
                 && !t.loading
                 && !t.capture
@@ -1131,7 +1050,7 @@ impl Manager {
         let candidates = self
             .tabs
             .iter()
-            .filter(|t| t.id != SHELL && t.id != GLANCE && t.view.is_some() && !t.scratch)
+            .filter(|t| t.id != GLANCE && t.live && !t.scratch)
             .map(|t| crate::memory::Candidate {
                 id: t.id,
                 idle: now.saturating_duration_since(t.last_used),
@@ -1218,7 +1137,8 @@ impl Manager {
                 loading: false,
                 icon: None,
                 scratch: false,
-                view: None,
+                live: false,
+                detached: false,
                 browser: None,
                 registration: None,
                 last_used: now,

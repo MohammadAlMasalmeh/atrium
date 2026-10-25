@@ -7,7 +7,7 @@ description = "Atrium: a Rust AI browser modeled on Aside, powered by the openco
 [features]
 default = ["chromium"]
 webkit = ["dep:wry", "dep:tao", "dep:objc2-web-kit", "dep:objc2-quartz-core", "dep:block2"]
-chromium = ["dep:cef"]
+chromium = ["dep:cef", "dep:wry", "dep:objc2-web-kit"]
 
 [[bin]]
 name = "atrium"

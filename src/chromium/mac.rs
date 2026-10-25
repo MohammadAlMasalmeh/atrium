@@ -49,7 +49,11 @@ impl AtriumApplication {
 }
 pub fn setup() {
     let app = AtriumApplication::shared_application();
-    app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
+    app.setActivationPolicy(if super::native::background() {
+        NSApplicationActivationPolicy::Prohibited
+    } else {
+        NSApplicationActivationPolicy::Regular
+    });
 }
 pub(super) fn menu(bridge: Bridge) -> Menu {
     let _ = BRIDGE.set(bridge.clone());

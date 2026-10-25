@@ -38,11 +38,36 @@ pub(crate) async fn shell_only(State(app): State<Arc<App>>, req: Request, next: 
 
 /// Host/Origin checks stop websites; the per-launch token also stops other local processes.
 pub(crate) async fn require_token(req: Request, next: Next) -> Response {
-    let provided = req.headers().get(crate::TOKEN_HEADER).map(|h| h.as_bytes());
-    if !matches!(req.uri().path(), "/shell" | "/onboarding.js" | "/onboarding.css") && !token_matches(crate::API_TOKEN.get().map(String::as_bytes), provided) {
+    let cookie = req
+        .headers()
+        .get_all(axum::http::header::COOKIE)
+        .iter()
+        .filter_map(|h| h.to_str().ok())
+        .flat_map(|h| h.split(';'))
+        .find_map(|c| c.trim().strip_prefix(TOKEN_COOKIE)?.strip_prefix('='));
+    let provided = req.headers().get(crate::TOKEN_HEADER).map(|h| h.as_bytes()).or(cookie.map(str::as_bytes));
+    if !matches!(req.uri().path(), "/shell" | "/session" | "/onboarding.js" | "/onboarding.css") && !token_matches(crate::API_TOKEN.get().map(String::as_bytes), provided) {
         return (StatusCode::UNAUTHORIZED, "A valid Atrium API token is required.").into_response();
     }
     next.run(req).await
+}
+
+const TOKEN_COOKIE: &str = "atrium_token";
+
+/// The shell's WebKit view can't send the token header on EventSource and image
+/// requests, so it opens `/session?t=<token>` once and carries a cookie instead.
+pub(crate) async fn session(axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>) -> Response {
+    let Some(token) = q.get("t").filter(|t| token_matches(crate::API_TOKEN.get().map(String::as_bytes), Some(t.as_bytes()))) else {
+        return (StatusCode::UNAUTHORIZED, "A valid Atrium API token is required.").into_response();
+    };
+    (
+        StatusCode::SEE_OTHER,
+        [
+            (axum::http::header::SET_COOKIE, format!("{TOKEN_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict")),
+            (axum::http::header::LOCATION, "/shell".to_string()),
+        ],
+    )
+        .into_response()
 }
 
 fn token_matches(expected: Option<&[u8]>, provided: Option<&[u8]>) -> bool {

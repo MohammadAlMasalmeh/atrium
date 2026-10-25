@@ -37,6 +37,7 @@ type Shared = State<Arc<App>>;
 pub fn router(app: Arc<App>) -> Router {
     Router::new()
         .route("/shell", get(|| async { Html(SHELL_HTML) }))
+        .route("/session", get(crate::setup::session))
         .route("/onboarding.js", get(|| async { ([(axum::http::header::CONTENT_TYPE, "text/javascript")], ONBOARDING_JS) }))
         .route("/onboarding.css", get(|| async { ([(axum::http::header::CONTENT_TYPE, "text/css")], ONBOARDING_CSS) }))
         .route("/frozen/:slot", get(frozen))
@@ -44,6 +45,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/browser/command", post(browser_command))
         .route("/api/browser/memory", get(browser_memory))
         .route("/api/browser/tabs", get(browser_tabs))
+        .route("/api/debug/window.png", get(window_png))
         .route("/api/sessions", get(sessions))
         .route("/api/session/:id/messages", get(messages))
         .route("/api/chat", post(chat))
@@ -262,7 +264,8 @@ async fn tool(State(app): Shared, Json(req): Json<ToolReq>) -> Json<Value> {
 
 /// Runs JS in the browser UI itself; handy for inspecting the shell's state.
 async fn debug_shell(State(app): Shared, body: String) -> Json<Value> {
-    if !cfg!(debug_assertions) { return Json(json!({"error":"Shell evaluation is disabled in release builds"})); }
+    let test_instance = std::env::var_os("ATRIUM_BACKGROUND_WINDOW").is_some_and(|v| v == "1");
+    if !cfg!(debug_assertions) && !test_instance { return Json(json!({"error":"Shell evaluation is disabled in release builds"})); }
     let r = app
         .agent
         .browser
@@ -282,6 +285,20 @@ async fn browser_command(State(app): Shared, Json(body): Json<Value>) -> Json<Va
 }
 async fn browser_memory(State(app): Shared) -> Json<Value> {
     Json(app.agent.browser.op(Op::Memory).await.unwrap_or_else(|e|json!({"error":e.to_string()})))
+}
+
+#[cfg(feature = "chromium")]
+async fn window_png(State(app): Shared) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match app.agent.browser.op(Op::WindowShot).await {
+        Ok(Ok(png)) => ([(axum::http::header::CONTENT_TYPE, "image/png")], png).into_response(),
+        Ok(Err(e)) => (axum::http::StatusCode::CONFLICT, e).into_response(),
+        Err(e) => (axum::http::StatusCode::SERVICE_UNAVAILABLE, e.to_string()).into_response(),
+    }
+}
+#[cfg(not(feature = "chromium"))]
+async fn window_png() -> (axum::http::StatusCode, &'static str) {
+    (axum::http::StatusCode::NOT_FOUND, "Window capture needs the Chromium build")
 }
 
 async fn browser_extensions() -> Json<Value> {
