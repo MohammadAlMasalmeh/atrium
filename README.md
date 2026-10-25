@@ -83,17 +83,18 @@ window (`tools/bench_three_way.py`, Chrome 155; Atrium two runs, Chrome one):
 | Memory, no tabs | **181 MiB** | 628 MiB |
 | Memory, 10 tabs after 6 min idle | **2,418 MiB** | 2,904 MiB |
 | Memory, 10 tabs live | **1,222 MiB** | 3,272 MiB |
-| Startup | 3.3 s | **1.2 s** |
+| Startup to a ready window | **0.7 s** | 1.2 s |
 | Switching back to an idle tab | reloads (evicted) | **instant** |
 
 The 10-live-tab Atrium figure is from the current build with ad blocking, in a
 background window 60 s after the last page loaded (one run, 16 processes,
 `docs/benchmarks/2026-10-25-ten-sites-current.json`). Before ad blocking it was
-4,990 MiB. Chrome's figures are from the earlier windowed run.
+4,990 MiB. Atrium's startup is the median of fresh and warm launches with a
+visible window, timed until the shell reports ready (an earlier harness run
+reported 3.3 s, measured just after a rebuild). Chrome's figures are from the
+earlier windowed run, where startup ends when its DevTools port is up.
 
 Where Atrium is behind:
-- **Startup:** most of the time goes to showing the visible window. The shell is
-  ready 0.8 s after launch in a background window.
 - **Idle tabs:** Atrium frees memory by evicting idle tabs, so they reload when
   selected again.
 
