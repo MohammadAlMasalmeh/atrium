@@ -21,7 +21,7 @@ use serde_json::{json, Value as Json};
 use std::cell::RefCell;
 
 pub(super) fn enabled() -> bool {
-    std::env::var_os("ATRIUM_NATIVE_CHROME").is_some_and(|v| v == "1")
+    super::native::flag("NATIVE_CHROME")
 }
 
 /// What the toolbar shows for the active tab.

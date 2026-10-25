@@ -165,9 +165,18 @@ pub(super) fn create(bridge: Bridge, shell_url: &str) {
     NATIVE.with(|n| *n.borrow_mut() = Some(Native { window, content, shell, _delegate: delegate }));
 }
 
+/// Test and development switches, read as `ATRIUM_<NAME>` or the older `ATRIUM_<NAME>`.
+pub(super) fn setting(name: &str) -> Option<String> {
+    ["ATRIUM_", "ATRIUM_"].iter().find_map(|prefix| std::env::var(format!("{prefix}{name}")).ok())
+}
+
+pub(super) fn flag(name: &str) -> bool {
+    setting(name).as_deref() == Some("1")
+}
+
 /// `ATRIUM_BACKGROUND_WINDOW=1` is for test instances that must never activate, take focus, or be seen.
 pub(super) fn background() -> bool {
-    std::env::var_os("ATRIUM_BACKGROUND_WINDOW").is_some_and(|v| v == "1")
+    flag("BACKGROUND_WINDOW")
 }
 
 /// Ordered in, so Chromium and the glass still render, but transparent, click-through,
@@ -176,7 +185,7 @@ fn keep_out_of_sight(window: &NSWindow) {
     use objc2_app_kit::NSWindowCollectionBehavior;
     // ATRIUM_SHOW_BEHIND=1 (screenshots only): on screen behind every other window, so the
     // glass has a backdrop, but still unable to activate or take clicks.
-    let behind = std::env::var_os("ATRIUM_SHOW_BEHIND").is_some_and(|v| v == "1");
+    let behind = flag("SHOW_BEHIND");
     #[allow(unused_unsafe)]
     unsafe {
         window.setIgnoresMouseEvents(true);
@@ -197,16 +206,16 @@ fn keep_out_of_sight(window: &NSWindow) {
 /// pages alike) so both modes can be checked without touching the system setting.
 fn test_appearance(mtm: MainThreadMarker) {
     use objc2_app_kit::{NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua};
-    let name = match std::env::var("ATRIUM_APPEARANCE").as_deref() {
-        Ok("dark") => unsafe { NSAppearanceNameDarkAqua },
-        Ok("light") => unsafe { NSAppearanceNameAqua },
+    let name = match setting("APPEARANCE").as_deref() {
+        Some("dark") => unsafe { NSAppearanceNameDarkAqua },
+        Some("light") => unsafe { NSAppearanceNameAqua },
         _ => return,
     };
     NSApplication::sharedApplication(mtm).setAppearance(NSAppearance::appearanceNamed(name).as_deref());
 }
 
 pub(super) fn shown_behind() -> bool {
-    background() && std::env::var_os("ATRIUM_SHOW_BEHIND").is_some_and(|v| v == "1")
+    background() && flag("SHOW_BEHIND")
 }
 
 #[link(name = "CoreGraphics", kind = "framework")]

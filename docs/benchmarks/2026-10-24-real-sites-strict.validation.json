@@ -5,7 +5,7 @@
       "url": "https://www.youtube.com/",
       "cef_id": 3,
       "validation": {
-        "Aside": {
+        "Baseline": {
           "url": "https://www.youtube.com/",
           "title": "YouTube",
           "ready": "complete",
@@ -46,7 +46,7 @@
       ],
       "cef_id": 4,
       "validation": {
-        "Aside": {
+        "Baseline": {
           "url": "https://workspace.google.com/intl/en-US/gmail/",
           "title": "Gmail: Secure, AI-Powered Email for Everyone | Google Workspace",
           "ready": "interactive",
@@ -83,7 +83,7 @@
       "url": "https://github.com/tauri-apps/cef-rs",
       "cef_id": 5,
       "validation": {
-        "Aside": {
+        "Baseline": {
           "url": "https://github.com/tauri-apps/cef-rs",
           "title": "GitHub - tauri-apps/cef-rs \u00b7 GitHub",
           "ready": "complete",
@@ -120,7 +120,7 @@
       "url": "https://en.wikipedia.org/wiki/Web_browser",
       "cef_id": 6,
       "validation": {
-        "Aside": {
+        "Baseline": {
           "url": "https://en.wikipedia.org/wiki/Web_browser",
           "title": "Web browser - Wikipedia",
           "ready": "complete",
@@ -160,7 +160,7 @@
       ],
       "cef_id": 7,
       "validation": {
-        "Aside": {
+        "Baseline": {
           "url": "https://www.bbc.com/news",
           "title": "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
           "ready": "complete",
@@ -197,7 +197,7 @@
       "url": "https://developer.mozilla.org/en-US/docs/Web/API",
       "cef_id": 8,
       "validation": {
-        "Aside": {
+        "Baseline": {
           "url": "https://developer.mozilla.org/en-US/docs/Web/API",
           "title": "Web APIs | MDN",
           "ready": "complete",
@@ -234,7 +234,7 @@
       "url": "https://stackoverflow.com/questions/tagged/rust",
       "cef_id": 9,
       "validation": {
-        "Aside": {
+        "Baseline": {
           "url": "https://stackoverflow.com/questions/tagged/rust",
           "title": "Newest 'rust' Questions - Stack Overflow",
           "ready": "complete",
@@ -271,7 +271,7 @@
       "url": "https://news.ycombinator.com/",
       "cef_id": 11,
       "validation": {
-        "Aside": {
+        "Baseline": {
           "url": "https://news.ycombinator.com/",
           "title": "Hacker News",
           "ready": "complete",
@@ -310,7 +310,7 @@
       "url": "https://www.google.com/search?q=chromium+browser",
       "cef_id": 2,
       "validation": {
-        "Aside": {
+        "Baseline": {
           "url": "https://www.google.com/sorry/index",
           "title": "https://www.google.com/search?q=chromium+browser&sei=ERTdasK0BaulqtsP3If-OA",
           "ready": "complete",
@@ -342,7 +342,7 @@
         }
       },
       "reasons": {
-        "Aside": "Page navigated away from the requested URL",
+        "Baseline": "Page navigated away from the requested URL",
         "CEF build": null
       }
     },
@@ -351,7 +351,7 @@
       "url": "https://www.reddit.com/r/rust/",
       "cef_id": 10,
       "validation": {
-        "Aside": {
+        "Baseline": {
           "url": "https://www.reddit.com/r/rust/",
           "title": "Reddit - Prove your humanity",
           "ready": "complete",
@@ -383,7 +383,7 @@
         }
       },
       "reasons": {
-        "Aside": "Challenge or error page",
+        "Baseline": "Challenge or error page",
         "CEF build": null
       }
     }

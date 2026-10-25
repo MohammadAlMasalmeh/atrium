@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Atrium app icon</title>
+<style>
+  :root { --paper: #F3F1EC; --ink: #141414; }
+  body { margin: 0; background: transparent; }
+  body:not(.solo) { display: flex; gap: 40px; padding: 40px; background: #E9E6DF; }
+  .icon { position: relative; width: 1024px; height: 1024px; flex: none; }
+  .tile { position: absolute; left: 100px; top: 100px; width: 824px; height: 824px; border-radius: 185px;
+          display: grid; place-items: center; box-shadow: 0 20px 36px rgb(0 0 0 / .22), 0 4px 10px rgb(0 0 0 / .12); }
+  .tile svg { width: 400px; height: 410px; }
+  .dark .tile { background: var(--ink); } .dark svg { fill: var(--paper); }
+  .light .tile { background: var(--paper); box-shadow: 0 20px 36px rgb(0 0 0 / .16), 0 4px 10px rgb(0 0 0 / .08), inset 0 0 0 2px rgb(0 0 0 / .06); }
+  .light svg { fill: var(--ink); }
+  .preview { zoom: .5; }
+</style>
+</head>
+<body>
+<script>
+const mark = `<svg viewBox="10 10 80 82"><path fill-rule="evenodd" d="M10 92 V50 A40 40 0 0 1 90 50 V92 Z M36 92 V64 A14 14 0 0 1 64 64 V92 Z"/></svg>`;
+const icon = (theme) => `<div class="icon ${theme}"><div class="tile">${mark}</div></div>`;
+const solo = new URLSearchParams(location.search).get("solo");
+if (solo) {
+  document.body.classList.add("solo");
+  document.body.innerHTML = icon(solo);
+} else {
+  document.body.innerHTML = `<div class="preview">${icon("dark")}</div><div class="preview">${icon("light")}</div>`;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Atrium logo</title>
+<style>
+  :root { --paper: #F3F1EC; --ink: #141414; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; }
+  .panel { height: 300px; display: flex; align-items: center; justify-content: center; gap: 72px; }
+  .light { background: var(--paper); color: var(--ink); }
+  .dark { background: var(--ink); color: var(--paper); }
+  .logo { display: flex; align-items: baseline; gap: .26em; font-size: 96px; font-weight: 700; letter-spacing: -0.05em; line-height: 1; }
+  .logo svg { width: .66em; height: .68em; fill: currentColor; flex: none; }
+  .logo.sm { font-size: 40px; }
+  img.app { width: 150px; height: 150px; }
+</style>
+</head>
+<body>
+<div class="panel light">
+  <div class="logo"><svg viewBox="10 10 80 82"><path fill-rule="evenodd" d="M10 92 V50 A40 40 0 0 1 90 50 V92 Z M36 92 V64 A14 14 0 0 1 64 64 V92 Z"/></svg>atrium</div>
+  <img class="app" src="icon-dark.png">
+</div>
+<div class="panel dark">
+  <div class="logo"><svg viewBox="10 10 80 82"><path fill-rule="evenodd" d="M10 92 V50 A40 40 0 0 1 90 50 V92 Z M36 92 V64 A14 14 0 0 1 64 64 V92 Z"/></svg>atrium</div>
+  <div class="logo sm"><svg viewBox="10 10 80 82"><path fill-rule="evenodd" d="M10 92 V50 A40 40 0 0 1 90 50 V92 Z M36 92 V64 A14 14 0 0 1 64 64 V92 Z"/></svg>atrium</div>
+</div>
+</body>
+</html>

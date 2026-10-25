@@ -2,12 +2,13 @@
 """Compare real public websites with live tabs and after idle eviction.
 
 Requires a fresh release CEF browser on 7783 and Node with native WebSocket.
-Starts only a separate temporary Aside profile. Does not use signed-in accounts.
+Starts only a separate temporary reference-browser profile. Does not use signed-in accounts.
 Validation reads public DOM metadata; it intentionally gives CEF pages the normal
 agent protection window, allowing a live phase before the idle eviction phase.
 """
 import argparse
 import json
+import os
 import statistics
 import subprocess
 import tempfile
@@ -21,10 +22,12 @@ from memory_benchmark import process_table, tree, physical_footprint_mib
 ROOT = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--api', default='http://127.0.0.1:7783')
-parser.add_argument('--aside', default='/Applications/Aside.app/Contents/MacOS/Aside')
+parser.add_argument('--baseline', default=os.environ.get('BASELINE_BROWSER', ''))
 parser.add_argument('--sites', type=Path, default=ROOT / 'real_sites.json')
 parser.add_argument('--output', type=Path, required=True)
 args = parser.parse_args()
+if not args.baseline:
+    raise SystemExit('pass --baseline or set BASELINE_BROWSER to the reference browser executable')
 sites = json.loads(args.sites.read_text())
 EXPRESSION = """({url:location.href,title:document.title,ready:document.readyState,
 visibility:document.visibilityState,viewport:[innerWidth,innerHeight,devicePixelRatio],
@@ -94,11 +97,11 @@ def public_metadata(info):
     return result
 
 def sample(label, cef_pid, baseline_pid):
-    values={'Aside':[],'CEF build':[]}; counts={key:[] for key in values}
+    values={'Baseline':[],'CEF build':[]}; counts={key:[] for key in values}
     footprints={key:[] for key in values}
     for i in range(8):
         processes=process_table()
-        for name,pid in [('Aside',baseline_pid),('CEF build',cef_pid)]:
+        for name,pid in [('Baseline',baseline_pid),('CEF build',cef_pid)]:
             pids=tree(processes,f'pid:{pid}')
             assert pids,f'{name} exited'
             values[name].append(round(sum(processes[p][1] for p in pids)/1024,2))
@@ -110,9 +113,9 @@ def sample(label, cef_pid, baseline_pid):
             'browsers':{name:{'median_mib':round(statistics.median(v),2),'samples_mib':v,'process_counts':counts[name],
                               'footprint_samples_mib':footprints[name],
                               'footprint_median_mib':round(statistics.median([f for f in footprints[name] if f is not None]),2) if sum(f is not None for f in footprints[name])>=4 else None} for name,v in values.items()}}
-    baseline=report['browsers']['Aside']['median_mib']; candidate=report['browsers']['CEF build']['median_mib']
+    baseline=report['browsers']['Baseline']['median_mib']; candidate=report['browsers']['CEF build']['median_mib']
     report['rss_reduction_percent']=round(100*(baseline-candidate)/baseline,1)
-    baseline_footprint=report['browsers']['Aside']['footprint_median_mib'];candidate_footprint=report['browsers']['CEF build']['footprint_median_mib']
+    baseline_footprint=report['browsers']['Baseline']['footprint_median_mib'];candidate_footprint=report['browsers']['CEF build']['footprint_median_mib']
     if baseline_footprint and candidate_footprint:
         report['footprint_reduction_percent']=round(100*(baseline_footprint-candidate_footprint)/baseline_footprint,1)
     print(json.dumps(report),flush=True)
@@ -126,14 +129,14 @@ for _ in range(60):
     time.sleep(.5)
 else:raise RuntimeError('CEF did not become ready')
 assert not any(t['live'] for t in state['tabs']),'Use a fresh, empty profile'
-profile=Path(tempfile.mkdtemp(prefix='aside-real-sites-baseline-'))
+profile=Path(tempfile.mkdtemp(prefix='baseline-real-sites-'))
 log=(profile/'launch.log').open('w')
-process=subprocess.Popen([args.aside,f'--user-data-dir={profile}','--remote-debugging-port=0','--no-first-run','--new-window',*[s['url'] for s in sites]],stdout=log,stderr=log)
+process=subprocess.Popen([args.baseline,f'--user-data-dir={profile}','--remote-debugging-port=0','--no-first-run','--new-window',*[s['url'] for s in sites]],stdout=log,stderr=log)
 try:
     for _ in range(80):
         port_file=profile/'DevToolsActivePort'
         if port_file.exists():break
-        assert process.poll() is None,'Aside exited'
+        assert process.poll() is None,'Reference browser exited'
         time.sleep(.5)
     port=int(port_file.read_text().splitlines()[0])
     def baseline_json(path):
@@ -152,10 +155,10 @@ try:
             assert target,'No matching baseline page'
             cdp(version['webSocketDebuggerUrl'],'Target.activateTarget',{'targetId':target['id']})
             time.sleep(2)
-            aside=cdp(target['webSocketDebuggerUrl'],'Runtime.evaluate',{'expression':EXPRESSION,'returnByValue':True})['result']['value']
+            baseline=cdp(target['webSocketDebuggerUrl'],'Runtime.evaluate',{'expression':EXPRESSION,'returnByValue':True})['result']['value']
             cef=inspect_cef(site['cef_id'])
-            reasons={'Aside':valid(aside,site),'CEF build':valid(cef,site)}
-            entry={**site,'validation':{'Aside':public_metadata(aside),'CEF build':public_metadata(cef)}}
+            reasons={'Baseline':valid(baseline,site),'CEF build':valid(cef,site)}
+            entry={**site,'validation':{'Baseline':public_metadata(baseline),'CEF build':public_metadata(cef)}}
             if any(reasons.values()):
                 excluded.append({**entry,'reasons':reasons})
             else:

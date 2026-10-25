@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Atrium lockups</title>
+<style>
+  :root { --paper: #F3F1EC; --ink: #141414; --line: #dcd9d2; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 48px 56px; background: var(--paper); color: var(--ink);
+         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; }
+  .grid { display: grid; grid-template-columns: 160px repeat(3, 1fr); gap: 2px; background: var(--line); border: 2px solid var(--line); }
+  .cell { background: var(--paper); height: 190px; display: flex; align-items: center; justify-content: center; }
+  .cell.dark { background: var(--ink); color: var(--paper); }
+  .cell svg { fill: currentColor; }
+  .name { justify-content: flex-start; padding-left: 24px; font-size: 13px; font-weight: 600; }
+  .head { height: 44px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #7a776f; }
+  .lockup { display: flex; align-items: center; }
+  .sans { gap: 14px; font-size: 54px; font-weight: 600; letter-spacing: -0.04em; }
+  .sans svg { height: 44px; width: 44px; }
+  .serif { gap: 16px; font-family: "New York", ui-serif, Georgia, serif; font-size: 58px; font-weight: 500; letter-spacing: -0.02em; }
+  .serif svg { height: 46px; width: 46px; }
+  .lower { gap: 12px; font-size: 56px; font-weight: 700; letter-spacing: -0.05em; padding-bottom: 6px; }
+  .lower svg { height: 36px; width: 36px; transform: translateY(5px); }
+</style>
+</head>
+<body>
+<div class="grid" id="grid">
+  <div class="cell head"></div>
+  <div class="cell head">Sans</div>
+  <div class="cell head">Serif</div>
+  <div class="cell head">Lowercase, dark</div>
+</div>
+<script>
+const gate = "M10 92 V50 A40 40 0 0 1 90 50 V92 Z";
+const marks = {
+  "A-frame": `<path fill-rule="evenodd" d="${gate} M36 92 V60 A14 14 0 0 1 64 60 V92 Z"/><rect x="36" y="68" width="28" height="7"/>`,
+  Gateway: `<path fill-rule="evenodd" d="${gate} M36 92 V64 A14 14 0 0 1 64 64 V92 Z"/>`,
+  "Wide door": `<path fill-rule="evenodd" d="${gate} M30 92 V56 A20 20 0 0 1 70 56 V92 Z"/>`,
+};
+const svg = (body) => `<svg viewBox="10 10 80 82">${body}</svg>`;
+const grid = document.getElementById("grid");
+for (const [name, body] of Object.entries(marks)) {
+  grid.insertAdjacentHTML("beforeend", `
+    <div class="cell name">${name}</div>
+    <div class="cell"><div class="lockup sans">${svg(body)}Atrium</div></div>
+    <div class="cell"><div class="lockup serif">${svg(body)}Atrium</div></div>
+    <div class="cell dark"><div class="lockup lower">${svg(body)}atrium</div></div>`);
+}
+</script>
+</body>
+</html>

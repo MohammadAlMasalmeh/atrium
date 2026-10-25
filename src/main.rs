@@ -1,4 +1,4 @@
-//! Atrium — a Rust AI browser, modeled on the Aside browser.
+//! Atrium — a Rust AI browser.
 //!
 //! `atrium` opens a native browser window with Chromium tabs. Its built-in
 //! assistant is an `opencode serve` session that drives the
@@ -178,7 +178,7 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
             // Serialize automatic startup with the onboarding's retry/connect actions.
             let _setup = app.setup_lock.lock().await;
             if auto_start && !oc.healthy().await {
-                match OpenCode::spawn(args.opencode_port, &app.workspace).await {
+                match OpenCode::spawn(args.opencode_port, &app.workspace, setup::event_log(&app)).await {
                     Ok((local, child)) => {
                         *app.oc_child.lock().unwrap() = Some(child);
                         oc.use_connection(&local);

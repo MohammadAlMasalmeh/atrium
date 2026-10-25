@@ -264,7 +264,7 @@ async fn tool(State(app): Shared, Json(req): Json<ToolReq>) -> Json<Value> {
 
 /// Runs JS in the browser UI itself; handy for inspecting the shell's state.
 async fn debug_shell(State(app): Shared, body: String) -> Json<Value> {
-    let test_instance = std::env::var_os("ATRIUM_BACKGROUND_WINDOW").is_some_and(|v| v == "1");
+    let test_instance = ["ATRIUM_BACKGROUND_WINDOW", "ATRIUM_BACKGROUND_WINDOW"].iter().any(|k| std::env::var_os(k).is_some_and(|v| v == "1"));
     if !cfg!(debug_assertions) && !test_instance { return Json(json!({"error":"Shell evaluation is disabled in release builds"})); }
     let r = app
         .agent

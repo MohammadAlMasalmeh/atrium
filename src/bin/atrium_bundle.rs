@@ -23,7 +23,7 @@ fn main() -> anyhow::Result<()> {
             &target.join(profile),
             "atrium",
             "atrium_helper",
-            None,
+            Some(root.join("branding")),
             info,
         )?;
         let resources = path.join("Contents/Resources");

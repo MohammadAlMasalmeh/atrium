@@ -173,7 +173,7 @@ profile on port 7783 and keep the fixture server on 7789. Then run:
 python3 tools/compare_memory.py --output /tmp/atrium-memory.json
 ```
 
-The script starts the installed `/Applications/Aside.app` with a separate temporary
+The script starts the reference browser given by `--baseline` with a separate temporary
 profile, verifies both browsers opened the same ten local pages, waits for the
 lifecycle policy, and samples both process trees six times. `--distinct-sites`
 uses ten separate `.localhost` hosts. Each page touches a 12 MiB buffer and has
@@ -185,11 +185,11 @@ same accounts, extensions, page set, build profile, and warm-up interval.
 
 ### Recorded comparison: October 24, 2026
 
-Apple Silicon macOS; release build; fresh profiles; Aside 1.0.1022.1
+Apple Silicon macOS; release build; fresh profiles; reference browser 1.0.1022.1
 (Chromium 154.0.8037.100), this build CEF 156.0.8 (Chromium 156.0.8078.48).
 Six samples after a 50-second warm-up, with ten fixture tabs in each browser.
 
-| Workload | Aside RSS | This build RSS | Reduction |
+| Workload | Baseline RSS | This build RSS | Reduction |
 | --- | ---: | ---: | ---: |
 | [Ten same-origin pages](benchmarks/2026-10-24-same-origin.json) | 2,785.51 MiB | 1,195.99 MiB | 57.1% |
 | [Ten separate localhost sites](benchmarks/2026-10-24-distinct-sites.json) | 2,843.91 MiB | 1,135.04 MiB | 60.1% |
@@ -235,7 +235,7 @@ builds and machine as above, fresh signed-out profiles, assistant disconnected.
 Eight sites matched in both browsers; Google Search (baseline redirected) and
 Reddit (baseline challenge page) were excluded from both.
 
-| Phase | Aside footprint | This build footprint | Reduction | RSS reduction |
+| Phase | Baseline footprint | This build footprint | Reduction | RSS reduction |
 | --- | ---: | ---: | ---: | ---: |
 | All accepted pages live (9 CEF views incl. shell) | 4,297 MiB | 3,329 MiB | 22.5% | 41.6% |
 | After eviction (7 CEF views) | 3,339 MiB | 2,809 MiB | 15.9% | 41.7% |
@@ -243,7 +243,7 @@ Reddit (baseline challenge page) were excluded from both.
 This is **one** run. An earlier, unrecorded real-site run showed this build
 using *more* footprint with all pages live, and a replicate was interrupted,
 so treat these figures as unconfirmed and do not publish them. The browsers
-also differ (Aside 1.0.1022.1 on Chromium 154 with its own built-in features
+also differ (reference browser 1.0.1022.1 on Chromium 154 with its own built-in features
 against a minimal CEF 156 shell), so the result is not a per-engine
 comparison. Process counts were 89 against 56 when live.
 

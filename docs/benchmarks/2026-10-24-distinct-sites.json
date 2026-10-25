@@ -15,7 +15,7 @@
   "cef_live_views": 7,
   "cef_tab_budget": 6,
   "browsers": {
-    "Aside": {
+    "Baseline": {
       "median_mib": 2843.91,
       "samples_mib": [
         2926.2,

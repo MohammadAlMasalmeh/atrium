@@ -1,5 +1,5 @@
 //! Setup APIs are only available to the local browser shell.
-use crate::{app::Op, migration, opencode::OpenCode, server::App};
+use crate::{app::Op, migration, opencode::{log_line, Log, OpenCode}, server::App};
 use axum::{
     extract::{Request, State},
     http::StatusCode,
@@ -121,7 +121,15 @@ fn validate_endpoint(raw: &str) -> anyhow::Result<String> {
     Ok(url.as_str().trim_end_matches('/').to_string())
 }
 
+/// Sends setup output to the shell's event stream for the onboarding terminal.
+pub(crate) fn event_log(app: &App) -> Log {
+    let tx = app.events.clone();
+    Arc::new(move |ev| { let _ = tx.send(ev); })
+}
+
 async fn attach(app: &App, oc: &OpenCode) -> anyhow::Result<()> {
+    let log = event_log(app);
+    log_line(&log, "info", "Connecting browser tools (MCP server \"atrium\")…");
     let dir = app.workspace.parent().unwrap_or(&app.workspace);
     oc.add_mcp("atrium", crate::mcp_command(dir, &app.ui_origin))
         .await?;
@@ -129,6 +137,7 @@ async fn attach(app: &App, oc: &OpenCode) -> anyhow::Result<()> {
         oc.browser_tools_ready().await,
         "OpenCode could not start the browser tools. Check the server and retry."
     );
+    log_line(&log, "ok", "Browser tools connected");
     Ok(())
 }
 
@@ -153,8 +162,10 @@ async fn opencode_status(State(app): State<Arc<App>>) -> Json<Value> {
     let healthy = app.oc.healthy().await;
     let browser_tools = healthy && app.oc.browser_tools_ready().await;
     let version = crate::opencode::opencode_version().await;
+    let path = crate::opencode::find_opencode();
     Json(json!({
-        "installed": crate::opencode::find_opencode().is_some(),
+        "installed": path.is_some(),
+        "path": path.map(|p| p.display().to_string()),
         "version": version,
         "healthy": healthy,
         "browser_tools": browser_tools,
@@ -165,7 +176,7 @@ async fn opencode_status(State(app): State<Arc<App>>) -> Json<Value> {
 async fn install(State(app): State<Arc<App>>) -> Json<Value> {
     response(async {
         let _lock = app.setup_lock.lock().await;
-        let version = crate::opencode::install_opencode().await?;
+        let version = crate::opencode::install_opencode(event_log(&app)).await?;
         Ok(json!({ "ok": true, "version": version }))
     }.await)
 }
@@ -175,7 +186,9 @@ async fn start(State(app): State<Arc<App>>) -> Json<Value> {
         async {
             let _lock = app.setup_lock.lock().await;
             let local = OpenCode::new(format!("http://127.0.0.1:{}", app.opencode_port));
-            if !local.healthy().await {
+            if local.healthy().await {
+                log_line(&event_log(&app), "ok", format!("OpenCode is already running at {}", local.base()));
+            } else {
                 // Release an exited child before trying again; never kill a user's server.
                 {
                     let mut child = app.oc_child.lock().unwrap();
@@ -186,7 +199,7 @@ async fn start(State(app): State<Arc<App>>) -> Json<Value> {
                     }
                     child.take();
                 }
-                let (_, child) = OpenCode::spawn(app.opencode_port, &app.workspace)
+                let (_, child) = OpenCode::spawn(app.opencode_port, &app.workspace, event_log(&app))
                     .await
                     .map_err(|_| {
                         anyhow::anyhow!(

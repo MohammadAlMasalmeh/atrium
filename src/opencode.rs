@@ -1,11 +1,20 @@
 //! Client for the `opencode serve` HTTP API.
 
-use std::{path::Path, process::Stdio, sync::{Arc, RwLock}, time::Duration};
+use std::{path::Path, process::Stdio, sync::{Arc, RwLock}, time::{Duration, Instant}};
 
 use anyhow::{bail, Context, Result};
 use futures_util::{Stream, StreamExt};
 use serde_json::{json, Value};
-use tokio::process::{Child, Command};
+use tokio::{io::{AsyncRead, AsyncReadExt}, process::{Child, Command}, task::JoinHandle};
+
+/// Receives setup output (`atrium.setup.log` / `atrium.setup.progress` events) for the onboarding terminal.
+pub type Log = Arc<dyn Fn(Value) + Send + Sync>;
+
+pub fn log_line(log: &Log, kind: &str, text: impl Into<String>) {
+    log(json!({ "type": "atrium.setup.log", "kind": kind, "text": text.into() }));
+}
+
+pub const INSTALL_CMD: &str = "curl -fsSL https://opencode.ai/install | bash";
 
 #[derive(Clone)]
 pub struct OpenCode {
@@ -64,19 +73,26 @@ impl OpenCode {
     }
 
     /// Spawn `opencode serve` on `port` with `workdir` as its project directory.
-    pub async fn spawn(port: u16, workdir: &Path) -> Result<(Self, Child)> {
+    /// Startup output goes to `log` for a minute; after that it is drained silently.
+    pub async fn spawn(port: u16, workdir: &Path, log: Log) -> Result<(Self, Child)> {
         let bin = which_opencode();
-        let child = Command::new(&bin)
+        log_line(&log, "cmd", format!("opencode serve --hostname 127.0.0.1 --port {port}"));
+        let started = Instant::now();
+        let mut child = Command::new(&bin)
             .args(["serve", "--hostname", "127.0.0.1", "--port", &port.to_string()])
             .current_dir(workdir)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .kill_on_drop(true)
             .spawn()
             .with_context(|| format!("could not start `{bin} serve` (is opencode installed?)"))?;
+        let until = Some(started + Duration::from_secs(60));
+        if let Some(out) = child.stdout.take() { pump(out, log.clone(), until); }
+        if let Some(err) = child.stderr.take() { pump(err, log.clone(), until); }
         let oc = Self::new(format!("http://127.0.0.1:{port}"));
         for _ in 0..80 {
             if oc.healthy().await {
+                log_line(&log, "ok", format!("Server is up ({:.1}s)", started.elapsed().as_secs_f32()));
                 return Ok((oc, child));
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
@@ -282,20 +298,116 @@ pub async fn opencode_version() -> Option<String> {
     Some(String::from_utf8_lossy(&out.stdout).trim().to_string()).filter(|v| !v.is_empty())
 }
 
-/// Run OpenCode's official installer (installs to ~/.opencode/bin).
-pub async fn install_opencode() -> Result<String> {
-    let out = Command::new("/bin/bash")
-        .args(["-c", "curl -fsSL https://opencode.ai/install | bash"])
+/// Run OpenCode's official installer (installs to ~/.opencode/bin), streaming its output to `log`.
+pub async fn install_opencode(log: Log) -> Result<String> {
+    log_line(&log, "cmd", INSTALL_CMD);
+    let mut child = Command::new("/bin/bash")
+        .args(["-c", INSTALL_CMD])
         .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin")
         .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .kill_on_drop(true)
-        .output();
-    let out = tokio::time::timeout(Duration::from_secs(300), out).await
+        .spawn()
+        .context("Could not run the OpenCode installer.")?;
+    let out = pump(child.stdout.take().context("installer stdout")?, log.clone(), None);
+    let err = pump(child.stderr.take().context("installer stderr")?, log.clone(), None);
+    let status = tokio::time::timeout(Duration::from_secs(300), child.wait()).await
         .context("The installer took too long. Check your connection and try again.")??;
-    if !out.status.success() || find_opencode().is_none() {
-        let err = String::from_utf8_lossy(&out.stderr);
-        let last = err.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("").trim().to_string();
+    let _ = out.await;
+    let last = err.await.unwrap_or_default();
+    if !status.success() || find_opencode().is_none() {
         bail!("OpenCode could not be installed{}", if last.is_empty() { ".".into() } else { format!(": {last}") });
     }
-    Ok(opencode_version().await.unwrap_or_default())
+    let version = opencode_version().await.unwrap_or_default();
+    log_line(&log, "ok", format!("Installed OpenCode {version}").trim_end().to_string());
+    Ok(version)
+}
+
+/// Forward a child's output to `log` line by line (until `until`, then just drain it so the
+/// child never blocks on a full pipe). curl's `-#` progress lines become progress events.
+/// Resolves to the last non-empty line, for error messages.
+fn pump(mut r: impl AsyncRead + Unpin + Send + 'static, log: Log, until: Option<Instant>) -> JoinHandle<String> {
+    tokio::spawn(async move {
+        let (mut buf, mut chunk) = (Vec::new(), [0u8; 4096]);
+        let (mut last, mut pct, mut after_cr) = (String::new(), -1i32, false);
+        let mut line = |raw: &[u8], log: &Log| {
+            let live = until.is_none_or(|t| Instant::now() < t);
+            let text = String::from_utf8_lossy(raw).into_owned();
+            let plain = strip_ansi(&text);
+            if let Some(p) = curl_progress(&plain) {
+                if live && p as i32 != pct { log(json!({ "type": "atrium.setup.progress", "pct": p })); }
+                pct = p as i32;
+                return;
+            }
+            if !plain.trim().is_empty() { last = plain.trim().to_string(); }
+            if live { log_line(log, "out", text); }
+        };
+        loop {
+            let n = r.read(&mut chunk).await.unwrap_or(0);
+            if n == 0 { break; }
+            buf.extend_from_slice(&chunk[..n]);
+            while let Some(i) = buf.iter().position(|&b| b == b'\n' || b == b'\r') {
+                let seg: Vec<u8> = buf.drain(..=i).collect();
+                let cr = seg[i] == b'\r';
+                // `\r\n` is one line break, and a bare `\r` (curl redrawing) is not a line.
+                if !(i == 0 && (cr || after_cr)) { line(&seg[..i], &log); }
+                after_cr = cr;
+            }
+        }
+        if !buf.is_empty() { line(&buf, &log); }
+        last
+    })
+}
+
+fn strip_ansi(s: &str) -> String {
+    let (mut out, mut chars) = (String::with_capacity(s.len()), s.chars());
+    while let Some(c) = chars.next() {
+        if c != '\x1b' { out.push(c); continue; }
+        if chars.next() == Some('[') {
+            for c in chars.by_ref() { if ('@'..='~').contains(&c) { break; } }
+        }
+    }
+    out
+}
+
+/// `######              42.3%` → 42.3
+fn curl_progress(line: &str) -> Option<f32> {
+    let n = line.trim().strip_suffix('%')?.trim_start_matches(['#', ' ']);
+    n.parse::<f32>().ok().filter(|p| (0.0..=100.0).contains(p))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_curl_progress_and_ignores_prose() {
+        assert_eq!(curl_progress("######                    42.3%"), Some(42.3));
+        assert_eq!(curl_progress("                           0.0%"), Some(0.0));
+        assert_eq!(curl_progress("################## 100.0%"), Some(100.0));
+        assert_eq!(curl_progress("Downloading 50%"), None);
+        assert_eq!(curl_progress("Installing opencode"), None);
+    }
+
+    #[test]
+    fn strips_installer_colours() {
+        assert_eq!(strip_ansi("\x1b[0;2mInstalling \x1b[0mopencode\x1b[0m"), "Installing opencode");
+        assert_eq!(strip_ansi("\x1b[38;5;214m###  12%\x1b[0m\x1b[?25l"), "###  12%");
+    }
+
+    #[tokio::test]
+    async fn pump_splits_lines_and_reports_progress() {
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = seen.clone();
+        let log: Log = Arc::new(move |v| sink.lock().unwrap().push(v));
+        let input: &[u8] = b"hello\r\n\n\r###  10.0%\r#####  55.0%\r\nfailed: no network\n";
+        let last = pump(input, log, None).await.unwrap();
+        assert_eq!(last, "failed: no network");
+        let seen = seen.lock().unwrap();
+        let texts: Vec<_> = seen.iter().filter_map(|v| v["text"].as_str()).collect();
+        assert_eq!(texts, ["hello", "", "failed: no network"]);
+        let pcts: Vec<_> = seen.iter().filter_map(|v| v["pct"].as_f64()).collect();
+        assert_eq!(pcts, [10.0, 55.0]);
+    }
 }
