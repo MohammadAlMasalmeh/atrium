@@ -1,0 +1,2361 @@
+{
+  "date": "2026-10-25",
+  "partial": true,
+  "method": "Windowed, real-site comparison of Google Chrome, the installed Aside, and this build.\n\nEach browser runs alone with a fresh profile and a visible, frontmost 1280x820\nwindow, the way a person would use it. Ten public sites are opened one at a time,\neach in a new foreground tab, and the page's own performance timeline gives the\nload times (TTFB, first contentful paint, DOMContentLoaded, load, largest\ncontentful paint), so harness overhead does not count. Memory is the summed\nphysical footprint (what Activity Monitor calls Memory) and RSS of the browser's\nprocess tree, plus WebKit XPC processes that appear while it runs (this build's\nshell is a WKWebView, whose processes are children of launchd, not of the app).\n\nMemory is sampled 60 s after the last site loaded (all ten tabs recently used)\nand again after 6 minutes idle, when each browser's own tab discarding (Chrome\nMemory Saver, this build's eviction) may have acted. Finally the first three tabs\nare selected again and timed until they are visible and loaded; for a discarded\ntab this includes the reload.\n\nThis takes over the screen: each browser is activated and must be frontmost with an\non-screen window before every site. Run it with no other browsers open.",
+  "window": [
+    1280,
+    820
+  ],
+  "live_at_s": 60,
+  "idle_at_s": 360,
+  "runs": [
+    {
+      "run": 1,
+      "order": [
+        "chrome",
+        "aside",
+        "atrium"
+      ],
+      "chrome": {
+        "browser": "Google Chrome",
+        "version": "Chrome/155.0.8059.85",
+        "startup_s": 1.25,
+        "system_before": {
+          "load_1m": 1.6,
+          "load_5m": 3.2,
+          "memory_free_percent": 56
+        },
+        "window": {
+          "activated": true,
+          "window": {
+            "y": 40,
+            "w": 1280,
+            "h": 820,
+            "x": 40
+          },
+          "frontmost": true
+        },
+        "memory_empty": {
+          "footprint_mib": 627.8,
+          "rss_mib": 1671.3,
+          "processes": 12,
+          "by_type": {
+            "browser": {
+              "count": 1,
+              "footprint_mib": 82.9
+            },
+            "extension_renderer": {
+              "count": 4,
+              "footprint_mib": 122.2
+            },
+            "gpu": {
+              "count": 1,
+              "footprint_mib": 192.2
+            },
+            "network": {
+              "count": 1,
+              "footprint_mib": 25.9
+            },
+            "renderer": {
+              "count": 4,
+              "footprint_mib": 185.8
+            },
+            "utility": {
+              "count": 1,
+              "footprint_mib": 18.7
+            }
+          }
+        },
+        "loads": [
+          {
+            "name": "Google Search",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908374206,
+              "url": "https://www.google.com/sorry/index",
+              "title": "https://www.google.com/search?q=chromium+browser&sei=VpzdapC6CIClqtsP-vrTuA8",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 329,
+              "nodes": 49,
+              "ttfb": 306,
+              "dcl": 319,
+              "load": 657,
+              "fcp": 368,
+              "lcp": 368,
+              "transfer_kib": 384,
+              "resources": 5,
+              "viewport": [
+                1280,
+                733
+              ]
+            }
+          },
+          {
+            "name": "YouTube",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908378905,
+              "url": "https://www.youtube.com/",
+              "title": "YouTube",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 151,
+              "nodes": 2017,
+              "ttfb": 140,
+              "dcl": 827,
+              "load": 1224,
+              "fcp": 320,
+              "lcp": 972,
+              "transfer_kib": 3366,
+              "resources": 132,
+              "viewport": [
+                1280,
+                733
+              ]
+            }
+          },
+          {
+            "name": "Gmail (signed out)",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908383267,
+              "url": "https://workspace.google.com/intl/en-US/gmail/",
+              "title": "Gmail: Secure, AI-Powered Email for Everyone | Google Workspace",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 3528,
+              "nodes": 884,
+              "ttfb": 319,
+              "dcl": 539,
+              "load": 1146,
+              "fcp": 592,
+              "lcp": 608,
+              "transfer_kib": 2662,
+              "resources": 97,
+              "viewport": [
+                1280,
+                733
+              ]
+            }
+          },
+          {
+            "name": "GitHub",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908387676,
+              "url": "https://github.com/tauri-apps/cef-rs",
+              "title": "GitHub - tauri-apps/cef-rs \u00b7 GitHub",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 6623,
+              "nodes": 2180,
+              "ttfb": 440,
+              "dcl": 875,
+              "load": 880,
+              "fcp": 764,
+              "lcp": 764,
+              "transfer_kib": 2024,
+              "resources": 193,
+              "viewport": [
+                1280,
+                733
+              ]
+            }
+          },
+          {
+            "name": "Wikipedia",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908391691,
+              "url": "https://en.wikipedia.org/wiki/Web_browser",
+              "title": "Web browser - Wikipedia",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 20359,
+              "nodes": 4170,
+              "ttfb": 182,
+              "dcl": 383,
+              "load": 590,
+              "fcp": 420,
+              "lcp": 420,
+              "transfer_kib": 513,
+              "resources": 36,
+              "viewport": [
+                1280,
+                733
+              ]
+            }
+          },
+          {
+            "name": "BBC News",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908395575,
+              "url": "https://www.bbc.com/news",
+              "title": "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 8387,
+              "nodes": 1475,
+              "ttfb": 67,
+              "dcl": 346,
+              "load": 1443,
+              "fcp": 200,
+              "lcp": 368,
+              "transfer_kib": 2437,
+              "resources": 173,
+              "viewport": [
+                1280,
+                733
+              ]
+            }
+          },
+          {
+            "name": "MDN",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908400053,
+              "url": "https://developer.mozilla.org/en-US/docs/Web/API",
+              "title": "Web APIs | MDN",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 22308,
+              "nodes": 4397,
+              "ttfb": 58,
+              "dcl": 163,
+              "load": 170,
+              "fcp": 240,
+              "lcp": 240,
+              "transfer_kib": 352,
+              "resources": 74,
+              "viewport": [
+                1280,
+                733
+              ]
+            }
+          },
+          {
+            "name": "Stack Overflow",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908404436,
+              "url": "https://stackoverflow.com/questions/tagged/rust",
+              "title": "Newest 'rust' Questions - Stack Overflow",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 9016,
+              "nodes": 1673,
+              "ttfb": 100,
+              "dcl": 301,
+              "load": 7386,
+              "fcp": 240,
+              "lcp": 308,
+              "transfer_kib": 1565,
+              "resources": 250,
+              "viewport": [
+                1280,
+                733
+              ]
+            }
+          },
+          {
+            "name": "Reddit",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908412736,
+              "url": "https://www.reddit.com/r/rust/",
+              "title": "Reddit - Prove your humanity",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 240,
+              "nodes": 44,
+              "ttfb": 68,
+              "dcl": 149,
+              "load": 292,
+              "fcp": 224,
+              "lcp": 224,
+              "transfer_kib": 167,
+              "resources": 5,
+              "viewport": [
+                1280,
+                733
+              ]
+            }
+          },
+          {
+            "name": "Hacker News",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908416024,
+              "url": "https://news.ycombinator.com/",
+              "title": "Hacker News",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 4237,
+              "nodes": 821,
+              "ttfb": 206,
+              "dcl": 285,
+              "load": 324,
+              "fcp": 320,
+              "lcp": 320,
+              "transfer_kib": 12,
+              "resources": 6,
+              "viewport": [
+                1280,
+                733
+              ]
+            }
+          }
+        ],
+        "tabs_open": 10,
+        "memory_live": {
+          "footprint_mib": 3272.4,
+          "rss_mib": 7780.4,
+          "processes": 67.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "footprint_mib": 286.2
+            },
+            "gpu": {
+              "count": 1.0,
+              "footprint_mib": 146.4
+            },
+            "network": {
+              "count": 1.0,
+              "footprint_mib": 67.0
+            },
+            "renderer": {
+              "count": 60.0,
+              "footprint_mib": 2675.5
+            },
+            "utility": {
+              "count": 4.0,
+              "footprint_mib": 96.7
+            }
+          }
+        },
+        "memory_idle": {
+          "footprint_mib": 2904.4,
+          "rss_mib": 6632.5,
+          "processes": 58.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "footprint_mib": 265.2
+            },
+            "gpu": {
+              "count": 1.0,
+              "footprint_mib": 145.7
+            },
+            "network": {
+              "count": 1.0,
+              "footprint_mib": 65.1
+            },
+            "renderer": {
+              "count": 52.0,
+              "footprint_mib": 2352.8
+            },
+            "utility": {
+              "count": 3.0,
+              "footprint_mib": 76.0
+            }
+          }
+        },
+        "switch_back": [
+          {
+            "name": "Google Search",
+            "seconds": 0.22,
+            "seconds_minus_overhead": 0.14,
+            "state": {
+              "origin": 1792908374206,
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 329,
+              "load": 657,
+              "reloaded": false
+            }
+          },
+          {
+            "name": "YouTube",
+            "seconds": 0.18,
+            "seconds_minus_overhead": 0.1,
+            "state": {
+              "origin": 1792908378905,
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 151,
+              "load": 1224,
+              "reloaded": false
+            }
+          },
+          {
+            "name": "Gmail (signed out)",
+            "seconds": 0.19,
+            "seconds_minus_overhead": 0.11,
+            "state": {
+              "origin": 1792908383267,
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 3528,
+              "load": 1146,
+              "reloaded": false
+            }
+          }
+        ],
+        "eval_round_trip_s": 0.079,
+        "system_after": {
+          "load_1m": 2.0,
+          "load_5m": 3.0,
+          "memory_free_percent": 47
+        }
+      },
+      "aside": {
+        "browser": "Aside",
+        "version": "Chrome/154.0.8037.100",
+        "startup_s": 11.64,
+        "system_before": {
+          "load_1m": 4.0,
+          "load_5m": 3.4,
+          "memory_free_percent": 57
+        },
+        "window": {
+          "frontmost": true,
+          "activated": true,
+          "window": {
+            "w": 1280,
+            "h": 820,
+            "x": 40,
+            "y": 40
+          }
+        },
+        "memory_empty": {
+          "footprint_mib": 997.0,
+          "rss_mib": 1502.9,
+          "processes": 9,
+          "by_type": {
+            "browser": {
+              "count": 1,
+              "footprint_mib": 91.9
+            },
+            "extension_renderer": {
+              "count": 2,
+              "footprint_mib": 314.4
+            },
+            "gpu": {
+              "count": 1,
+              "footprint_mib": 428.1
+            },
+            "network": {
+              "count": 1,
+              "footprint_mib": 27.6
+            },
+            "renderer": {
+              "count": 3,
+              "footprint_mib": 114.4
+            },
+            "utility": {
+              "count": 1,
+              "footprint_mib": 20.7
+            }
+          }
+        },
+        "loads": [
+          {
+            "name": "Google Search",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908825019,
+              "url": "https://www.google.com/sorry/index",
+              "title": "https://www.google.com/search?q=chromium+browser&sei=GJ7darW_Mv2nqtsPiISl-Q0",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 329,
+              "nodes": 49,
+              "ttfb": 412,
+              "dcl": 429,
+              "load": 797,
+              "fcp": 492,
+              "lcp": 492,
+              "transfer_kib": 385,
+              "resources": 5,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "YouTube",
+            "timed_out": true,
+            "problem": "DevTools timeout: Runtime.evaluate",
+            "page": "DevTools timeout: Runtime.evaluate"
+          },
+          {
+            "name": "Gmail (signed out)",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908871596,
+              "url": "https://workspace.google.com/intl/en-US/gmail/",
+              "title": "Gmail: Secure, AI-Powered Email for Everyone | Google Workspace",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 3507,
+              "nodes": 883,
+              "ttfb": 332,
+              "dcl": 458,
+              "load": 1228,
+              "fcp": 664,
+              "lcp": 696,
+              "transfer_kib": 2819,
+              "resources": 107,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "GitHub",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908876042,
+              "url": "https://github.com/tauri-apps/cef-rs",
+              "title": "GitHub - tauri-apps/cef-rs \u00b7 GitHub",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 6521,
+              "nodes": 2180,
+              "ttfb": 491,
+              "dcl": 982,
+              "load": 1049,
+              "fcp": 768,
+              "lcp": 852,
+              "transfer_kib": 2024,
+              "resources": 193,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "Wikipedia",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908880132,
+              "url": "https://en.wikipedia.org/wiki/Web_browser",
+              "title": "Web browser - Wikipedia",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 21925,
+              "nodes": 4676,
+              "ttfb": 203,
+              "dcl": 413,
+              "load": 719,
+              "fcp": 444,
+              "lcp": 444,
+              "transfer_kib": 550,
+              "resources": 33,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "BBC News",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908884183,
+              "url": "https://www.bbc.com/news",
+              "title": "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 8209,
+              "nodes": 1438,
+              "ttfb": 97,
+              "dcl": 453,
+              "load": 1885,
+              "fcp": 260,
+              "lcp": 496,
+              "transfer_kib": 2261,
+              "resources": 175,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "MDN",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908889169,
+              "url": "https://developer.mozilla.org/en-US/docs/Web/API",
+              "title": "Web APIs | MDN",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 22252,
+              "nodes": 4397,
+              "ttfb": 173,
+              "dcl": 337,
+              "load": 462,
+              "fcp": 456,
+              "lcp": 456,
+              "transfer_kib": 355,
+              "resources": 74,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "Stack Overflow",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908893668,
+              "url": "https://stackoverflow.com/questions/tagged/rust",
+              "title": "Newest 'rust' Questions - Stack Overflow",
+              "ready": "interactive",
+              "visibility": "visible",
+              "textLength": 9436,
+              "nodes": 3340,
+              "ttfb": 98,
+              "dcl": 419,
+              "load": null,
+              "fcp": 344,
+              "lcp": 624,
+              "transfer_kib": 1616,
+              "resources": 250,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "Reddit",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908923110,
+              "url": "https://www.reddit.com/r/rust/",
+              "title": "Reddit - Prove your humanity",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 240,
+              "nodes": 44,
+              "ttfb": 118,
+              "dcl": 235,
+              "load": 553,
+              "fcp": 952,
+              "lcp": 952,
+              "transfer_kib": 167,
+              "resources": 5,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "Hacker News",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792908926960,
+              "url": "https://news.ycombinator.com/",
+              "title": "Hacker News",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 4225,
+              "nodes": 821,
+              "ttfb": 236,
+              "dcl": 330,
+              "load": 391,
+              "fcp": 368,
+              "lcp": 368,
+              "transfer_kib": 12,
+              "resources": 6,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          }
+        ],
+        "tabs_open": 10,
+        "memory_live": {
+          "footprint_mib": 4649.4,
+          "rss_mib": 9973.5,
+          "processes": 82.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "footprint_mib": 415.2
+            },
+            "extension_renderer": {
+              "count": 2.0,
+              "footprint_mib": 182.4
+            },
+            "gpu": {
+              "count": 1.0,
+              "footprint_mib": 291.6
+            },
+            "network": {
+              "count": 1.0,
+              "footprint_mib": 100.8
+            },
+            "other": {
+              "count": 2.0,
+              "footprint_mib": 156.5
+            },
+            "renderer": {
+              "count": 72.0,
+              "footprint_mib": 3422.7
+            },
+            "utility": {
+              "count": 3.0,
+              "footprint_mib": 79.8
+            }
+          }
+        },
+        "memory_idle": {
+          "footprint_mib": 3774.6,
+          "rss_mib": 7674.8,
+          "processes": 63.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "footprint_mib": 340.8
+            },
+            "extension_renderer": {
+              "count": 2.0,
+              "footprint_mib": 183.3
+            },
+            "gpu": {
+              "count": 1.0,
+              "footprint_mib": 285.9
+            },
+            "network": {
+              "count": 1.0,
+              "footprint_mib": 88.2
+            },
+            "other": {
+              "count": 1.0,
+              "footprint_mib": 133.2
+            },
+            "renderer": {
+              "count": 54.0,
+              "footprint_mib": 2664.5
+            },
+            "utility": {
+              "count": 3.0,
+              "footprint_mib": 78.6
+            }
+          }
+        },
+        "switch_back": [
+          {
+            "name": "Google Search",
+            "seconds": 0.22,
+            "seconds_minus_overhead": 0.14,
+            "state": {
+              "origin": 1792908825019,
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 329,
+              "load": 797,
+              "reloaded": false
+            }
+          },
+          {
+            "name": "YouTube",
+            "seconds": null,
+            "seconds_minus_overhead": null,
+            "state": "DevTools timeout: Runtime.evaluate"
+          },
+          {
+            "name": "Gmail (signed out)",
+            "seconds": 0.22,
+            "seconds_minus_overhead": 0.14,
+            "state": {
+              "origin": 1792908871596,
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 3507,
+              "load": 1228,
+              "reloaded": false
+            }
+          }
+        ],
+        "eval_round_trip_s": 0.079,
+        "system_after": {
+          "load_1m": 2.2,
+          "load_5m": 2.9,
+          "memory_free_percent": 45
+        }
+      },
+      "atrium": {
+        "browser": "Atrium",
+        "version": "Atrium (this repository, release)",
+        "startup_s": 3.18,
+        "system_before": {
+          "load_1m": 20.7,
+          "load_5m": 7.0,
+          "memory_free_percent": 54
+        },
+        "window": {
+          "window": {
+            "w": 1280,
+            "x": 215,
+            "y": 75,
+            "h": 820
+          },
+          "activated": true,
+          "frontmost": true
+        },
+        "memory_empty": {
+          "footprint_mib": 179.4,
+          "rss_mib": 505.2,
+          "processes": 7,
+          "by_type": {
+            "browser": {
+              "count": 1,
+              "footprint_mib": 55.0
+            },
+            "gpu": {
+              "count": 1,
+              "footprint_mib": 27.2
+            },
+            "network": {
+              "count": 1,
+              "footprint_mib": 24.5
+            },
+            "utility": {
+              "count": 1,
+              "footprint_mib": 19.3
+            },
+            "webkit": {
+              "count": 3,
+              "footprint_mib": 53.4
+            }
+          }
+        },
+        "loads": [
+          {
+            "name": "Google Search",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 463,
+              "fcp": 188,
+              "lcp": 1192,
+              "load": 1655,
+              "nodes": 4981,
+              "origin": 1792909367295,
+              "ready": "complete",
+              "resources": 120,
+              "textLength": 7133,
+              "title": "chromium browser - Google Search",
+              "transfer_kib": 2131,
+              "ttfb": 86,
+              "url": "https://www.google.com/search",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "YouTube",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 1774,
+              "fcp": 548,
+              "lcp": 2108,
+              "load": 1863,
+              "nodes": 2045,
+              "origin": 1792909373347,
+              "ready": "complete",
+              "resources": 133,
+              "textLength": 151,
+              "title": "YouTube",
+              "transfer_kib": 3255,
+              "ttfb": 137,
+              "url": "https://www.youtube.com/",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "Gmail (signed out)",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 468,
+              "fcp": 1032,
+              "lcp": 1680,
+              "load": 1650,
+              "nodes": 884,
+              "origin": 1792909378273,
+              "ready": "complete",
+              "resources": 98,
+              "textLength": 3507,
+              "title": "Gmail: Secure, AI-Powered Email for Everyone | Google Workspace",
+              "transfer_kib": 2662,
+              "ttfb": 293,
+              "url": "https://workspace.google.com/intl/en-US/gmail/",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "GitHub",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 835,
+              "fcp": 708,
+              "lcp": 708,
+              "load": 880,
+              "nodes": 2180,
+              "origin": 1792909382678,
+              "ready": "complete",
+              "resources": 193,
+              "textLength": 6592,
+              "title": "GitHub - tauri-apps/cef-rs \u00b7 GitHub",
+              "transfer_kib": 2009,
+              "ttfb": 432,
+              "url": "https://github.com/tauri-apps/cef-rs",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "Wikipedia",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 504,
+              "fcp": 568,
+              "lcp": 568,
+              "load": 672,
+              "nodes": 4170,
+              "origin": 1792909386571,
+              "ready": "complete",
+              "resources": 31,
+              "textLength": 20106,
+              "title": "Web browser - Wikipedia",
+              "transfer_kib": 645,
+              "ttfb": 210,
+              "url": "https://en.wikipedia.org/wiki/Web_browser",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "BBC News",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 399,
+              "fcp": 132,
+              "lcp": 404,
+              "load": 3346,
+              "nodes": 1471,
+              "origin": 1792909390050,
+              "ready": "complete",
+              "resources": 178,
+              "textLength": 8411,
+              "title": "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
+              "transfer_kib": 2362,
+              "ttfb": 60,
+              "url": "https://www.bbc.com/news",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "MDN",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 171,
+              "fcp": 340,
+              "lcp": 340,
+              "load": 178,
+              "nodes": 4397,
+              "origin": 1792909396148,
+              "ready": "complete",
+              "resources": 73,
+              "textLength": 22252,
+              "title": "Web APIs | MDN",
+              "transfer_kib": 359,
+              "ttfb": 55,
+              "url": "https://developer.mozilla.org/en-US/docs/Web/API",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "Stack Overflow",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 620,
+              "fcp": 848,
+              "lcp": 848,
+              "load": 1527,
+              "nodes": 3320,
+              "origin": 1792909401475,
+              "ready": "complete",
+              "resources": 94,
+              "textLength": 9883,
+              "title": "Newest 'rust' Questions - Stack Overflow",
+              "transfer_kib": 1004,
+              "ttfb": 110,
+              "url": "https://stackoverflow.com/questions/tagged/rust",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "Reddit",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 640,
+              "fcp": 3368,
+              "lcp": 3368,
+              "load": 4688,
+              "nodes": 3482,
+              "origin": 1792909404148,
+              "ready": "complete",
+              "resources": 81,
+              "textLength": 29272,
+              "title": "The Rust Programming Language",
+              "transfer_kib": 1289,
+              "ttfb": 106,
+              "url": "https://www.reddit.com/r/rust/",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "Hacker News",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 280,
+              "fcp": 340,
+              "lcp": 340,
+              "load": 313,
+              "nodes": 821,
+              "origin": 1792909412013,
+              "ready": "complete",
+              "resources": 7,
+              "textLength": 4261,
+              "title": "Hacker News",
+              "transfer_kib": 12,
+              "ttfb": 191,
+              "url": "https://news.ycombinator.com/",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          }
+        ],
+        "tabs_open": 10,
+        "memory_live": {
+          "footprint_mib": 4975.4,
+          "rss_mib": 9015.9,
+          "processes": 92.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "footprint_mib": 625.0
+            },
+            "gpu": {
+              "count": 1.0,
+              "footprint_mib": 184.5
+            },
+            "network": {
+              "count": 1.0,
+              "footprint_mib": 113.8
+            },
+            "other": {
+              "count": 1.0,
+              "footprint_mib": 0.0
+            },
+            "renderer": {
+              "count": 82.5,
+              "footprint_mib": 3857.4
+            },
+            "utility": {
+              "count": 3.0,
+              "footprint_mib": 77.3
+            },
+            "webkit": {
+              "count": 3.0,
+              "footprint_mib": 69.3
+            }
+          }
+        },
+        "atrium_live": {
+          "live_renderers": 6,
+          "not_live": 4
+        },
+        "memory_idle": {
+          "footprint_mib": 2472.8,
+          "rss_mib": 4882.9,
+          "processes": 48.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "footprint_mib": 380.5
+            },
+            "gpu": {
+              "count": 1.0,
+              "footprint_mib": 124.4
+            },
+            "network": {
+              "count": 1.0,
+              "footprint_mib": 91.6
+            },
+            "renderer": {
+              "count": 39.0,
+              "footprint_mib": 1717.5
+            },
+            "utility": {
+              "count": 3.0,
+              "footprint_mib": 73.4
+            },
+            "webkit": {
+              "count": 3.0,
+              "footprint_mib": 85.4
+            }
+          }
+        },
+        "atrium_idle": {
+          "live_renderers": 3,
+          "not_live": 7
+        },
+        "switch_back": [
+          {
+            "name": "Google Search",
+            "seconds": 3.87,
+            "seconds_minus_overhead": 3.86,
+            "state": {
+              "load": 3786,
+              "origin": 1792909790653,
+              "ready": "complete",
+              "textLength": 7152,
+              "visibility": "visible",
+              "reloaded": true
+            }
+          },
+          {
+            "name": "YouTube",
+            "seconds": 0.95,
+            "seconds_minus_overhead": 0.94,
+            "state": {
+              "load": 809,
+              "origin": 1792909795525,
+              "ready": "complete",
+              "textLength": 121,
+              "visibility": "visible",
+              "reloaded": true
+            }
+          },
+          {
+            "name": "Gmail (signed out)",
+            "seconds": 0.66,
+            "seconds_minus_overhead": 0.65,
+            "state": {
+              "load": 630,
+              "origin": 1792909797470,
+              "ready": "complete",
+              "textLength": 3507,
+              "visibility": "visible",
+              "reloaded": true
+            }
+          }
+        ],
+        "eval_round_trip_s": 0.007,
+        "system_after": {
+          "load_1m": 9.2,
+          "load_5m": 9.4,
+          "memory_free_percent": 47
+        }
+      }
+    },
+    {
+      "run": 2,
+      "order": [
+        "aside",
+        "atrium",
+        "chrome"
+      ],
+      "aside": {
+        "browser": "Aside",
+        "version": "Chrome/154.0.8037.100",
+        "startup_s": 11.35,
+        "system_before": {
+          "load_1m": 7.9,
+          "load_5m": 9.1,
+          "memory_free_percent": 57
+        },
+        "window": {
+          "frontmost": true,
+          "activated": true,
+          "window": {
+            "h": 820,
+            "x": 40,
+            "w": 1280,
+            "y": 40
+          }
+        },
+        "memory_empty": {
+          "footprint_mib": 953.4,
+          "rss_mib": 1563.3,
+          "processes": 9,
+          "by_type": {
+            "browser": {
+              "count": 1,
+              "footprint_mib": 91.4
+            },
+            "extension_renderer": {
+              "count": 2,
+              "footprint_mib": 294.0
+            },
+            "gpu": {
+              "count": 1,
+              "footprint_mib": 410.5
+            },
+            "network": {
+              "count": 1,
+              "footprint_mib": 27.6
+            },
+            "renderer": {
+              "count": 3,
+              "footprint_mib": 109.1
+            },
+            "utility": {
+              "count": 1,
+              "footprint_mib": 20.7
+            }
+          }
+        },
+        "loads": [
+          {
+            "name": "Google Search",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792909824768,
+              "url": "https://www.google.com/sorry/index",
+              "title": "https://www.google.com/search?q=chromium+browser&sei=AKLdatqtKfqtmtkP5-WbkQU",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 329,
+              "nodes": 49,
+              "ttfb": 313,
+              "dcl": 327,
+              "load": 700,
+              "fcp": 388,
+              "lcp": 388,
+              "transfer_kib": 388,
+              "resources": 5,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "YouTube",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792909829379,
+              "url": "https://www.youtube.com/",
+              "title": "YouTube",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 151,
+              "nodes": 2011,
+              "ttfb": 109,
+              "dcl": 1028,
+              "load": 1925,
+              "fcp": 292,
+              "lcp": 1208,
+              "transfer_kib": 3343,
+              "resources": 131,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "Gmail (signed out)",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792909834530,
+              "url": "https://workspace.google.com/intl/en-US/gmail/",
+              "title": "Gmail: Secure, AI-Powered Email for Everyone | Google Workspace",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 3507,
+              "nodes": 884,
+              "ttfb": 293,
+              "dcl": 501,
+              "load": 1327,
+              "fcp": 556,
+              "lcp": 576,
+              "transfer_kib": 2819,
+              "resources": 107,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "GitHub",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792909838778,
+              "url": "https://github.com/tauri-apps/cef-rs",
+              "title": "GitHub - tauri-apps/cef-rs \u00b7 GitHub",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 6521,
+              "nodes": 2180,
+              "ttfb": 503,
+              "dcl": 1098,
+              "load": 1337,
+              "fcp": 896,
+              "lcp": 1012,
+              "transfer_kib": 2024,
+              "resources": 193,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "Wikipedia",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792909843588,
+              "url": "https://en.wikipedia.org/wiki/Web_browser",
+              "title": "Web browser - Wikipedia",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 20106,
+              "nodes": 4170,
+              "ttfb": 207,
+              "dcl": 453,
+              "load": 699,
+              "fcp": 500,
+              "lcp": 500,
+              "transfer_kib": 509,
+              "resources": 29,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "BBC News",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792909847471,
+              "url": "https://www.bbc.com/news",
+              "title": "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 8202,
+              "nodes": 1437,
+              "ttfb": 93,
+              "dcl": 593,
+              "load": 1666,
+              "fcp": 232,
+              "lcp": 400,
+              "transfer_kib": 2256,
+              "resources": 165,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "MDN",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792909852524,
+              "url": "https://developer.mozilla.org/en-US/docs/Web/API",
+              "title": "Web APIs | MDN",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 22252,
+              "nodes": 4397,
+              "ttfb": 131,
+              "dcl": 445,
+              "load": 582,
+              "fcp": 548,
+              "lcp": 548,
+              "transfer_kib": 352,
+              "resources": 74,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "Stack Overflow",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792909857671,
+              "url": "https://stackoverflow.com/questions/tagged/rust",
+              "title": "Newest 'rust' Questions - Stack Overflow",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 10063,
+              "nodes": 3337,
+              "ttfb": 131,
+              "dcl": 864,
+              "load": 1520,
+              "fcp": 668,
+              "lcp": 752,
+              "transfer_kib": 1353,
+              "resources": 151,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "Reddit",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792909863489,
+              "url": "https://www.reddit.com/r/rust/",
+              "title": "Reddit - Prove your humanity",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 240,
+              "nodes": 44,
+              "ttfb": 150,
+              "dcl": 346,
+              "load": 730,
+              "fcp": 468,
+              "lcp": 468,
+              "transfer_kib": 515,
+              "resources": 5,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          },
+          {
+            "name": "Hacker News",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "origin": 1792909867527,
+              "url": "https://news.ycombinator.com/",
+              "title": "Hacker News",
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 4263,
+              "nodes": 821,
+              "ttfb": 231,
+              "dcl": 328,
+              "load": 391,
+              "fcp": 360,
+              "lcp": 360,
+              "transfer_kib": 12,
+              "resources": 6,
+              "viewport": [
+                1000,
+                778
+              ]
+            }
+          }
+        ],
+        "tabs_open": 10,
+        "memory_live": {
+          "footprint_mib": 4960.8,
+          "rss_mib": 10741.2,
+          "processes": 87.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "footprint_mib": 440.1
+            },
+            "extension_renderer": {
+              "count": 2.0,
+              "footprint_mib": 177.2
+            },
+            "gpu": {
+              "count": 1.0,
+              "footprint_mib": 228.8
+            },
+            "network": {
+              "count": 1.0,
+              "footprint_mib": 107.7
+            },
+            "other": {
+              "count": 2.0,
+              "footprint_mib": 152.9
+            },
+            "renderer": {
+              "count": 77.0,
+              "footprint_mib": 3775.4
+            },
+            "utility": {
+              "count": 3.0,
+              "footprint_mib": 78.5
+            }
+          }
+        },
+        "memory_idle": {
+          "footprint_mib": 3582.5,
+          "rss_mib": 7015.1,
+          "processes": 56.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "footprint_mib": 370.7
+            },
+            "extension_renderer": {
+              "count": 2.0,
+              "footprint_mib": 177.8
+            },
+            "gpu": {
+              "count": 1.0,
+              "footprint_mib": 220.6
+            },
+            "network": {
+              "count": 1.0,
+              "footprint_mib": 94.7
+            },
+            "other": {
+              "count": 1.0,
+              "footprint_mib": 140.0
+            },
+            "renderer": {
+              "count": 47.0,
+              "footprint_mib": 2501.9
+            },
+            "utility": {
+              "count": 3.0,
+              "footprint_mib": 76.7
+            }
+          }
+        },
+        "switch_back": [
+          {
+            "name": "Google Search",
+            "seconds": 0.21,
+            "seconds_minus_overhead": 0.13,
+            "state": {
+              "origin": 1792909824768,
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 329,
+              "load": 700,
+              "reloaded": false
+            }
+          },
+          {
+            "name": "YouTube",
+            "seconds": 0.23,
+            "seconds_minus_overhead": 0.15,
+            "state": {
+              "origin": 1792909829379,
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 151,
+              "load": 1925,
+              "reloaded": false
+            }
+          },
+          {
+            "name": "Gmail (signed out)",
+            "seconds": 0.23,
+            "seconds_minus_overhead": 0.15,
+            "state": {
+              "origin": 1792909834530,
+              "ready": "complete",
+              "visibility": "visible",
+              "textLength": 3507,
+              "load": 1327,
+              "reloaded": false
+            }
+          }
+        ],
+        "eval_round_trip_s": 0.08,
+        "system_after": {
+          "load_1m": 2.0,
+          "load_5m": 4.2,
+          "memory_free_percent": 44
+        }
+      },
+      "atrium": {
+        "browser": "Atrium",
+        "version": "Atrium (this repository, release)",
+        "startup_s": 3.37,
+        "system_before": {
+          "load_1m": 1.8,
+          "load_5m": 4.1,
+          "memory_free_percent": 54
+        },
+        "window": {
+          "frontmost": true,
+          "window": {
+            "y": 75,
+            "w": 1280,
+            "x": 215,
+            "h": 820
+          },
+          "activated": true
+        },
+        "memory_empty": {
+          "footprint_mib": 182.9,
+          "rss_mib": 504.3,
+          "processes": 7,
+          "by_type": {
+            "browser": {
+              "count": 1,
+              "footprint_mib": 58.2
+            },
+            "gpu": {
+              "count": 1,
+              "footprint_mib": 27.6
+            },
+            "network": {
+              "count": 1,
+              "footprint_mib": 24.5
+            },
+            "utility": {
+              "count": 1,
+              "footprint_mib": 19.4
+            },
+            "webkit": {
+              "count": 3,
+              "footprint_mib": 53.2
+            }
+          }
+        },
+        "loads": [
+          {
+            "name": "Google Search",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 671,
+              "fcp": 204,
+              "lcp": 556,
+              "load": 1607,
+              "nodes": 4981,
+              "origin": 1792910267659,
+              "ready": "complete",
+              "resources": 120,
+              "textLength": 7133,
+              "title": "chromium browser - Google Search",
+              "transfer_kib": 2112,
+              "ttfb": 77,
+              "url": "https://www.google.com/search",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "YouTube",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 1622,
+              "fcp": 320,
+              "lcp": 1952,
+              "load": 1675,
+              "nodes": 2045,
+              "origin": 1792910273495,
+              "ready": "complete",
+              "resources": 138,
+              "textLength": 151,
+              "title": "YouTube",
+              "transfer_kib": 3253,
+              "ttfb": 116,
+              "url": "https://www.youtube.com/",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "Gmail (signed out)",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 497,
+              "fcp": 568,
+              "lcp": 736,
+              "load": 1415,
+              "nodes": 884,
+              "origin": 1792910278261,
+              "ready": "complete",
+              "resources": 98,
+              "textLength": 3507,
+              "title": "Gmail: Secure, AI-Powered Email for Everyone | Google Workspace",
+              "transfer_kib": 2662,
+              "ttfb": 295,
+              "url": "https://workspace.google.com/intl/en-US/gmail/",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "GitHub",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 924,
+              "fcp": 764,
+              "lcp": 764,
+              "load": 929,
+              "nodes": 2180,
+              "origin": 1792910282534,
+              "ready": "complete",
+              "resources": 193,
+              "textLength": 6592,
+              "title": "GitHub - tauri-apps/cef-rs \u00b7 GitHub",
+              "transfer_kib": 2009,
+              "ttfb": 476,
+              "url": "https://github.com/tauri-apps/cef-rs",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "Wikipedia",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 395,
+              "fcp": 436,
+              "lcp": 436,
+              "load": 529,
+              "nodes": 4168,
+              "origin": 1792910286178,
+              "ready": "complete",
+              "resources": 31,
+              "textLength": 20106,
+              "title": "Web browser - Wikipedia",
+              "transfer_kib": 645,
+              "ttfb": 178,
+              "url": "https://en.wikipedia.org/wiki/Web_browser",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "BBC News",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 551,
+              "fcp": 136,
+              "lcp": 272,
+              "load": 2300,
+              "nodes": 1471,
+              "origin": 1792910289527,
+              "ready": "complete",
+              "resources": 178,
+              "textLength": 8407,
+              "title": "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
+              "transfer_kib": 2362,
+              "ttfb": 60,
+              "url": "https://www.bbc.com/news",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "MDN",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 165,
+              "fcp": 252,
+              "lcp": 252,
+              "load": 173,
+              "nodes": 4397,
+              "origin": 1792910294861,
+              "ready": "complete",
+              "resources": 73,
+              "textLength": 22252,
+              "title": "Web APIs | MDN",
+              "transfer_kib": 350,
+              "ttfb": 55,
+              "url": "https://developer.mozilla.org/en-US/docs/Web/API",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "Stack Overflow",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 654,
+              "fcp": 440,
+              "lcp": 524,
+              "load": 1551,
+              "nodes": 3319,
+              "origin": 1792910300508,
+              "ready": "complete",
+              "resources": 96,
+              "textLength": 9917,
+              "title": "Newest 'rust' Questions - Stack Overflow",
+              "transfer_kib": 1227,
+              "ttfb": 96,
+              "url": "https://stackoverflow.com/questions/tagged/rust",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "Reddit",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 856,
+              "fcp": 896,
+              "lcp": 4096,
+              "load": 4697,
+              "nodes": 3481,
+              "origin": 1792910305099,
+              "ready": "complete",
+              "resources": 97,
+              "textLength": 28818,
+              "title": "The Rust Programming Language",
+              "transfer_kib": 1167,
+              "ttfb": 188,
+              "url": "https://www.reddit.com/r/rust/",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          },
+          {
+            "name": "Hacker News",
+            "timed_out": false,
+            "problem": null,
+            "page": {
+              "dcl": 272,
+              "fcp": 316,
+              "lcp": 316,
+              "load": 311,
+              "nodes": 821,
+              "origin": 1792910312513,
+              "ready": "complete",
+              "resources": 7,
+              "textLength": 4264,
+              "title": "Hacker News",
+              "transfer_kib": 11,
+              "ttfb": 185,
+              "url": "https://news.ycombinator.com/",
+              "viewport": [
+                1024,
+                808
+              ],
+              "visibility": "visible"
+            }
+          }
+        ],
+        "tabs_open": 10,
+        "memory_live": {
+          "footprint_mib": 5004.9,
+          "rss_mib": 9113.1,
+          "processes": 94.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "footprint_mib": 674.9
+            },
+            "gpu": {
+              "count": 1.0,
+              "footprint_mib": 188.1
+            },
+            "network": {
+              "count": 1.0,
+              "footprint_mib": 118.0
+            },
+            "other": {
+              "count": 1.5,
+              "footprint_mib": 0.0
+            },
+            "renderer": {
+              "count": 83.5,
+              "footprint_mib": 3845.1
+            },
+            "utility": {
+              "count": 3.0,
+              "footprint_mib": 78.2
+            },
+            "webkit": {
+              "count": 3.0,
+              "footprint_mib": 72.4
+            }
+          }
+        },
+        "atrium_live": {
+          "live_renderers": 6,
+          "not_live": 4
+        },
+        "memory_idle": {
+          "footprint_mib": 2363.1,
+          "rss_mib": 4073.4,
+          "processes": 41.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "footprint_mib": 440.7
+            },
+            "gpu": {
+              "count": 1.0,
+              "footprint_mib": 129.1
+            },
+            "network": {
+              "count": 1.0,
+              "footprint_mib": 95.8
+            },
+            "renderer": {
+              "count": 32.0,
+              "footprint_mib": 1539.2
+            },
+            "utility": {
+              "count": 3.0,
+              "footprint_mib": 74.6
+            },
+            "webkit": {
+              "count": 3.0,
+              "footprint_mib": 83.3
+            }
+          }
+        },
+        "atrium_idle": {
+          "live_renderers": 3,
+          "not_live": 7
+        },
+        "switch_back": [
+          {
+            "name": "Google Search",
+            "seconds": 1.85,
+            "seconds_minus_overhead": 1.84,
+            "state": {
+              "load": 1788,
+              "origin": 1792910690965,
+              "ready": "complete",
+              "textLength": 7152,
+              "visibility": "visible",
+              "reloaded": true
+            }
+          },
+          {
+            "name": "YouTube",
+            "seconds": 2.14,
+            "seconds_minus_overhead": 2.13,
+            "state": {
+              "load": 1661,
+              "origin": 1792910694094,
+              "ready": "complete",
+              "textLength": 121,
+              "visibility": "visible",
+              "reloaded": true
+            }
+          },
+          {
+            "name": "Gmail (signed out)",
+            "seconds": 0.85,
+            "seconds_minus_overhead": 0.84,
+            "state": {
+              "load": 789,
+              "origin": 1792910696998,
+              "ready": "complete",
+              "textLength": 3507,
+              "visibility": "visible",
+              "reloaded": true
+            }
+          }
+        ],
+        "eval_round_trip_s": 0.005,
+        "system_after": {
+          "load_1m": 2.8,
+          "load_5m": 7.2,
+          "memory_free_percent": 44
+        }
+      }
+    }
+  ],
+  "summary": {
+    "Aside": {
+      "runs": 2,
+      "startup_s": 11.5,
+      "empty_footprint_mib": 975.2,
+      "live_footprint_mib": 4805.1,
+      "live_rss_mib": 10357.4,
+      "live_processes": 84.5,
+      "idle_footprint_mib": 3678.6,
+      "idle_rss_mib": 7345.0,
+      "idle_processes": 59.5,
+      "live_footprint_runs": [
+        4649.4,
+        4960.8
+      ],
+      "idle_footprint_runs": [
+        3774.6,
+        3582.5
+      ],
+      "timing_ms_median_per_site": {
+        "ttfb": {
+          "Google Search": 362.5,
+          "YouTube": 109,
+          "Gmail (signed out)": 312.5,
+          "GitHub": 497.0,
+          "Wikipedia": 205.0,
+          "BBC News": 95.0,
+          "MDN": 152.0,
+          "Stack Overflow": 114.5,
+          "Reddit": 134.0,
+          "Hacker News": 233.5
+        },
+        "fcp": {
+          "Google Search": 440.0,
+          "YouTube": 292,
+          "Gmail (signed out)": 610.0,
+          "GitHub": 832.0,
+          "Wikipedia": 472.0,
+          "BBC News": 246.0,
+          "MDN": 502.0,
+          "Stack Overflow": 506.0,
+          "Reddit": 710.0,
+          "Hacker News": 364.0
+        },
+        "dcl": {
+          "Google Search": 378.0,
+          "YouTube": 1028,
+          "Gmail (signed out)": 479.5,
+          "GitHub": 1040.0,
+          "Wikipedia": 433.0,
+          "BBC News": 523.0,
+          "MDN": 391.0,
+          "Stack Overflow": 641.5,
+          "Reddit": 290.5,
+          "Hacker News": 329.0
+        },
+        "load": {
+          "Google Search": 748.5,
+          "YouTube": 1925,
+          "Gmail (signed out)": 1277.5,
+          "GitHub": 1193.0,
+          "Wikipedia": 709.0,
+          "BBC News": 1775.5,
+          "MDN": 522.0,
+          "Stack Overflow": 1520,
+          "Reddit": 641.5,
+          "Hacker News": 391.0
+        },
+        "lcp": {
+          "Google Search": 440.0,
+          "YouTube": 1208,
+          "Gmail (signed out)": 636.0,
+          "GitHub": 932.0,
+          "Wikipedia": 472.0,
+          "BBC News": 448.0,
+          "MDN": 502.0,
+          "Stack Overflow": 688.0,
+          "Reddit": 710.0,
+          "Hacker News": 364.0
+        }
+      },
+      "switch_back_s_minus_overhead": {
+        "Google Search": 0.1,
+        "YouTube": 0.1,
+        "Gmail (signed out)": 0.1
+      },
+      "switch_back_reloads": 0,
+      "switch_back_total": 6,
+      "problems": [
+        "YouTube: DevTools timeout: Runtime.evaluate"
+      ]
+    },
+    "Atrium": {
+      "runs": 2,
+      "startup_s": 3.3,
+      "empty_footprint_mib": 181.2,
+      "live_footprint_mib": 4990.1,
+      "live_rss_mib": 9064.5,
+      "live_processes": 93.0,
+      "idle_footprint_mib": 2417.9,
+      "idle_rss_mib": 4478.1,
+      "idle_processes": 44.5,
+      "live_footprint_runs": [
+        4975.4,
+        5004.9
+      ],
+      "idle_footprint_runs": [
+        2472.8,
+        2363.1
+      ],
+      "timing_ms_median_per_site": {
+        "ttfb": {
+          "Google Search": 81.5,
+          "YouTube": 126.5,
+          "Gmail (signed out)": 294.0,
+          "GitHub": 454.0,
+          "Wikipedia": 194.0,
+          "BBC News": 60.0,
+          "MDN": 55.0,
+          "Stack Overflow": 103.0,
+          "Reddit": 147.0,
+          "Hacker News": 188.0
+        },
+        "fcp": {
+          "Google Search": 196.0,
+          "YouTube": 434.0,
+          "Gmail (signed out)": 800.0,
+          "GitHub": 736.0,
+          "Wikipedia": 502.0,
+          "BBC News": 134.0,
+          "MDN": 296.0,
+          "Stack Overflow": 644.0,
+          "Reddit": 2132.0,
+          "Hacker News": 328.0
+        },
+        "dcl": {
+          "Google Search": 567.0,
+          "YouTube": 1698.0,
+          "Gmail (signed out)": 482.5,
+          "GitHub": 879.5,
+          "Wikipedia": 449.5,
+          "BBC News": 475.0,
+          "MDN": 168.0,
+          "Stack Overflow": 637.0,
+          "Reddit": 748.0,
+          "Hacker News": 276.0
+        },
+        "load": {
+          "Google Search": 1631.0,
+          "YouTube": 1769.0,
+          "Gmail (signed out)": 1532.5,
+          "GitHub": 904.5,
+          "Wikipedia": 600.5,
+          "BBC News": 2823.0,
+          "MDN": 175.5,
+          "Stack Overflow": 1539.0,
+          "Reddit": 4692.5,
+          "Hacker News": 312.0
+        },
+        "lcp": {
+          "Google Search": 874.0,
+          "YouTube": 2030.0,
+          "Gmail (signed out)": 1208.0,
+          "GitHub": 736.0,
+          "Wikipedia": 502.0,
+          "BBC News": 338.0,
+          "MDN": 296.0,
+          "Stack Overflow": 686.0,
+          "Reddit": 3732.0,
+          "Hacker News": 328.0
+        }
+      },
+      "switch_back_s_minus_overhead": {
+        "Google Search": 2.9,
+        "YouTube": 1.5,
+        "Gmail (signed out)": 0.7
+      },
+      "switch_back_reloads": 6,
+      "switch_back_total": 6,
+      "problems": []
+    },
+    "Google Chrome": {
+      "runs": 1,
+      "startup_s": 1.2,
+      "empty_footprint_mib": 627.8,
+      "live_footprint_mib": 3272.4,
+      "live_rss_mib": 7780.4,
+      "live_processes": 67.0,
+      "idle_footprint_mib": 2904.4,
+      "idle_rss_mib": 6632.5,
+      "idle_processes": 58.0,
+      "live_footprint_runs": [
+        3272.4
+      ],
+      "idle_footprint_runs": [
+        2904.4
+      ],
+      "timing_ms_median_per_site": {
+        "ttfb": {
+          "Google Search": 306,
+          "YouTube": 140,
+          "Gmail (signed out)": 319,
+          "GitHub": 440,
+          "Wikipedia": 182,
+          "BBC News": 67,
+          "MDN": 58,
+          "Stack Overflow": 100,
+          "Reddit": 68,
+          "Hacker News": 206
+        },
+        "fcp": {
+          "Google Search": 368,
+          "YouTube": 320,
+          "Gmail (signed out)": 592,
+          "GitHub": 764,
+          "Wikipedia": 420,
+          "BBC News": 200,
+          "MDN": 240,
+          "Stack Overflow": 240,
+          "Reddit": 224,
+          "Hacker News": 320
+        },
+        "dcl": {
+          "Google Search": 319,
+          "YouTube": 827,
+          "Gmail (signed out)": 539,
+          "GitHub": 875,
+          "Wikipedia": 383,
+          "BBC News": 346,
+          "MDN": 163,
+          "Stack Overflow": 301,
+          "Reddit": 149,
+          "Hacker News": 285
+        },
+        "load": {
+          "Google Search": 657,
+          "YouTube": 1224,
+          "Gmail (signed out)": 1146,
+          "GitHub": 880,
+          "Wikipedia": 590,
+          "BBC News": 1443,
+          "MDN": 170,
+          "Stack Overflow": 7386,
+          "Reddit": 292,
+          "Hacker News": 324
+        },
+        "lcp": {
+          "Google Search": 368,
+          "YouTube": 972,
+          "Gmail (signed out)": 608,
+          "GitHub": 764,
+          "Wikipedia": 420,
+          "BBC News": 368,
+          "MDN": 240,
+          "Stack Overflow": 308,
+          "Reddit": 224,
+          "Hacker News": 320
+        }
+      },
+      "switch_back_s_minus_overhead": {
+        "Google Search": 0.1,
+        "YouTube": 0.1,
+        "Gmail (signed out)": 0.1
+      },
+      "switch_back_reloads": 0,
+      "switch_back_total": 3,
+      "problems": []
+    }
+  }
+}

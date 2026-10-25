@@ -7,6 +7,9 @@ pub struct Candidate {
     pub visible: bool,
     pub loading: bool,
     pub protected: bool,
+    /// Frames in the page, counting subframes: a cheap stand-in for its memory cost,
+    /// since each cross-site frame gets its own renderer process.
+    pub frames: usize,
 }
 #[derive(Clone, Debug)]
 pub struct Policy {
@@ -29,7 +32,9 @@ impl Policy {
             .iter()
             .filter(|t| !t.visible && !t.loading && !t.protected && t.idle >= self.minimum_idle)
             .collect();
-        eligible.sort_by_key(|t| std::cmp::Reverse(t.idle));
+        // Over budget, the heaviest pages go first. Ad-heavy pages hold dozens of frames
+        // and keep spawning more while hidden; evicting a light page saves little.
+        eligible.sort_by_key(|t| (std::cmp::Reverse(t.frames), std::cmp::Reverse(t.idle)));
         let over_budget = tabs.len().saturating_sub(self.max_live_tabs);
         eligible
             .into_iter()
@@ -49,6 +54,7 @@ mod tests {
             visible: false,
             loading: false,
             protected: false,
+            frames: 1,
         }
     }
     #[test]
@@ -76,6 +82,19 @@ mod tests {
         }
         .candidates(&[a, b, c])
         .is_empty());
+    }
+    #[test]
+    fn evicts_heaviest_background_pages_first() {
+        let mut heavy = tab(3, 40);
+        heavy.frames = 60;
+        assert_eq!(
+            Policy {
+                max_live_tabs: 2,
+                ..Default::default()
+            }
+            .candidates(&[tab(1, 90), tab(2, 80), heavy]),
+            vec![3]
+        );
     }
     #[test]
     fn idle_tabs_are_released_even_when_under_budget() {

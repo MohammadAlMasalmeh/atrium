@@ -209,6 +209,8 @@ enum Event {
     Title(u64, String),
     Address(u64, String),
     Loading(u64, bool),
+    /// The main frame started loading a document (true) or failed to (false).
+    Document(u64, bool),
     Loaded(u64),
     Capture(u64, bool),
     Download(u64, u32, bool),
@@ -264,6 +266,9 @@ struct Tab {
     title: String,
     url: String,
     loading: bool,
+    /// The main document is loading. `loading` also covers subframes, and ad-heavy
+    /// pages keep adding iframes long after their own load, so it can stay true for good.
+    document_loading: bool,
     icon: Option<String>,
     scratch: bool,
     /// A Chromium browser exists or is being created for this tab.
@@ -301,6 +306,7 @@ impl Tab {
             title,
             url,
             loading: false,
+            document_loading: false,
             icon: None,
             scratch: false,
             live: false,
@@ -463,6 +469,7 @@ impl Manager {
                 tab.suspended = false;
                 tab.crashed = false;
                 tab.loading = true;
+                tab.document_loading = true;
             }
         }
     }
@@ -576,6 +583,7 @@ impl Manager {
             }
             t.url = url.clone();
             t.loading = true;
+            t.document_loading = true;
             t.scroll = None;
             t.last_used = Instant::now();
             if let Some(frame) = t.browser.as_ref().and_then(|b| b.main_frame()) {
@@ -961,6 +969,7 @@ impl Manager {
         tab.forward = newer;
         tab.scroll = None;
         tab.loading = true;
+        tab.document_loading = true;
         tab.last_used = Instant::now();
         tab.reopen = tab.browser.is_some();
         let live = tab.reopen;
@@ -1503,12 +1512,21 @@ impl Manager {
             Event::Loading(id, loading) => {
                 if let Some(t) = self.tab_mut(id) {
                     t.loading = loading;
+                    t.document_loading &= loading;
                     t.crashed &= !loading;
                 }
                 self.push(false);
             }
+            Event::Document(id, loading) => {
+                if let Some(t) = self.tab_mut(id) {
+                    t.document_loading = loading;
+                }
+            }
             Event::Crashed(id) => self.crashed(id),
             Event::Loaded(id) => {
+                if let Some(t) = self.tab_mut(id) {
+                    t.document_loading = false;
+                }
                 if id != SHELL && self.tab(id).is_some_and(|t| t.browser.is_some()) {
                     let scroll = self
                         .tab_mut(id)
@@ -1816,7 +1834,9 @@ wrap_display_handler! {struct HostDisplay {bridge:Bridge,id:u64} impl DisplayHan
 }}
 wrap_load_handler! {struct HostLoad {bridge:Bridge,id:u64} impl LoadHandler {
     fn on_loading_state_change(&self, _unused22:Option<&mut Browser>,loading:i32, _unused23:i32, _unused24:i32){self.bridge.send(Event::Loading(self.id,loading!=0));}
+    fn on_load_start(&self, _unused51:Option<&mut Browser>,frame:Option<&mut Frame>, _unused52:TransitionType){if frame.is_some_and(|f|f.is_main()!=0){self.bridge.send(Event::Document(self.id,true));}}
     fn on_load_end(&self, _unused25:Option<&mut Browser>,frame:Option<&mut Frame>, _unused26:i32){if frame.is_some_and(|f|f.is_main()!=0){self.bridge.send(Event::Loaded(self.id));}}
+    fn on_load_error(&self, _unused53:Option<&mut Browser>,frame:Option<&mut Frame>, _unused54:Errorcode, _unused55:Option<&CefString>, _unused56:Option<&CefString>){if frame.is_some_and(|f|f.is_main()!=0){self.bridge.send(Event::Document(self.id,false));}}
 }}
 wrap_dev_tools_message_observer! {struct DevObserver {bridge:Bridge,id:u64} impl DevToolsMessageObserver {
     fn on_dev_tools_method_result(&self, _unused27:Option<&mut Browser>,id:i32,success:i32,result:Option<&[u8]>){self.bridge.send(Event::DevResult(id,success!=0,result.and_then(|r|serde_json::from_slice(r).ok()).unwrap_or(Json::Null)));}
@@ -2000,7 +2020,7 @@ impl Manager {
         !self.linked(id) && self.tab(id).is_some_and(|t| {
             t.live
                 && !t.suspending
-                && !t.loading
+                && !t.document_loading
                 && !t.capture
                 && t.downloads.is_empty()
                 && t.agent_until <= Instant::now()
@@ -2034,7 +2054,8 @@ impl Manager {
                 id: t.id,
                 idle: now.saturating_duration_since(t.last_used),
                 visible: Some(t.id) == self.active || Some(t.id) == self.split,
-                loading: t.loading,
+                loading: t.document_loading,
+                frames: t.browser.as_ref().map_or(0, |b| b.frame_count()),
                 protected: t.capture
                     || self.linked(t.id)
                     || !t.downloads.is_empty()
