@@ -131,6 +131,13 @@ pub enum Op {
         body: Json,
         reply: Reply<Result<Json, String>>,
     },
+    /// A DevTools method on a live web tab, for measurements; it never wakes a sleeping tab.
+    DevTools {
+        tab: Option<u64>,
+        method: String,
+        params: Json,
+        reply: Reply<Result<Json, String>>,
+    },
 }
 use crate::migration::cookies::{Stored as CookieStored, Write as CookieWrite};
 #[derive(Clone)]
@@ -1057,6 +1064,11 @@ impl Manager {
                 let _ = reply.send(json!({ "forms": forms, "offers": offers }));
             }
             Op::Action { body, reply } => self.action(body, Some(reply)),
+            // Measurements must not wake a sleeping tab, so only live pages are reachable.
+            Op::DevTools { tab, method, params, reply } => match tab.or(self.active).filter(|id| *id != SHELL && self.tab(*id).is_some_and(|t| t.browser.is_some())) {
+                Some(tab) => self.cdp(tab, &method, params, Pending::Raw(reply)),
+                None => { let _ = reply.send(Err("The tab has no live page".into())); }
+            },
             Op::Memory(reply) => {
                 let r = &self.main_rect;
                 let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": self.tab(SHELL).is_some_and(|t|t.browser.is_some()), "shell_view": self.tab(SHELL).is_some_and(|t|t.view.is_some()), "shell_record": self.tab(SHELL).is_some(), "live_renderers": self.tabs.iter().filter(|t|t.view.is_some()).count(), "tabs": self.tabs.iter().filter(|t| t.id != SHELL).map(|t| json!({"id":t.id,"live":t.view.is_some(),"suspended":t.suspended})).collect::<Vec<_>>(),

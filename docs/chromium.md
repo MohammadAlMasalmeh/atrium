@@ -364,85 +364,183 @@ For a repeatable RAM comparison, start a **fresh, empty**, extension-free releas
 profile on port 7783 and keep the fixture server on 7789. Then run:
 
 ```sh
-python3 tools/compare_memory.py --data-dir /private/tmp/aside-bench \
-  --output /tmp/aside-memory.json
+python3 tools/bench_guarded.py --workload fixture-distinct --runs 3 \
+  --output docs/benchmarks/2026-10-24-guarded-fixture-distinct.json
+python3 tools/bench_guarded.py --workload real --runs 3 \
+  --output docs/benchmarks/2026-10-24-guarded-real-sites.json
 ```
 
-The script starts the installed `/Applications/Aside.app` as a normal, visible
-window (it has no background mode) with a separate temporary
-profile, verifies both browsers opened the same ten local pages, waits for the
-lifecycle policy, and samples both process trees six times. `--distinct-sites`
-uses ten separate `.localhost` hosts. Each page touches a 12 MiB buffer and has
-identical simple controls. The metric is median aggregate descendant-process RSS;
-shared memory may be counted multiple times. It is not physical footprint, a
-real-world browsing benchmark, or proof that every workload uses less memory.
-The shared external OpenCode server is outside both process trees. Compare the
-same accounts, extensions, page set, build profile, and warm-up interval.
+The fixture workloads open ten local pages (`fixture` on one origin,
+`fixture-distinct` on ten `.localhost` sites), each holding a 12 MiB buffer.
+The CEF build samples them while all are live (6 s after loading) and again
+after its lifecycle policy has evicted background pages (90 s); Aside has no
+such policy, so its second phase measures the same elapsed time. The real-site
+workload uses `tools/real_sites.json` signed out; a page rejected by Aside's
+validation (challenge, redirect, or unrendered page) is closed in both browsers.
+Samples sum macOS physical footprint (`proc_pid_rusage`, `ri_phys_footprint`)
+and RSS over each browser's process tree, with process counts by type (browser,
+GPU, network, other utility, renderer, extension renderer). Zombie children
+and Aside's periodic `aside-daemon` are reported separately and excluded.
+Reports contain titles, URL paths, and DOM counts, never page text or
+addresses. The harness stops if the Mac sleeps during a measurement.
 
-### Recorded comparison: October 24, 2026
+Treat footprint as the primary metric. RSS counts shared pages repeatedly and
+moves with memory compression: in one Aside fixture run RSS fell 21% between
+phases while footprint fell 7%. Neither is total machine memory.
 
-Apple Silicon macOS; release build; fresh profiles; Aside 1.0.1022.1
-(Chromium 154.0.8037.100), this build CEF 156.0.8 (Chromium 156.0.8078.48).
-Six samples after a 50-second warm-up, with ten fixture tabs in each browser.
+> **Preliminary — do not publish.** Every result in the fixture, real-site,
+> and responsiveness sections below came from a heavily loaded machine: load
+> averages of roughly 100–375 during the session (34–244 at the start of
+> individual browser runs), on battery, with other agents' builds and
+> browsers running. They validate the tools, not the claims. Rerun on a quiet
+> machine before citing any number.
 
-| Workload | Aside RSS | This build RSS | Reduction |
-| --- | ---: | ---: | ---: |
-| [Ten same-origin pages](benchmarks/2026-10-24-same-origin.json) | 2,785.51 MiB | 1,195.99 MiB | 57.1% |
-| [Ten separate localhost sites](benchmarks/2026-10-24-distinct-sites.json) | 2,843.91 MiB | 1,135.04 MiB | 60.1% |
+### Fixture results: October 24, 2026
 
-This build retained six live content views plus its shell and released four
-background pages. They remain in the tab list and reload when selected. These
-numbers include that behavior and the different browser shells; they do not
-isolate a per-renderer efficiency improvement. Baseline RSS varied during
-sampling, so the raw samples and process counts are included in each report.
-No claim is made about arbitrary websites, active workloads, battery use, or
-physical memory footprint.
+Apple Silicon, 16 GB, macOS 26, on battery; release build (CEF 156.0.8,
+Chromium 156.0.8078.48) against Aside 1.0.1022.1 (Chromium 154.0.8037.100).
+[Report](benchmarks/2026-10-24-guarded-fixture-distinct.json): ten
+separate `.localhost` sites, three repetitions, all three comparable; every
+CEF live sample had all 11 views (ten pages and the shell) live and every
+idle sample had 7. No visibility-guard violations. The machine was shared with
+other agents' builds: the one-minute load average before a browser run ranged
+from 34 to 244, so these are **not** idle-machine numbers.
+
+| Phase | Metric | Aside median (min–max) | This build median (min–max) | Paired reduction median (min–max) |
+| --- | --- | ---: | ---: | ---: |
+| All pages live | Footprint | 1,036 MiB (988–1,076) | 729 MiB (712–812) | 29.7% (17.9–33.8) |
+| All pages live | RSS | 2,777 MiB (1,998–2,855) | 1,644 MiB (1,554–1,737) | 40.8% (13.0–45.6) |
+| All pages live | Processes | 20 (19–21) | 16 (16–16) | |
+| After eviction | Footprint | 1,030 MiB (969–1,370) | 544 MiB (521–560) | 45.7% (43.8–62.0) |
+| After eviction | RSS | 2,181 MiB (1,741–2,852) | 1,065 MiB (989–1,133) | 51.2% (43.2–60.3) |
+| After eviction | Processes | 20 (19–21) | 12 (12–12) | |
+
+Per-run footprint, live then after eviction: Aside 1,036/969, 1,076/1,370,
+988/1,030 MiB; this build 729/544, 712/521, 812/560 MiB.
+
+Median footprint by process type with all pages live:
+
+| Process type | Aside | This build |
+| --- | ---: | ---: |
+| Browser | 1 × 90 MiB | 1 × 71 MiB |
+| GPU | 1 × 120 MiB | 1 × 104 MiB |
+| Network service | 1 × 32 MiB | 1 × 28 MiB |
+| Other utility | 1 × 22 MiB | 1 × 21 MiB |
+| Renderers | 13, 587 MiB total | 12, 507 MiB total |
+| Extension renderers | 2, 139 MiB total | none |
+
+After eviction this build ran 8 renderers (334 MiB): six pages, the shell,
+and one spare. For these fixtures the renderers of evicted pages exited. With
+all pages live, most of the footprint difference comes from Aside's two
+built-in extension renderers, its browser and GPU processes, and its own UI
+pages; the per-page renderer cost is similar (about 40–45 MiB each). After
+eviction, most of the difference is the four released pages. Aside's numbers
+vary more between runs than this build's.
 
 ### Real public websites
 
 `tools/real_sites.json` defines Google Search, YouTube, Gmail's signed-out page,
-GitHub, Wikipedia, BBC News, MDN, Stack Overflow, Reddit, and Hacker News. Start
-a fresh release profile on port 7783, then run:
+GitHub, Wikipedia, BBC News, MDN, Stack Overflow, Reddit, and Hacker News.
+Public websites vary by time, region, cookies, viewport, and browser version;
+signed-in Gmail and user documents are outside this test.
+
+[Partial report](benchmarks/2026-10-24-guarded-real-sites.json): two
+completed repetitions; the third stopped when this build hung (below). In
+both completed runs the browsers accepted the same eight sites; YouTube (not
+rendered in time headless) and Reddit (challenge page) were excluded from
+both. CEF had all 9 views live in the first phase and 7 after eviction. Load
+average 8–57.
+
+| Run | Phase | Aside footprint (processes) | This build footprint (processes) | Reduction |
+| --- | --- | ---: | ---: | ---: |
+| 1 | All pages live | 5,813 MiB (95) | 5,349 MiB (92) | 8.0% |
+| 1 | After eviction | 3,612 MiB (53) | 2,889 MiB (43) | 20.0% |
+| 2 | All pages live | 2,968 MiB (50) | 4,999 MiB (88) | −68.5% |
+| 2 | After eviction | 2,908 MiB (50) | 4,638 MiB (85) | −59.5% |
+| 3 | All pages live | 6,008 MiB (94) | hung | |
+| 3 | After eviction | 3,262 MiB (47) | | |
+
+**These results support no memory claim for real websites, in either
+direction.** Renderers are 80–90% of both footprints, and their number follows
+the ads and embeds a site serves at that moment: Aside alone ran 85, 40, and
+84 renderers in three runs and in run 3 fell from 84 to 37 within two minutes
+with no eviction; Stack Overflow reported 1 iframe in one Aside run and 22 in
+the next. The browsers run minutes apart and never see the same ad auction.
+Two differences were consistent: this build's GPU process used 219–278 MiB
+against Aside's 132–138 MiB on these pages (the reverse of the fixture
+result), and in run 2 this build kept 79 renderers with 7 live views. That
+fits renderers outliving evicted pages; it is under separate investigation
+and was only measured here. A fair comparison needs identical content, for
+example a Web Page Replay archive served to both browsers, and more runs.
+
+**Hang observed.** In the third real-site repetition the CEF browser process
+stopped responding 44 seconds after launch while the sites loaded: the UI
+thread, the IO thread, and several thread-pool workers were all blocked
+waiting for the write side of the same reader-writer lock inside the CEF
+framework, and the local API timed out. CEF had logged "Timeout of new browser
+info response" just before. It was seen once; it has not been reproduced or
+diagnosed (the framework is stripped).
+
+### Earlier results (superseded)
+
+Before the guarded harness, `compare_memory.py` and `compare_real_sites.py`
+started `/Applications/Aside.app` as a normal visible window and measured a
+single run. Those scripts have been removed. Their reports remain for
+reference: [same-origin](benchmarks/2026-10-24-same-origin.json) and
+[distinct sites](benchmarks/2026-10-24-distinct-sites.json) RSS reductions of
+57.1% and 60.1%, and a [real-site run](benchmarks/2026-10-24-real-sites-strict.json)
+([validation](benchmarks/2026-10-24-real-sites-strict.validation.json)) with
+footprint reductions of 22.5% live and 15.9% after eviction. These are single
+RSS-led runs against a visible, differently configured baseline and should
+not be cited.
+
+### Responsiveness
+
+`tools/test_responsiveness.py` starts its own fixture server and background
+instance and measures through the token-protected
+`POST /api/browser/devtools` route. That route forwards only
+`Performance.enable`, `Performance.disable`, `Performance.getMetrics`, and
+`Input.synthesizeScrollGesture`, and only to a live, non-shell tab, so a
+measurement never wakes a sleeping page. It exits non-zero if the median live
+switch exceeds 250 ms or the median wake exceeds 3 s.
 
 ```sh
-python3 tools/compare_real_sites.py --data-dir /private/tmp/aside-bench \
-  --output /tmp/aside-real-sites.json
+python3 tools/test_responsiveness.py --output docs/benchmarks/2026-10-24-responsiveness.json
 ```
 
-This requires Node with its built-in WebSocket API. The script opens each site in
-both browsers, brings tabs into view, and verifies their rendered documents.
-Challenge pages, errors, and incomplete loads are excluded from both sides and
-recorded in the report. It samples once while normal agent protection keeps all
-accepted pages live, and again after that protection expires and normal eviction
-can run. Public websites may vary by time, region, cookies, viewport, and browser
-version. Signed-in Gmail and user documents are outside this test.
+[Report](benchmarks/2026-10-24-responsiveness.json), load average 14–29,
+local fixtures, CEF build only (Aside cannot be measured comparably in
+headless mode):
 
-Alongside RSS it records the sum of macOS per-process physical-footprint counters
-(`proc_pid_rusage`, `rusage_info_v2.ri_phys_footprint`) over each browser's process
-tree. Samples with incomplete process coverage are null. At least four complete
-samples are required to publish a footprint median. These counters are a more
-useful RAM signal than RSS alone, but are still process accounting rather than
-an isolated measurement of total machine memory consumption.
+| Measurement | Median | p95 | Range |
+| --- | ---: | ---: | ---: |
+| Live tab switch: activate API round trip (30) | 2.2 ms | 15.2 ms | 1.7–19.7 ms |
+| Live tab switch: page `visibilitychange` after request | 1.2 ms | 3.5 ms | 0.7–6.6 ms |
+| Live tab switch: first animation frame after request | 1.6 ms | 5.6 ms | 1.0–7.0 ms |
+| Scroll, 4,000 px synthesized wheel gesture (5 runs): frame interval | 16.7 ms | 17.8 ms | 14.8–18.9 ms |
+| Wake an evicted tab: view recreated (5) | 16.1 ms | 18.5 ms | 12.9–18.5 ms |
+| Wake an evicted tab: page reports loaded (5) | 45.1 ms | 68.2 ms | 39.5–68.2 ms |
 
-### Recorded real-site run: October 24, 2026 (single run, preliminary)
+No scroll frame took longer than 33 ms. The selected tab ran 61 animation
+frames per second. Times are taken from the request with the page's clock,
+not from photons on screen; the background window is composited but not
+displayed, so presentation latency is not covered. Wake time is for a
+small local page; a real site reloads from the network after eviction. Under
+load averages of 140–170 in an earlier trial, the p95 live switch rose to
+650 ms and one evaluation timed out.
 
-[Report](benchmarks/2026-10-24-real-sites-strict.json) and
-[validation](benchmarks/2026-10-24-real-sites-strict.validation.json). Same
-builds and machine as above, fresh signed-out profiles, assistant disconnected.
-Eight sites matched in both browsers; Google Search (baseline redirected) and
-Reddit (baseline challenge page) were excluded from both.
+### Soak test
 
-| Phase | Aside footprint | This build footprint | Reduction | RSS reduction |
-| --- | ---: | ---: | ---: | ---: |
-| All accepted pages live (9 CEF views incl. shell) | 4,297 MiB | 3,329 MiB | 22.5% | 41.6% |
-| After eviction (7 CEF views) | 3,339 MiB | 2,809 MiB | 15.9% | 41.7% |
+`tools/soak_test.py` runs a 30-minute background session: fixture tabs (plain,
+form, scroll, dirty draft) opened, closed, switched, navigated, typed into, and
+evicted/woken around a 12-tab target, plus three real sites and a looping
+local video. Every five minutes it closes the churn tabs and samples the same
+fixed set. It fails on a browser exit, renderer terminations (now logged by
+the app), Chromium child-process crashes, Rust panics, unexpected API errors,
+new crash reports, the Mac sleeping, checkpoint footprint growth above both
+25% and 250 MiB, or process-count growth above 4. **It has not been run yet.**
 
-This is **one** run. An earlier, unrecorded real-site run showed this build
-using *more* footprint with all pages live, and a replicate was interrupted,
-so treat these figures as unconfirmed and do not publish them. The browsers
-also differ (Aside 1.0.1022.1 on Chromium 154 with its own built-in features
-against a minimal CEF 156 shell), so the result is not a per-engine
-comparison. Process counts were 89 against 56 when live.
+### Battery
 
 With eight pages live, that run had roughly 45 renderer processes, most idle at
 about 38 MiB RSS each, and its process count stayed at 56 after two pages were
