@@ -957,6 +957,11 @@ fn build_menu() -> Menu {
     menu
 }
 
+/// Extension installs ask the Chrome Web Store for packages compatible with this version.
+pub fn chromium_version() -> String {
+    "156.0.8078.48".into()
+}
+
 /// Creates the event loop and hands a [`Handle`] to `start` (which should spin
 /// up the servers), then runs the window until it is closed.
 pub fn run(ui_base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 'static) -> ! {

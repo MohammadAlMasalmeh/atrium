@@ -9,7 +9,7 @@ use muda::{
 use objc2::{
     class, define_class, extern_methods, msg_send,
     rc::Retained,
-    runtime::{AnyObject, Bool, NSObjectProtocol},
+    runtime::{AnyClass, AnyObject, Bool, Imp, NSObjectProtocol, Sel},
     sel, DefinedClass,
 };
 use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSEvent};
@@ -49,6 +49,37 @@ define_class!(
             }
             let _: () = msg_send![super(self), accessibilitySetValue: value, forAttribute: attribute];
         }
+        // Chromium and extensions can ask to activate the app or change its policy; a
+        // background instance must never become the active application.
+        #[unsafe(method(activateIgnoringOtherApps:))]
+        unsafe fn activate_ignoring_other_apps(&self, flag: Bool) {
+            if background() { return eprintln!("background window mode: refused activateIgnoringOtherApps"); }
+            let _: () = msg_send![super(self), activateIgnoringOtherApps: flag];
+        }
+        #[unsafe(method(activate))]
+        unsafe fn activate(&self) {
+            if background() { return eprintln!("background window mode: refused activate"); }
+            let _: () = msg_send![super(self), activate];
+        }
+        #[unsafe(method(setActivationPolicy:))]
+        unsafe fn set_activation_policy(&self, policy: NSApplicationActivationPolicy) -> Bool {
+            let policy = if background() && policy != NSApplicationActivationPolicy::Prohibited {
+                eprintln!("background window mode: refused activation policy {}", policy.0);
+                NSApplicationActivationPolicy::Prohibited
+            } else {
+                policy
+            };
+            msg_send![super(self), setActivationPolicy: policy]
+        }
+        // An invisible modal would block the UI thread forever.
+        #[unsafe(method(runModalForWindow:))]
+        unsafe fn run_modal_for_window(&self, window: &AnyObject) -> isize {
+            if background() {
+                eprintln!("background window mode: refused a modal window");
+                return -1001; // NSModalResponseAbort
+            }
+            msg_send![super(self), runModalForWindow: window]
+        }
     }
     unsafe impl NSObjectProtocol for AsideApplication {}
     unsafe impl CrAppProtocol for AsideApplication {
@@ -75,26 +106,143 @@ pub fn setup() {
     } else {
         NSApplicationActivationPolicy::Regular
     });
+    if background() {
+        guard_all_windows();
+    }
+}
+/// Transparent, shadowless, click-through, excluded from window cycling, and off-screen.
+unsafe fn conceal(window: &AnyObject) {
+    let _: () = msg_send![window, setAlphaValue: 0.0f64];
+    let _: () = msg_send![window, setHasShadow: Bool::NO];
+    let _: () = msg_send![window, setIgnoresMouseEvents: Bool::YES];
+    let _: () = msg_send![window, setExcludedFromWindowsMenu: Bool::YES];
+    // NSWindowCollectionBehaviorTransient | NSWindowCollectionBehaviorIgnoresCycle
+    let _: () = msg_send![window, setCollectionBehavior: (1usize << 3) | (1usize << 6)];
+    let origin = objc2_foundation::NSPoint::new(-30000.0, -30000.0);
+    let _: () = msg_send![window, setFrameOrigin: origin];
+}
+unsafe fn window_of(handle: *mut std::ffi::c_void) -> Option<&'static AnyObject> {
+    let view = handle as *mut AnyObject;
+    if view.is_null() {
+        return None;
+    }
+    let window: *mut AnyObject = msg_send![view, window];
+    window.as_ref()
 }
 /// Keeps the window ordered in, so Chromium still paints, but transparent, click-through,
 /// off-screen, and behind other windows.
 pub fn keep_out_of_sight(handle: *mut std::ffi::c_void) {
-    let view = handle as *mut AnyObject;
-    if view.is_null() {
+    unsafe {
+        let Some(window) = window_of(handle) else { return };
+        conceal(window);
+        let _: () = msg_send![window, orderBack: std::ptr::null::<AnyObject>()];
+    }
+}
+/// Removes a browser's top-level window from the screen.
+pub fn hide_window(handle: *mut std::ffi::c_void) {
+    unsafe {
+        let Some(window) = window_of(handle) else { return };
+        if background() {
+            conceal(window);
+        }
+        let _: () = msg_send![window, orderOut: std::ptr::null::<AnyObject>()];
+    }
+}
+
+type OrderWindow = unsafe extern "C-unwind" fn(*mut AnyObject, Sel, isize, isize);
+type WithSender = unsafe extern "C-unwind" fn(*mut AnyObject, Sel, *mut AnyObject);
+type NoArgs = unsafe extern "C-unwind" fn(*mut AnyObject, Sel);
+type Activate = unsafe extern "C-unwind" fn(*mut AnyObject, Sel, usize) -> Bool;
+static ORDER_WINDOW: OnceLock<Imp> = OnceLock::new();
+static ACTIVATE_WITH_OPTIONS: OnceLock<Imp> = OnceLock::new();
+
+/// Applies the background treatment to every window the process orders in, including windows
+/// Chromium or an extension creates on its own, and keeps them from becoming key.
+fn guard_all_windows() {
+    unsafe extern "C-unwind" fn order_window(this: *mut AnyObject, sel: Sel, place: isize, relative: isize) {
+        // NSWindowOut = 0, NSWindowAbove = 1, NSWindowBelow = -1
+        if let (Some(window), true) = (this.as_ref(), place != 0) {
+            conceal(window);
+        }
+        let Some(original) = ORDER_WINDOW.get() else { return };
+        let original: OrderWindow = std::mem::transmute(*original);
+        if place == 1 {
+            original(this, sel, -1, 0);
+        } else {
+            original(this, sel, place, relative);
+        }
+    }
+    unsafe extern "C-unwind" fn order_back(this: *mut AnyObject, _: Sel, _: *mut AnyObject) {
+        let _: () = msg_send![this, orderWindow: -1isize, relativeTo: 0isize];
+    }
+    unsafe extern "C-unwind" fn order_back_regardless(this: *mut AnyObject, _: Sel) {
+        let _: () = msg_send![this, orderWindow: -1isize, relativeTo: 0isize];
+    }
+    unsafe extern "C-unwind" fn refuse(_: *mut AnyObject, _: Sel) {}
+    unsafe extern "C-unwind" fn activate_with_options(this: *mut AnyObject, sel: Sel, options: usize) -> Bool {
+        let current: *mut AnyObject = msg_send![AnyClass::get(c"NSRunningApplication").unwrap(), currentApplication];
+        if this == current {
+            eprintln!("background window mode: refused activateWithOptions");
+            return Bool::NO;
+        }
+        match ACTIVATE_WITH_OPTIONS.get() {
+            Some(original) => std::mem::transmute::<Imp, Activate>(*original)(this, sel, options),
+            None => Bool::NO,
+        }
+    }
+    unsafe fn replace(class: &AnyClass, sel: Sel, imp: Imp) -> Option<Imp> {
+        class.instance_method(sel).map(|method| method.set_implementation(imp))
+    }
+    unsafe {
+        let Some(window) = AnyClass::get(c"NSWindow") else { return };
+        if let Some(original) = replace(window, sel!(orderWindow:relativeTo:), std::mem::transmute::<OrderWindow, Imp>(order_window)) {
+            let _ = ORDER_WINDOW.set(original);
+        }
+        for sel in [sel!(orderFront:), sel!(makeKeyAndOrderFront:)] {
+            replace(window, sel, std::mem::transmute::<WithSender, Imp>(order_back));
+        }
+        replace(window, sel!(orderFrontRegardless), std::mem::transmute::<NoArgs, Imp>(order_back_regardless));
+        for sel in [sel!(makeKeyWindow), sel!(makeMainWindow)] {
+            replace(window, sel, std::mem::transmute::<NoArgs, Imp>(refuse));
+        }
+        if let Some(running) = AnyClass::get(c"NSRunningApplication") {
+            if let Some(original) = replace(running, sel!(activateWithOptions:), std::mem::transmute::<Activate, Imp>(activate_with_options)) {
+                let _ = ACTIVATE_WITH_OPTIONS.set(original);
+            }
+        }
+    }
+}
+
+/// Safety net for background instances: conceals any visible window and resigns activation.
+pub fn sweep() {
+    if !background() {
         return;
     }
     unsafe {
-        let window: *mut AnyObject = msg_send![view, window];
-        let Some(window) = window.as_ref() else { return };
-        let _: () = msg_send![window, setAlphaValue: 0.0f64];
-        let _: () = msg_send![window, setHasShadow: Bool::NO];
-        let _: () = msg_send![window, setIgnoresMouseEvents: Bool::YES];
-        let _: () = msg_send![window, setExcludedFromWindowsMenu: Bool::YES];
-        // NSWindowCollectionBehaviorTransient | NSWindowCollectionBehaviorIgnoresCycle
-        let _: () = msg_send![window, setCollectionBehavior: (1usize << 3) | (1usize << 6)];
-        let origin = objc2_foundation::NSPoint::new(-30000.0, -30000.0);
-        let _: () = msg_send![window, setFrameOrigin: origin];
-        let _: () = msg_send![window, orderBack: std::ptr::null::<AnyObject>()];
+        let app = AsideApplication::shared_application();
+        if app.activationPolicy() != NSApplicationActivationPolicy::Prohibited {
+            eprintln!("background window mode: restored the Prohibited activation policy");
+            app.setActivationPolicy(NSApplicationActivationPolicy::Prohibited);
+        }
+        let active: Bool = msg_send![&*app, isActive];
+        if active.as_bool() {
+            eprintln!("background window mode: the app became active; deactivating");
+            let _: () = msg_send![&*app, deactivate];
+        }
+        let windows: *mut AnyObject = msg_send![&*app, windows];
+        let Some(windows) = windows.as_ref() else { return };
+        let count: usize = msg_send![windows, count];
+        for i in 0..count {
+            let window: *mut AnyObject = msg_send![windows, objectAtIndex: i];
+            let Some(window) = window.as_ref() else { continue };
+            let alpha: f64 = msg_send![window, alphaValue];
+            let visible: Bool = msg_send![window, isVisible];
+            if alpha > 0.0 && visible.as_bool() {
+                eprintln!("background window mode: concealed a visible window");
+                conceal(window);
+                let _: () = msg_send![window, orderBack: std::ptr::null::<AnyObject>()];
+            }
+        }
     }
 }
 pub fn voiceover_enabled() -> bool {
