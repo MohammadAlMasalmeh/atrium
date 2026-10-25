@@ -75,20 +75,20 @@ Stack Overflow, Daily Mail), all open at once, median of two runs
 | Page load (median) | 1,406 ms | 832 ms | **−41%** |
 | First contentful paint (median) | 480 ms | 328 ms | **−32%** |
 
-**Against Google Chrome and Aside**, ten popular sites opened one at a time, each
+**Against Google Chrome**, ten popular sites opened one at a time, each
 in a new foreground tab of a visible window, one run each on 2026-10-25
-(`tools/bench_three_way.py`, Chrome 155, Aside on Chromium 154):
+(`tools/bench_three_way.py`, Chrome 155):
 
-| | Atrium | Chrome | Aside |
-| --- | --- | --- | --- |
-| Memory, no tabs | **261 MiB** | 582 MiB | 1,425 MiB |
-| Memory, 10 tabs live (60 s after the last load) | **1,351 MiB** | 4,656 MiB | 6,315 MiB |
-| Memory, 10 tabs after 6 min idle | **1,046 MiB** | 3,189 MiB | 4,094 MiB |
-| Processes, 10 tabs live | **20** | 92 | 93 |
-| Startup | 2.0 s | **1.0 s** | 2.8 s |
-| First contentful paint (median) | 526 ms | **316 ms** | 400 ms |
-| Load event (median) | 1,084 ms | **787 ms** | 1,108 ms |
-| Switching back to an idle tab | 0.6–1.8 s (reloads) | **0.1 s** | **0.1 s** |
+| | Atrium | Chrome |
+| --- | --- | --- |
+| Memory, no tabs | **261 MiB** | 582 MiB |
+| Memory, 10 tabs live (60 s after the last load) | **1,351 MiB** | 4,656 MiB |
+| Memory, 10 tabs after 6 min idle | **1,046 MiB** | 3,189 MiB |
+| Processes, 10 tabs live | **20** | 92 |
+| Startup | 2.0 s | **1.0 s** |
+| First contentful paint (median) | 526 ms | **316 ms** |
+| Load event (median) | 1,084 ms | **787 ms** |
+| Switching back to an idle tab | 0.6–1.8 s (reloads) | **0.1 s** |
 
 Where Atrium is behind:
 - **First paint and load:** on the same pages Chrome paints first. Atrium also
@@ -98,8 +98,8 @@ Where Atrium is behind:
 - **Idle tabs:** Atrium keeps memory low by evicting idle tabs, so switching back
   reloads them.
 
-Page timings are medians over the eight sites where all three browsers received
-the same page. On Google Search and Reddit, Chrome and Aside were served a
+Page timings are medians over the eight sites where every browser received
+the same page. On Google Search and Reddit, Chrome was served a
 lightweight page (49 and 44 DOM nodes) while Atrium got the full one (4,624 and
 3,253), so those two sites are left out. Memory is the physical footprint of the
 browser's process tree, including Atrium's shell WebKit processes. Raw results are
