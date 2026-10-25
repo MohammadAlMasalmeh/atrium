@@ -94,7 +94,10 @@ Where Atrium is behind:
 - **First paint:** on real sites Chrome paints about 120–200 ms sooner (a
   repeated visible-window check: YouTube 476 vs 280 ms, Gmail 496 vs 328 ms,
   Wikipedia 296 vs 176 ms). A plain local page paints equally fast in both, and
-  turning ad blocking off does not close the gap.
+  turning ad blocking off does not close the gap. Single loads vary widely (YouTube
+  312–1,164 ms across three loads), and a Chromium trace of a cold YouTube load
+  showed the time going to network waits and the site's own scripts, not to Atrium
+  holding back the paint.
 - **Startup:** Chrome starts about 0.3 s sooner. Atrium's figure runs until the
   shell and first tab are ready; Chrome's ends when its DevTools port opens.
 - **Idle tabs:** Atrium keeps memory low by evicting idle tabs, so switching back
