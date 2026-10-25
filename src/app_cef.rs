@@ -205,7 +205,8 @@ enum Event {
     Created(u64, Browser),
     Detach(u64),
     Closed(u64),
-    Crashed(u64),
+    /// A renderer process ended: why, in words, for the log.
+    Crashed(u64, String),
     Title(u64, String),
     Address(u64, String),
     Loading(u64, bool),
@@ -983,7 +984,7 @@ impl Manager {
         self.push(false);
         Ok(())
     }
-    fn crashed(&mut self, id: u64) {
+    fn crashed(&mut self, id: u64, reason: &str) {
         if self.closing.load(Ordering::Relaxed) {
             return;
         }
@@ -1017,7 +1018,7 @@ impl Manager {
             }
             return;
         }
-        eprintln!("tab {id}: renderer process terminated");
+        eprintln!("tab {id}: renderer process terminated ({reason})");
         tab.crashed = true;
         if !visible {
             self.suspend(id);
@@ -1522,7 +1523,7 @@ impl Manager {
                     t.document_loading = loading;
                 }
             }
-            Event::Crashed(id) => self.crashed(id),
+            Event::Crashed(id, reason) => self.crashed(id, &reason),
             Event::Loaded(id) => {
                 if let Some(t) = self.tab_mut(id) {
                     t.document_loading = false;
@@ -1698,6 +1699,24 @@ fn focus_page(host: &BrowserHost) {
     native::focus_view(host.window_handle());
     host.set_focus(1);
 }
+/// Why a renderer ended. A failed launch (for example a helper app missing from the
+/// bundle) looks like a crash to the page, so the log has to say which it was.
+fn termination_reason(status: TerminationStatus, code: i32, error: Option<&CefString>) -> String {
+    let kind = match status {
+        TerminationStatus::ABNORMAL_TERMINATION => "abnormal termination",
+        TerminationStatus::PROCESS_WAS_KILLED => "killed",
+        TerminationStatus::PROCESS_CRASHED => "crashed",
+        TerminationStatus::PROCESS_OOM => "out of memory",
+        TerminationStatus::LAUNCH_FAILED => "launch failed",
+        TerminationStatus::INTEGRITY_FAILURE => "code integrity failure",
+        _ => "unknown status",
+    };
+    let error = error.map(|e| e.to_string()).filter(|e| !e.is_empty());
+    match error {
+        Some(error) => format!("{kind}, code {code}: {error}"),
+        None => format!("{kind}, code {code}"),
+    }
+}
 fn is_local_api(url: &str, base: &str) -> bool {
     url.strip_prefix(base).is_some_and(|rest| rest.is_empty() || rest.starts_with(['/', '?', '#']))
 }
@@ -1710,7 +1729,7 @@ fn is_about(url: &str, base: &str) -> bool {
 }
 // Tabs never load the API origin, so no page shares the shell's origin and storage.
 wrap_request_handler! {struct TabRequests {bridge:Bridge,id:u64,base:String} impl RequestHandler {
-    fn on_render_process_terminated(&self, _unused50:Option<&mut Browser>, _unused51:TerminationStatus, _unused52:i32, _unused53:Option<&CefString>){self.bridge.send(Event::Crashed(self.id));}
+    fn on_render_process_terminated(&self, _unused50:Option<&mut Browser>, status:TerminationStatus, code:i32, error:Option<&CefString>){self.bridge.send(Event::Crashed(self.id, termination_reason(status, code, error)));}
     fn on_before_browse(&self, _browser:Option<&mut Browser>, _frame:Option<&mut Frame>, request:Option<&mut Request>, _user_gesture:i32, _is_redirect:i32)->i32{
         request.is_some_and(|r| {
             let url = CefString::from(&r.url()).to_string();

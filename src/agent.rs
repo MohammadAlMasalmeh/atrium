@@ -1,6 +1,6 @@
 //! Browser tools for the agent, built on the native browser's primitive ops.
 //!
-//! Follows Aside's agent design: the agent reads pages through an
+//! The agent reads pages through an
 //! accessibility-style snapshot with stable refs, every action reports what
 //! changed on the page (so the model rarely needs a separate look), several
 //! actions can be chained in one call, and research happens in invisible

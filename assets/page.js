@@ -1,6 +1,6 @@
 // Injected into every page's isolated world, so page scripts cannot see it.
 // Defines window.__atrium, the agent's view of and
-// hands on the page. Modeled on Aside's agent: a compact accessibility tree
+// hands on the page. A compact accessibility tree
 // where actionable elements carry refs (e12) that stay stable while the
 // element lives, so successive snapshots can be diffed.
 (() => {
