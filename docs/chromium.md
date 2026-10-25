@@ -69,6 +69,17 @@ polling `lsappinfo front` never saw the test instance frontmost, the window
 server listed its window at `alpha 0` with most of the frame off the display,
 and screenshots contained the rendered fixture.
 
+The protections cover every window the process creates, not only the main
+one, because extensions can make Chromium open windows of its own. In this
+mode `NSApplication` refuses `activateIgnoringOtherApps:`, `activate`, and
+any activation-policy change, and modal sessions return immediately.
+`NSRunningApplication activateWithOptions:` is refused for the app itself.
+`NSWindow` ordering calls are swizzled so any window that is ordered in is
+first made transparent and moved off screen, then ordered back rather than to
+the front; `makeKeyWindow` and `makeMainWindow` do nothing. A 250 ms sweep also
+re-asserts the policy and conceals any visible window it finds. Each refusal is
+logged to stderr. Outside background mode none of this is installed.
+
 `tools/build-chromium.sh --release` creates a complete development app with the
 CEF framework, sandbox helper executables, Chromium credits, and verified ad hoc
 signatures. CEF updates require changing the pin, rebuilding, and re-running the
@@ -268,6 +279,15 @@ python3 tools/test_profile_persistence.py --port 7792 --fixture http://127.0.0.1
 python3 tools/test_history.py --port 7793 --fixture http://127.0.0.1:7799
 python3 tools/investigate_renderers.py --port 7794 --fixture-port 7799 \
   [--real-sites tools/real_sites.json [--per-site] [--skip-fixtures]]
+```
+
+The extension check starts its own background instances and fixture server.
+It kills and fails on any instance that becomes frontmost, and also runs
+`--watchdog SCRIPT PID` per instance when that script exists. It needs network
+access to the Chrome Web Store and the blocked ad hosts:
+
+```sh
+python3 tools/test_extensions.py --port 7852 --fixture-port 7853
 ```
 
 The smoke check covers navigation, page interaction, JavaScript isolation,
