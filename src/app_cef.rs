@@ -79,6 +79,7 @@ pub enum Op {
     AgentTab {
         id: u64,
         opened: bool,
+        session: Option<String>,
         reply: Reply<()>,
     },
     Navigate {
@@ -288,6 +289,8 @@ struct Tab {
     /// The browser's view has left the window and may already be freed; never touch it.
     detached: bool,
     browser: Option<Browser>,
+    /// Latest navigation submitted while CEF is still creating the browser.
+    pending_navigation: Option<String>,
     registration: Option<Registration>,
     last_used: Instant,
     capture: bool,
@@ -329,6 +332,7 @@ impl Tab {
             live: false,
             detached: false,
             browser: None,
+            pending_navigation: None,
             registration: None,
             last_used: now,
             capture: false,
@@ -579,6 +583,7 @@ impl Manager {
     }
     fn remove_tab(&mut self, id: u64) {
         let opener = self.tab(id).and_then(|t| t.opener);
+        media::remove(id);
         self.forget_snapshot(id);
         self.tabs.retain(|t| t.id != id);
         for t in &mut self.tabs {
@@ -611,7 +616,6 @@ impl Manager {
         self.push(false);
     }
     fn navigate(&mut self, tab: Option<u64>, raw: String) -> u64 {
-        media::remove(id);
         let id = tab
             .filter(|id| self.tab(*id).is_some())
             .unwrap_or_else(|| self.new_tab(None, true, false));
@@ -661,6 +665,12 @@ impl Manager {
             } else {
                 (self.main_rect.clone(), false)
             };
+            // A page reopened in WebKit covers its Chromium view, which stays hidden.
+            if media::place(t.id, &bounds, visible) {
+                if let Some(host) = host { native::place(host.window_handle(), &bounds, false); }
+                continue;
+            }
+            let Some(host) = host else { continue };
             // Chromium only paints visible views, so a hidden tab being captured stays
             // visible but outside the window instead of covering the user's page. A peek is
             // brief and a re-shown view starts blank, so the page is parked the same way.
@@ -699,12 +709,6 @@ impl Manager {
             .filter(|t| !t.detached)
             .find(|t| t.browser.as_ref().and_then(|b| b.host()).is_some_and(|h| native::has_focus(h.window_handle())))
             .map(|t| match t.id {
-            // A page reopened in WebKit covers its Chromium view, which stays hidden.
-            if media::place(t.id, &bounds, visible) {
-                if let Some(host) = host { native::place(host.window_handle(), &bounds, false); }
-                continue;
-            }
-            let Some(host) = host else { continue };
                 GLANCE => json!("glance"),
                 id => json!(id),
             })
@@ -1113,6 +1117,7 @@ impl Manager {
         if !visible {
             self.suspend(id);
         }
+        self.layout();
         self.session_dirty = true;
         self.push(false);
     }
@@ -1121,7 +1126,7 @@ impl Manager {
             Op::Tabs(reply) => { let _ = reply.send(self.state()); }
             Op::NewTab { url, background, scratch, reply } => { let id = self.new_tab(url, !background, scratch); let _ = reply.send(id); }
             Op::Close { id, reply } => { self.close(id); let _ = reply.send(()); }
-            Op::AgentTab { id, opened, reply } => { self.shell(&format!("window.atriumShell?.agent({id}, {opened})")); let _ = reply.send(()); }
+            Op::AgentTab { id, opened, session, reply } => { self.shell(&format!("window.atriumShell?.agent({id}, {opened}, {})", json!(session))); let _ = reply.send(()); }
             Op::Navigate { tab, url, reply } => { let id = self.navigate(tab.or(self.active), url); let _ = reply.send(id); }
             Op::History { tab, action, reply } => {
                 let id = tab.or(self.active).filter(|id| self.tab(*id).is_some());
@@ -1267,6 +1272,11 @@ impl Manager {
                     self.pw_command(tab, &m);
                 }
             }
+            "webkitOpen" | "webkitClose" => {
+                if let Some(tab) = m["tab"].as_u64().or(self.active) {
+                    self.media_command(tab, m["cmd"] == "webkitOpen");
+                }
+            }
             "focus" => match m["target"].as_str() {
                 // A command that opens a page asks for focus before the shell uncovers it.
                 Some("page") => match self.page_visible() {
@@ -1396,11 +1406,6 @@ impl Manager {
                 if let Some(id) = self.split {
                     self.create_view(id);
                 }
-            "webkitOpen" | "webkitClose" => {
-                if let Some(tab) = m["tab"].as_u64().or(self.active) {
-                    self.media_command(tab, m["cmd"] == "webkitOpen");
-                }
-            }
                 self.layout();
                 self.push(false);
             }
@@ -1537,6 +1542,14 @@ impl Manager {
                 if let Some(t) = self.tab_mut(id) {
                     t.browser = Some(browser);
                     t.registration = reg;
+                    if let Some(url) = t.pending_navigation.take() {
+                        if let Some(browser) = &t.browser {
+                            browser.stop_load();
+                            if let Some(frame) = browser.main_frame() {
+                                frame.load_url(Some(&CefString::from(url.as_str())));
+                            }
+                        }
+                    }
                     // A popup's browser was created by Chromium, already parented to our window.
                     if t.opening {
                         t.opening = false;
@@ -1609,7 +1622,9 @@ impl Manager {
                 self.push(false);
             }
             Event::Address(id, url) => {
+                self.media_address(id, &url);
                 if let Some(t) = self.tab_mut(id) {
+                    if t.pending_navigation.is_some() || t.suspending { return; }
                     if crate::favicons::key(&t.url) != crate::favicons::key(&url) {
                         t.icon = None;
                     }
@@ -1752,7 +1767,6 @@ impl Manager {
                 // With no live browsers, nothing will report closing, so quit now.
                 self.finish_quit();
             }
-                self.media_address(id, &url);
             Event::Maintenance => self.maintain(),
             Event::Commands(event) => self.on_commands(event),
         }
@@ -1988,7 +2002,7 @@ wrap_load_handler! {struct HostLoad {bridge:Bridge,id:u64} impl LoadHandler {
     fn on_loading_state_change(&self, _unused22:Option<&mut Browser>,loading:i32, _unused23:i32, _unused24:i32){self.bridge.send(Event::Loading(self.id,loading!=0));}
     fn on_load_start(&self, _unused51:Option<&mut Browser>,frame:Option<&mut Frame>, _unused52:TransitionType){if frame.is_some_and(|f|f.is_main()!=0){self.bridge.send(Event::Document(self.id,true));}}
     fn on_load_end(&self, _unused25:Option<&mut Browser>,frame:Option<&mut Frame>, _unused26:i32){if frame.is_some_and(|f|f.is_main()!=0){self.bridge.send(Event::Loaded(self.id));}}
-    fn on_load_error(&self, _unused53:Option<&mut Browser>,frame:Option<&mut Frame>, _unused54:Errorcode, _unused55:Option<&CefString>, _unused56:Option<&CefString>){if frame.is_some_and(|f|f.is_main()!=0){self.bridge.send(Event::Document(self.id,false));}}
+    fn on_load_error(&self, _unused53:Option<&mut Browser>,frame:Option<&mut Frame>, error:Errorcode, _unused55:Option<&CefString>, _unused56:Option<&CefString>){if error!=Errorcode::ABORTED && frame.is_some_and(|f|f.is_main()!=0){self.bridge.send(Event::Document(self.id,false));}}
 }}
 wrap_dev_tools_message_observer! {struct DevObserver {bridge:Bridge,id:u64} impl DevToolsMessageObserver {
     fn on_dev_tools_method_result(&self, _unused27:Option<&mut Browser>,id:i32,success:i32,result:Option<&[u8]>){self.bridge.send(Event::DevResult(id,success!=0,result.and_then(|r|serde_json::from_slice(r).ok()).unwrap_or(Json::Null)));}
@@ -2479,6 +2493,7 @@ impl Manager {
                 }
                 self.pw_store(move || Ok(PwEvent::Found { tab, ctx, login, signup, accounts: crate::passwords::with(|s| s.for_origin(&origin))? }));
             }
+            Some("media") => self.media_unsupported(tab, origin, msg["src"].as_str().unwrap_or("")),
             Some("submit") => {
                 let username = msg["username"].as_str().unwrap_or("").chars().take(1024).collect::<String>();
                 let Some(password) = msg["password"].as_str().filter(|p| !p.is_empty() && p.len() <= 4096).map(str::to_string) else { return };
@@ -2593,4 +2608,3 @@ impl Manager {
 fn error_of(data: &Json) -> Option<String> {
     data["exceptionDetails"]["exception"]["description"].as_str().or(data["exceptionDetails"]["text"].as_str()).map(str::to_string)
 }
-            Some("media") => self.media_unsupported(tab, origin, msg["src"].as_str().unwrap_or("")),

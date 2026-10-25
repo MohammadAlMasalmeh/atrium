@@ -99,7 +99,7 @@ pub enum Op {
     Close { id: u64, reply: Reply<()> },
     /// The agent now works in this tab; the chat view previews it. A tab the agent
     /// `opened` stays out of the sidebar until the user opens it.
-    AgentTab { id: u64, opened: bool, reply: Reply<()> },
+    AgentTab { id: u64, opened: bool, session: Option<String>, reply: Reply<()> },
     /// Load a URL in `tab` (or the active tab); returns the tab used.
     Navigate { tab: Option<u64>, url: String, reply: Reply<u64> },
     History { tab: Option<u64>, action: &'static str, reply: Reply<Result<(), String>> },
@@ -129,7 +129,7 @@ pub enum UserEvent {
     Menu(String),
     Tab { id: u64, ev: TabEv },
     Op(Op),
-    Frozen { slot: &'static str, data: String },
+    Frozen { slot: &'static str, data: String, tab: u64 },
 }
 
 /// Thread-safe way to drive the browser from tokio.
@@ -510,11 +510,11 @@ impl Browser {
             slots.push(("split", self.split));
         }
         for (slot, id) in slots {
-            let Some(v) = id.and_then(|id| self.view_of(id)) else { continue };
+            let Some((id, v)) = id.and_then(|id| self.view_of(id).map(|v| (id, v))) else { continue };
             let p = self.proxy.clone();
             snapshot(v, move |r| {
                 if let Ok(data) = r {
-                    let _ = p.send_event(UserEvent::Frozen { slot, data });
+                    let _ = p.send_event(UserEvent::Frozen { slot, data, tab: id });
                 }
             });
         }
@@ -584,8 +584,8 @@ impl Browser {
                 self.close(id);
                 let _ = reply.send(());
             }
-            Op::AgentTab { id, opened, reply } => {
-                self.shell_js(&format!("atriumShell.agent({id}, {opened})"));
+            Op::AgentTab { id, opened, session, reply } => {
+                self.shell_js(&format!("atriumShell.agent({id}, {opened}, {})", json!(session)));
                 let _ = reply.send(());
             }
             Op::Navigate { tab, url, reply } => {
@@ -756,11 +756,11 @@ impl Browser {
             "freeze" => self.freeze(),
             // Thumbnail of any tab (the live preview of the agent's page).
             "thumb" => {
-                if let Some(v) = m["id"].as_u64().and_then(|id| self.view_of(id)) {
+                if let Some((id, v)) = m["id"].as_u64().and_then(|id| self.view_of(id).map(|v| (id, v))) {
                     let p = self.proxy.clone();
                     snapshot(v, move |r| {
                         if let Ok(data) = r {
-                            let _ = p.send_event(UserEvent::Frozen { slot: "pip", data });
+                            let _ = p.send_event(UserEvent::Frozen { slot: "pip", data, tab: id });
                         }
                     });
                 }
@@ -1054,12 +1054,12 @@ pub fn run(ui_base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() +
             Event::UserEvent(UserEvent::Menu(id)) => b.handle_menu(&id),
             Event::UserEvent(UserEvent::Tab { id, ev }) => b.handle_tab(id, ev),
             Event::UserEvent(UserEvent::Op(op)) => b.handle_op(op),
-            Event::UserEvent(UserEvent::Frozen { slot, data }) => {
+            Event::UserEvent(UserEvent::Frozen { slot, data, tab }) => {
                 use base64::Engine;
                 if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(data) {
                     FROZEN.lock().unwrap().insert(slot.to_string(), bytes);
                     let url = format!("/frozen/{slot}?v={}", uuid::Uuid::new_v4().simple());
-                    b.shell_js(&format!("atriumShell.frozen({}, {})", json!(slot), json!(url)));
+                    b.shell_js(&format!("atriumShell.frozen({}, {}, {tab})", json!(slot), json!(url)));
                 }
             }
             _ => {}

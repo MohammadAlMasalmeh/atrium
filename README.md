@@ -131,6 +131,9 @@ methodology is in [docs/chromium.md](docs/chromium.md).
   visits, ranked like an address bar: a site-name prefix first, then word and
   substring matches, ordered by visits and recency. A lookup over 7,500 imported
   pages takes about 2.5 ms.
+- The address field also shows live search predictions from Google, or an imported
+  Bing/DuckDuckGo default. Requests wait for a typing pause and use no profile
+  cookies. `ATRIUM_SEARCH_SUGGESTIONS=0` keeps suggestions local.
 - Built-in ad blocking: third-party requests to about 60 ad exchanges, ad servers,
   and ID-sync endpoints are refused, so ad frames never get their own renderer
   processes. Top-level navigations and analytics scripts are left alone.

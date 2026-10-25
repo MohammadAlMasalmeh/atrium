@@ -116,6 +116,8 @@ pub struct Agent {
     pub browser: Handle,
     /// The tab the agent is working in.
     current: Mutex<Option<u64>>,
+    /// The chat that owns the current tool run, including before its HTTP response.
+    session: Mutex<Option<String>>,
     /// Last interactive tree seen per tab: (url, tree), for change reports.
     seen: Mutex<HashMap<u64, (String, String)>>,
     scratch_slots: std::sync::Arc<tokio::sync::Semaphore>,
@@ -124,7 +126,15 @@ pub struct Agent {
 
 impl Agent {
     pub fn new(browser: Handle) -> Self {
-        Self { browser, current: Mutex::new(None), seen: Mutex::new(HashMap::new()), scratch_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(3)) }
+        Self { browser, current: Mutex::new(None), session: Mutex::new(None), seen: Mutex::new(HashMap::new()), scratch_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(3)) }
+    }
+
+    pub async fn begin_session(&self, session: String, tab: Option<u64>) {
+        *self.session.lock().unwrap() = Some(session);
+        self.set_current(tab);
+        if let Some(tab) = tab {
+            self.adopt(tab, false).await;
+        }
     }
 
     /// Point the agent at the tab the user is looking at (None: it opens its own).
@@ -136,7 +146,8 @@ impl Agent {
     /// `opened`: the agent created the tab, so it isn't one of the user's yet.
     async fn adopt(&self, tab: u64, opened: bool) {
         self.set_current(Some(tab));
-        let _ = self.browser.op(|reply| Op::AgentTab { id: tab, opened, reply }).await;
+        let session = self.session.lock().unwrap().clone();
+        let _ = self.browser.op(|reply| Op::AgentTab { id: tab, opened, session, reply }).await;
     }
 
     pub fn current(&self) -> Option<u64> {

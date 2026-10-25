@@ -25,6 +25,7 @@ pub fn routes(_app: Arc<App>) -> Router<Arc<App>> {
         .route("/api/setup/opencode/install", post(install))
         .route("/api/setup/google", get(google))
         .route("/api/setup/suggest", get(suggest))
+        .route("/api/setup/search-suggest", get(search_suggest))
 }
 
 pub(crate) async fn shell_only(State(app): State<Arc<App>>, req: Request, next: Next) -> Response {
@@ -137,6 +138,12 @@ async fn suggest(State(app): State<Arc<App>>, axum::extract::Query(q): axum::ext
     let dir = data_dir(&app).to_path_buf();
     let found = tokio::task::spawn_blocking(move || crate::suggest::suggest(&dir, &q.q, q.limit.min(50))).await.unwrap_or_default();
     Json(json!({ "results": found }))
+}
+
+async fn search_suggest(axum::extract::Query(q): axum::extract::Query<SuggestQuery>) -> Json<Value> {
+    let results: Vec<_> = crate::suggest::search(q.q.trim(), q.limit).await.into_iter()
+        .map(|text| json!({ "url": migration::search::terms_url(&text), "text": text })).collect();
+    Json(json!({ "results": results }))
 }
 
 #[derive(Deserialize)]

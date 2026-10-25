@@ -23,6 +23,7 @@ this off yet; see below.
 | Websites | The sites you (or the assistant) open | Normal browsing |
 | Favicons | The icon URL a page declares, usually the same site | After a page reports its favicon |
 | Address bar search | `https://www.google.com/search?q=…` | When the typed text is not a URL |
+| Address bar search predictions | `https://www.google.com/complete/search?client=firefox&q=…`, `https://www.bing.com/osjson.aspx?query=…`, or `https://ac.duckduckgo.com/ac/?type=list&q=…` | While typing search text in the address field, using the selected supported search engine (Google by default) |
 | Assistant search tool | `https://html.duckduckgo.com/html/?q=…` | When the assistant calls `atrium_search` |
 | Assistant fetch tool | Any URL the model asks for | When the assistant calls `atrium_fetch` |
 | OpenCode | `http://127.0.0.1:4097` by default, or the endpoint you configure | At startup and while the assistant is used |
@@ -33,7 +34,7 @@ this off yet; see below.
 
 Nothing else in the Rust code or the browser shell opens a network connection.
 Besides the OpenCode endpoint and the loopback API, the Rust code's HTTP clients
-are the app updater and the Chrome Web Store client listed above. There is no
+include search predictions, the app updater, and the Chrome Web Store client listed above. There is no
 remote configuration.
 
 ### Websites and Chromium
@@ -76,6 +77,13 @@ process tree while only loopback pages are open) without failing on them. This
 was observed on macOS 26 with a fresh profile; it is a point-in-time check, not a
 complete audit of Chromium's network behavior.
 
+### Sleeping tab images
+
+When an idle tab is put to sleep, Atrium keeps a compressed image of its last
+viewport in memory to cover the page while it wakes. These images are never
+written to the profile or sent to the assistant. The cache is limited to 32 MiB,
+and images are removed after wake-up, navigation, tab closure, or app exit.
+
 ### Favicons
 
 The sidebar used to load every site's icon from Google's favicon service
@@ -90,10 +98,20 @@ clear it, delete the `favicons` folder.
 
 ### Search
 
-Text typed in the address bar that is not a URL is searched with Google. The
-assistant's search tool uses DuckDuckGo's HTML endpoint. Both load in Chromium with
-your profile's cookies for those sites, like a normal visit. Neither is configurable
-yet.
+Text submitted in the address bar that is not a URL is searched with the imported
+default search engine, or Google if none was imported. The assistant's search tool
+uses DuckDuckGo's HTML endpoint. Search result pages load in Chromium with your
+profile's cookies for those sites, like a normal visit.
+
+While editing an address, search predictions send partial search text to the
+selected engine's suggestion endpoint after a 180 ms typing pause (at least two
+characters). Google, Bing, and DuckDuckGo are supported; other imported engines
+keep local history/bookmark suggestions only. Addresses, paths, email addresses,
+and text over 256 characters are excluded by a heuristic. The engine receives the
+query and your IP address. These requests use a separate Rust HTTP client without
+profile cookies, account credentials, or the current page URL. Partial queries and
+predictions are not stored on disk by Atrium. Set `ATRIUM_SEARCH_SUGGESTIONS=0`
+before launching to turn off remote predictions; local suggestions still work.
 
 ### The assistant (OpenCode and AI providers)
 

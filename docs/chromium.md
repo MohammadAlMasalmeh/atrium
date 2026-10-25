@@ -91,6 +91,32 @@ rather than drawn over the visible page. Tab activation no longer calls
 `window.activate()`, so agent or API tab switches don't pull the app in front
 of other applications.
 
+The sidebar toggle applies the final shell and native page bounds once. It does
+not translate a page snapshot and then swap to a differently laid-out live page.
+The sidebar button reveals the already-rendered list in the click event, without
+an entrance animation or re-rendering the shell. The left-edge hover panel stays
+below the toolbar and transitions only its own transform and opacity; reversing
+direction continues from the current position. Its snapshot remains mounted
+until the close and native-page handoff finish, and re-entry cancels that cleanup.
+Parked split views retain their own viewport sizes. `python3
+tools/test_sidebar_motion.py` checks these behaviors in an isolated background
+instance, including responsive page bounds, unequal split widths, interrupted
+closing, re-entry during cleanup, late snapshot decoding and rapid toggles.
+It also clicks the actual shell buttons, requires the revealed list to be fully
+visible within the handler, and checks native layout latency while a test page
+is busy for 1.5 seconds.
+The invisible window can throttle WebKit's animation clock, so the hover checks
+explicitly finish entrance transitions and seek an interrupted close.
+It uses synthetic pointer events; subjective motion and real pointer feel still
+need visual review in a foreground window.
+
+The full chat's top-right page preview associates agent tab notifications with
+their session, even when a tool opens a tab before the new chat response arrives.
+Its capture interval survives shell renders, and screenshot callbacks include the
+source tab so late captures cannot be assigned to a different page. Run
+`python3 tools/test_agent_preview.py` for the isolated startup, scrolling,
+session ownership, stale-capture and preview-opening regression checks.
+
 ### Keychain prompts
 
 Chromium stores its cookie encryption key as "Chromium Safe Storage" in the
@@ -137,6 +163,42 @@ CEF framework, sandbox helper executables, Chromium credits, and verified
 signatures (see [Releases, signing, and updates](#releases-signing-and-updates)).
 CEF updates require changing the pin, rebuilding, and re-running the
 integration checks.
+
+### Video and audio codecs
+
+The stock Spotify CEF 156.0.8 runtime does **not** support H.264 or AAC:
+`canPlayType` returns an empty string and `MediaSource.isTypeSupported` returns
+false for both. VP9 and Opus report support. This prevents many MP4 and live
+stream players from working even when their pages and scripts load correctly.
+Changing the user agent or adding runtime switches cannot add these codecs.
+
+`tools/build-cef-media.py` builds the exact CEF commit pinned by the Rust
+bindings, with `proprietary_codecs=true ffmpeg_branding=Chrome`. It downloads
+CEF/Chromium build dependencies and source from upstream. Upstream recommends
+200 GB free for source builds; the script uses a reduced release-only build
+(no debug symbols, ThinLTO, PGO profiles or distribution archives), requires
+100 GiB to start, and stops if free space drops below 20 GiB. That smaller
+configuration is an attempt to fit on development machines, not a guarantee
+that every Chromium revision fits. It keeps the stock runtime and running app
+unchanged and produces a separate flattened `runtime` directory for cef-rs.
+
+```sh
+xcodebuild -downloadComponent MetalToolchain  # when Xcode's Metal compiler is missing
+python3 tools/build-cef-media.py --build-dir /path/to/cef-media-build --check
+python3 tools/build-cef-media.py --build-dir /path/to/cef-media-build
+CEF_PATH=/path/to/cef-media-build/runtime ./tools/build-chromium.sh --release
+python3 tools/test_media_playback.py
+```
+
+The playback test uses an isolated background-only app copy and generated local
+fixtures. It requires H.264, AAC and combined H.264/AAC support through both
+HTML media and MediaSource, actual playback to the end, and decoded video
+frames at the expected dimensions. The stock runtime fails the capability
+check (verified October 25, 2026); a codec-enabled replacement must pass the
+whole test before playback is considered fixed. Codec-enabled builds do not
+by themselves provide DRM service compatibility. Before distributing such a
+build, review the codec licensing requirements described in
+[Google's CEF build guidance](https://support.google.com/webdesigner/answer/10043691).
 
 ## Shell IPC and local API security
 
@@ -206,11 +268,33 @@ backed off for three minutes. Eligible pages idle for five minutes are released
 even below the six-page target. A ten-second maintenance task applies the policy.
 
 Eviction closes the page's BrowserView while retaining its tab metadata. Selecting
-it creates a fresh view at the saved URL. Cookies and origin storage persist in
+it creates a fresh view at the saved URL. Before eviction, a viewport JPEG is
+captured and retained in memory (at most 512 KiB per tab and 32 MiB in total).
+Selecting a sleeping tab displays that image in a native view while Chromium
+loads and paints off screen. Scroll restoration and two animation frames complete
+after DOMContentLoaded, before the live view replaces it; slow images and
+subframes no longer delay that handoff. Wake-up loading indicators stay hidden
+in the shell and native toolbar through the remaining resource loads. Split panes
+and hover prewarming use the same handoff. A navigation submitted while CEF is
+still creating the browser is retained and applied when the browser arrives,
+so searching during wake-up does not wait for the saved page to finish loading.
+Renderer budgets, idle thresholds, and the bounded snapshot cache are unchanged.
+Explicit navigation cancels the cover; load errors, renderer crashes and a
+30-second watchdog also clear it. Tabs restored after restarting the app, failed
+captures, and images evicted from the bounded cache use the regular loading path.
+Cookies and origin storage persist in
 Chromium's profile. In-memory application state is not restored; history and
 scroll are partially restored (see below). Media protection is conservative
 but does not guarantee detection inside every cross-origin frame. Protected tabs
 can exceed the target; the app does not discard unsaved forms to meet a RAM claim.
+
+`python3 tools/test_tab_wake.py` launches an isolated background instance and local
+fixture server. It checks real policy eviction, saved-view presentation during a
+stalled wake, silent loading indicators, rapid switching, scroll restoration,
+split-pane prewarming, explicit-navigation cancellation, DOM/scroll readiness with
+a stalled image, the two-tab pressure budget, and rapid navigation during fresh
+browser creation and wake-up. The memory API reports
+`wake_previews` (mounted native covers), and per-tab `waking` and `preview_bytes`.
 
 ### Renderer crashes
 
@@ -368,6 +452,27 @@ python3 tools/test_native_chrome.py --screenshots /private/tmp/native-chrome/sho
 `--screenshots` captures the window in light and dark mode (`ATRIUM_APPEARANCE`).
 For those two runs the window sits on screen behind every other window, because
 glass needs something behind it to render; it still can't activate or take clicks.
+
+With the shell toolbar (sidebar hidden), typing in the top address field opens
+an anchored dropdown using the command bar's open-tab, recent-history, and imported
+history/bookmark results. Arrow keys select a result, Enter opens it in the current
+tab, and Escape or clicking outside dismisses it. Search and assistant submissions
+remain available. The page uses the existing frozen overlay while suggestions are
+open so Chromium's native page view cannot cover the dropdown. After a 180 ms pause,
+search text also fetches up to six live search predictions from the selected
+supported engine (Google by default, or imported Google/Bing/DuckDuckGo). Choosing
+a prediction searches for its full text. Requests use a separate cookie-free client,
+skip address-like input, time out after two seconds, and fail silently while local
+results stay usable. New input and dismissal cancel pending lookups, and late
+responses cannot replace the current results. `ATRIUM_SEARCH_SUGGESTIONS=0` disables
+remote predictions. Other imported search engines keep local results only.
+
+`python3 tools/test_address_suggestions.py` starts an invisible background instance
+with a throwaway profile and a local fixture. It checks dropdown placement and hit
+testing, history/bookmark matches, keyboard and mouse selection, composition,
+dismissal, live prediction responses through a local fixture, searching a full
+prediction, provider errors, credential exclusion, stale responses, and that the command palette still works. It dispatches
+DOM events in the real shell; physical keyboard input is not covered by this test.
 
 `tools/test_secure_ipc.py` starts its own background instances, with a mock
 keychain, an invisible window, and a fresh profile, plus `ATRIUM_TEST_SHELL_EVAL=1` for

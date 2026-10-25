@@ -1,4 +1,4 @@
-//! Command-bar suggestions from imported Chrome history and bookmarks.
+//! Address suggestions from imported Chrome history/bookmarks and search engines.
 //!
 //! The shell keeps only its own recent visits, so an imported profile's history was
 //! unreachable from the command bar. The index is built once from the import files and
@@ -127,9 +127,110 @@ pub fn suggest(data_dir: &Path, query: &str, limit: usize) -> Vec<Suggestion> {
     rank(&index.as_ref().unwrap().1.entries, query, limit)
 }
 
+/// Don't send addresses, paths or email addresses to a remote search service.
+fn search_query(query: &str) -> bool {
+    let len = query.chars().count();
+    let first = query.split_whitespace().next().unwrap_or_default();
+    (2..=256).contains(&len)
+        && !query.chars().any(char::is_control)
+        && !first.contains([':', '/', '\\', '@'])
+        && !(query.split_whitespace().count() == 1 && (first.contains('.') || first.starts_with("localhost")))
+}
+
+fn search_endpoint(engine: Option<&crate::migration::search::Engine>) -> Option<reqwest::Url> {
+    let host = match engine {
+        Some(e) => reqwest::Url::parse(&e.template).ok()?.host_str()?.to_string(),
+        None => "www.google.com".to_string(),
+    };
+    // Keep predictions with the chosen provider; an unknown engine stays local.
+    let endpoint = match host.strip_prefix("www.").unwrap_or(&host) {
+        "google.com" => "https://www.google.com/complete/search?client=firefox",
+        "bing.com" => "https://www.bing.com/osjson.aspx",
+        "duckduckgo.com" => "https://ac.duckduckgo.com/ac/?type=list",
+        _ => return None,
+    };
+    reqwest::Url::parse(endpoint).ok()
+}
+
+fn search_results(doc: &serde_json::Value, query: &str, limit: usize) -> Vec<String> {
+    let mut seen = std::collections::HashSet::from([query.to_lowercase()]);
+    doc[1].as_array().into_iter().flatten()
+        .filter_map(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && s.chars().count() <= 256 && !s.chars().any(char::is_control) && seen.insert(s.to_lowercase()))
+        .take(limit.min(8))
+        .map(str::to_string)
+        .collect()
+}
+
+/// Search-engine predictions use a separate cookie-free client, never the browsing profile.
+pub async fn search(query: &str, limit: usize) -> Vec<String> {
+    if !search_query(query) || limit == 0 || std::env::var_os("ATRIUM_SEARCH_SUGGESTIONS").is_some_and(|v| v == "0") {
+        return Vec::new();
+    }
+    let engine = crate::migration::search::current();
+    let mut endpoint = search_endpoint(engine.as_ref());
+    // Tests may replace the provider with a loopback fixture only under the mock keychain.
+    if crate::migration::mock_keychain() {
+        endpoint = std::env::var("ATRIUM_TEST_SUGGEST_URL").ok()
+            .and_then(|s| reqwest::Url::parse(&s).ok())
+            .filter(|u| u.scheme() == "http" && u.host_str() == Some("127.0.0.1") && u.username().is_empty() && u.password().is_none());
+    }
+    let Some(mut endpoint) = endpoint else { return Vec::new() };
+    let param = if endpoint.host_str().is_some_and(|h| h == "www.bing.com") { "query" } else { "q" };
+    endpoint.query_pairs_mut().append_pair(param, query);
+    static CLIENT: std::sync::LazyLock<Option<reqwest::Client>> = std::sync::LazyLock::new(|| {
+        reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(std::time::Duration::from_secs(2))
+            .user_agent("Atrium")
+            .build().ok()
+    });
+    let Some(client) = CLIENT.as_ref() else { return Vec::new() };
+    let result: anyhow::Result<Vec<String>> = async {
+        let mut response = client.get(endpoint).send().await?.error_for_status()?;
+        let mut body = Vec::new();
+        while let Some(chunk) = response.chunk().await? {
+            anyhow::ensure!(body.len() + chunk.len() <= 64 * 1024, "suggestion response too large");
+            body.extend_from_slice(&chunk);
+        }
+        Ok(search_results(&serde_json::from_slice(&body)?, query, limit))
+    }.await;
+    result.unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn predictions_only_send_search_terms() {
+        for q in ["new york", "weather", "東京", "node.js tutorial"] {
+            assert!(search_query(q), "{q}");
+        }
+        for q in ["", "n", "https://example.com/private", "example.com", "localhost:7777", "/private/file", "user@example.com", "about:blank", "new\nyork"] {
+            assert!(!search_query(q), "{q}");
+        }
+        assert!(!search_query(&"x".repeat(257)));
+    }
+    #[test]
+    fn prediction_provider_follows_the_search_engine() {
+        let engine = |host: &str| crate::migration::search::Engine {
+            name: "Test".into(), keyword: host.into(), template: format!("https://{host}/search?q={{searchTerms}}"),
+        };
+        assert_eq!(search_endpoint(None).unwrap().host_str(), Some("www.google.com"));
+        for (host, expected) in [("www.google.com", "www.google.com"), ("bing.com", "www.bing.com"), ("duckduckgo.com", "ac.duckduckgo.com")] {
+            assert_eq!(search_endpoint(Some(&engine(host))).unwrap().host_str(), Some(expected));
+        }
+        assert!(search_endpoint(Some(&engine("custom.example"))).is_none());
+        assert!(search_endpoint(Some(&engine("google.com.evil.example"))).is_none());
+    }
+    #[test]
+    fn prediction_responses_are_bounded_and_deduplicated() {
+        let doc = serde_json::json!(["new york", ["new york", "new york city", "New York City", 42, "", "new york giants", "bad\nresult"]]);
+        assert_eq!(search_results(&doc, "new york", 8), ["new york city", "new york giants"]);
+        assert_eq!(search_results(&doc, "new york", 1), ["new york city"]);
+        assert!(search_results(&serde_json::json!({"error":"unavailable"}), "new york", 8).is_empty());
+    }
     fn e(url: &str, title: &str, weight: f64) -> Entry {
         entry(url, title, "history", weight)
     }

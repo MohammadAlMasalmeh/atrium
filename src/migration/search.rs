@@ -24,6 +24,16 @@ pub fn query_url(encoded: &str) -> String {
     }
 }
 
+/// A selected prediction is always a search, even when its text resembles a URL.
+pub fn terms_url(terms: &str) -> String {
+    let encoded: String = terms.bytes().map(|b| match b {
+        b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+        b' ' => "+".into(),
+        _ => format!("%{b:02X}"),
+    }).collect();
+    query_url(&encoded)
+}
+
 pub fn current() -> Option<Engine> {
     ENGINE.read().unwrap().clone()
 }

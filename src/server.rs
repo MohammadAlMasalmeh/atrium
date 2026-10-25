@@ -275,7 +275,7 @@ async fn chat(State(app): Shared, Json(req): Json<ChatReq>) -> Json<Value> {
         };
         let st = app.agent.browser.op(Op::Tabs).await.ok();
         let target = req.tab.and_then(|id| st.as_ref()?.tabs.iter().find(|t| t.id == id && t.kind == "web").cloned());
-        app.agent.set_current(target.as_ref().map(|t| t.id));
+        app.agent.begin_session(session.clone(), target.as_ref().map(|t| t.id)).await;
         let tab = target.map(|t| (t.title, t.url));
         let context = tab_context(&app, &req.tabs).await;
         let text = if context.is_empty() {
