@@ -1190,6 +1190,8 @@ impl Manager {
                         focus_page(&host);
                     }
                 }
+                // The shell places focus itself, such as in the top bar's address field.
+                Some("shell") => native::focus_shell(),
                 _ => self.focus_shell("focusSidebar"),
             },
             "layout" => {
