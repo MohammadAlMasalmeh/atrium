@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 180
+    env:
+      CEF_PATH: ${{ github.workspace }}/target/cef
+      CARGO_TERM_COLOR: always
+      # Optional secrets. Missing ones make tools/release.sh fall back to ad hoc signing
+      # and skip notarization or update signing.
+      MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+      NOTARY_API_KEY_P8: ${{ secrets.NOTARY_API_KEY_P8 }}
+      ASIDE_NOTARY_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+      ASIDE_NOTARY_ISSUER: ${{ secrets.NOTARY_API_ISSUER }}
+      ASIDE_UPDATE_SECRET_KEY_B64: ${{ secrets.ASIDE_UPDATE_SECRET_KEY }}
+      ASIDE_UPDATE_PUBLIC_KEY: ${{ vars.ASIDE_UPDATE_PUBLIC_KEY }}
+      ASIDE_UPDATE_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target/cef
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install build tools
+        run: brew install ninja
+
+      - name: Check the tag matches the crate version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME does not match Cargo.toml $version"; exit 1; }
+
+      - name: Import the Developer ID certificate
+        if: env.MACOS_CERTIFICATE_P12 != '' && env.MACOS_SIGN_IDENTITY != ''
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(uuidgen)
+          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+          echo "ASIDE_SIGN_IDENTITY=$MACOS_SIGN_IDENTITY" >> "$GITHUB_ENV"
+          echo "ASIDE_SIGN_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
+      - name: Prepare the notary API key
+        if: env.NOTARY_API_KEY_P8 != ''
+        run: |
+          echo "$NOTARY_API_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+          echo "ASIDE_NOTARY_KEY=$RUNNER_TEMP/notary.p8" >> "$GITHUB_ENV"
+
+      - name: Rust tests
+        run: cargo test --locked
+
+      - name: Build, sign, package, notarize
+        run: ./tools/release.sh
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/Aside-* dist/SHA256SUMS --title "Aside ${GITHUB_REF_NAME#v}" --generate-notes
+
+      - name: Remove signing material
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/notary.p8"
+          if [ -n "${ASIDE_SIGN_KEYCHAIN:-}" ]; then security delete-keychain "$ASIDE_SIGN_KEYCHAIN" || true; fi
