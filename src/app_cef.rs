@@ -1685,6 +1685,13 @@ fn on_before_command_line_processing(&self, process_type:Option<&CefString>,comm
             command.append_switch_with_value(Some(&CefString::from("disable-features")), Some(&CefString::from("MacWebContentsOcclusion")));
             command.append_switch(Some(&CefString::from("disable-backgrounding-occluded-windows")));
         }
+        // Test instances can record a Chromium trace of startup and the first page loads.
+        if let (Some(command), Some(file), true) = (command_line.as_deref(), std::env::var_os("ATRIUM_TEST_TRACE_FILE"), crate::migration::mock_keychain()) {
+            command.append_switch_with_value(Some(&CefString::from("trace-startup")), Some(&CefString::from("toplevel,blink,cc,viz,loading,navigation,v8,devtools.timeline")));
+            command.append_switch_with_value(Some(&CefString::from("trace-startup-file")), Some(&CefString::from(file.to_string_lossy().as_ref())));
+            command.append_switch_with_value(Some(&CefString::from("trace-startup-duration")), Some(&CefString::from("12")));
+            command.append_switch_with_value(Some(&CefString::from("trace-startup-format")), Some(&CefString::from("json")));
+        }
         let paths: Vec<_> = crate::CHROME_EXTENSIONS.get().into_iter().chain(crate::INSTALLED_EXTENSIONS.get()).flatten().collect();
         if let (false,Some(command))=(paths.is_empty(),command_line) {
             let value=paths.iter().map(|p|p.to_string_lossy()).collect::<Vec<_>>().join(",");command.append_switch_with_value(Some(&CefString::from("load-extension")),Some(&CefString::from(value.as_str())));
