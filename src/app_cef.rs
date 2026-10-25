@@ -382,6 +382,8 @@ struct Manager {
     next_id: u64,
     next_call: i32,
     pending: HashMap<i32, (Instant, u64, Pending)>,
+    /// The cover is the sidebar peeking over the page: the page stays painted, just off screen.
+    parked: bool,
     adopted: std::collections::HashSet<i32>,
     closing: Arc<AtomicBool>,
     voiceover: bool,
@@ -621,8 +623,10 @@ impl Manager {
                 (self.main_rect.clone(), false)
             };
             // Chromium only paints visible views, so a hidden tab being captured stays
-            // visible but outside the window instead of covering the user's page.
-            let (bounds, visible) = if !visible && self.capturing(t.id) {
+            // visible but outside the window instead of covering the user's page. A peek is
+            // brief and a re-shown view starts blank, so the page is parked the same way.
+            let parked = self.parked && (Some(t.id) == self.active || Some(t.id) == self.split);
+            let (bounds, visible) = if !visible && (parked || self.capturing(t.id)) {
                 (
                     Rect {
                         x: width + 64,
@@ -1219,6 +1223,7 @@ impl Manager {
                 self.layout();
                 if self.focus_page_until.take().is_some_and(|until| until > Instant::now()) {
                     if let Some(host) = self.page_visible() {
+                self.parked = self.covered && m["peek"] == true;
                         focus_page(&host);
                     }
                 }
@@ -1944,6 +1949,7 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
             pending: HashMap::new(),
             adopted: Default::default(),
             closing,
+            parked: false,
             voiceover: false,
             assistive: Default::default(),
             accessibility: false,
