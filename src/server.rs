@@ -48,6 +48,8 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/events", get(events))
         .route("/api/tool", post(tool))
         .route("/api/debug/shell", post(debug_shell))
+        .route("/api/debug/cdp", post(debug_cdp))
+        .route("/api/debug/accessibility", post(debug_accessibility))
         .route("/api/browser/extensions", get(browser_extensions))
         .route("/api/browser/permissions", get(browser_permissions).post(set_browser_permission))
         .merge(crate::setup::routes(app.clone()))
@@ -326,6 +328,78 @@ async fn debug_shell(State(app): Shared, body: String) -> Json<Value> {
         Ok(Err(e)) => json!({ "error": e }),
         Err(e) => json!({ "error": e.to_string() }),
     })
+}
+
+/// Test-only DevTools access, enabled in debug builds or with `ASIDE_DEBUG_API=1`.
+fn debug_api() -> bool {
+    cfg!(debug_assertions) || std::env::var_os("ASIDE_DEBUG_API").is_some_and(|v| v == "1")
+}
+
+const DEBUG_CDP_METHODS: &[&str] = &[
+    "Accessibility.enable",
+    "Accessibility.disable",
+    "Accessibility.getFullAXTree",
+    "Accessibility.queryAXTree",
+    "Input.dispatchKeyEvent",
+    "Emulation.setEmulatedMedia",
+    "Emulation.setFocusEmulationEnabled",
+    "Runtime.evaluate",
+];
+
+#[derive(Deserialize)]
+struct CdpReq {
+    /// A tab id, "shell", or absent for the active tab.
+    #[serde(default)]
+    tab: Value,
+    method: String,
+    #[serde(default)]
+    params: Value,
+}
+
+async fn debug_cdp(State(app): Shared, Json(req): Json<CdpReq>) -> Json<Value> {
+    if !debug_api() {
+        return Json(json!({"error":"Debug DevTools access is disabled; start with ASIDE_DEBUG_API=1"}));
+    }
+    if !DEBUG_CDP_METHODS.contains(&req.method.as_str()) {
+        return Json(json!({"error":format!("{} is not an allowed debug method", req.method)}));
+    }
+    let tab = match &req.tab {
+        Value::String(s) if s == "shell" => Some(crate::app::SHELL),
+        Value::Number(n) => n.as_u64(),
+        _ => None,
+    };
+    let params = if req.params.is_object() { req.params } else { json!({}) };
+    let r = app
+        .agent
+        .browser
+        .op(|reply| Op::Cdp { tab, method: req.method, params, reply })
+        .await;
+    Json(match r {
+        Ok(Ok(v)) => json!({ "result": v }),
+        Ok(Err(e)) => json!({ "error": e }),
+        Err(e) => json!({ "error": e.to_string() }),
+    })
+}
+
+#[derive(Deserialize)]
+struct AccessibilityReq {
+    /// Simulates an assistive client turning on or off, as VoiceOver would.
+    #[serde(default)]
+    assistive: Option<bool>,
+    #[serde(default)]
+    tree: bool,
+}
+
+async fn debug_accessibility(State(app): Shared, Json(req): Json<AccessibilityReq>) -> Json<Value> {
+    if !debug_api() {
+        return Json(json!({"error":"Debug accessibility access is disabled; start with ASIDE_DEBUG_API=1"}));
+    }
+    let r = app
+        .agent
+        .browser
+        .op(|reply| Op::Accessibility { assistive: req.assistive, tree: req.tree, reply })
+        .await;
+    Json(r.unwrap_or_else(|e| json!({"error":e.to_string()})))
 }
 
 async fn browser_command(State(app): Shared, Json(body): Json<Value>) -> Json<Value> {

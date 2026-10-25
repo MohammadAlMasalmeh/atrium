@@ -9,21 +9,25 @@
    as a card, the assistant docked beside it (Comet/Aside), and a full chat view
    with a live preview of the agent's tab. The window itself is one Liquid
    Glass surface; the sidebar and side chat sit directly on it. */
+/* --fg-2 and --fg-3 keep text at WCAG AA (4.5:1) on the card, menu, and field surfaces. */
 :root {
-  --fg: rgb(0 0 0 / .86); --fg-2: rgb(0 0 0 / .56); --fg-3: rgb(0 0 0 / .36);
+  --fg: rgb(0 0 0 / .86); --fg-2: rgb(0 0 0 / .66); --fg-3: rgb(0 0 0 / .56);
   --hover: rgb(0 0 0 / .055); --press: rgb(0 0 0 / .1); --line: rgb(0 0 0 / .09);
   --selected: rgb(255 255 255 / .75); --selected-ring: rgb(0 0 0 / .06);
   --card: #fff; --card-ring: rgb(0 0 0 / .1); --field: rgb(0 0 0 / .05); --well: rgb(255 255 255 / .45);
   --menu: rgb(248 248 248 / .98); --menu-ring: rgb(0 0 0 / .12);
   --shadow: 0 0.5px 1.5px rgb(0 0 0 / .12), 0 6px 20px -8px rgb(0 0 0 / .2);
   --accent: AccentColor; --accent-soft: color-mix(in srgb, AccentColor 16%, transparent);
+  --accent-text: color-mix(in srgb, AccentColor 80%, black); --accent-strong: color-mix(in srgb, AccentColor 80%, black);
+  --danger: #c5221f;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --fg: rgb(255 255 255 / .92); --fg-2: rgb(255 255 255 / .6); --fg-3: rgb(255 255 255 / .38);
+    --fg: rgb(255 255 255 / .92); --fg-2: rgb(255 255 255 / .7); --fg-3: rgb(255 255 255 / .56);
+    --accent-text: color-mix(in srgb, AccentColor 70%, white); --danger: #ff6961;
     --hover: rgb(255 255 255 / .07); --press: rgb(255 255 255 / .12); --line: rgb(255 255 255 / .1);
     --selected: rgb(255 255 255 / .14); --selected-ring: rgb(255 255 255 / .08);
     --card: #1c1c1e; --card-ring: rgb(255 255 255 / .1); --field: rgb(255 255 255 / .08); --well: rgb(255 255 255 / .06);
@@ -57,8 +61,9 @@ kbd { font: 11px/16px var(--font); padding: 0 5px; border-radius: 4px; border: .
 
 /* ── Sidebar ─────────────────────────────────────────── */
 #sidebar { width: 250px; flex: none; display: flex; flex-direction: column; padding: 0 8px 4px 10px;
-  transition: margin-left .22s cubic-bezier(.3,.7,.2,1), opacity .18s; }
-body.sb-hidden #sidebar { margin-left: -250px; opacity: 0; }
+  transition: margin-left .22s cubic-bezier(.3,.7,.2,1), opacity .18s, visibility 0s; }
+body.sb-hidden #sidebar { margin-left: -250px; opacity: 0; visibility: hidden;
+  transition: margin-left .22s cubic-bezier(.3,.7,.2,1), opacity .18s, visibility 0s .22s; }
 body.sb-hidden #app { padding-left: 6px; }
 .sb-top { height: 40px; flex: none; display: flex; align-items: center; gap: 0; padding-left: 70px; }
 .sb-top .grow { flex: 1; align-self: stretch; }
@@ -176,7 +181,7 @@ body.side-open #side { display: flex; }
 .inner { padding: 0 16px; display: flex; flex-direction: column; gap: 12px; }
 #side .inner { padding: 0 10px 0 8px; }
 .u { align-self: flex-end; background: var(--field); padding: 6px 12px; border-radius: 15px; max-width: 86%; white-space: pre-wrap; user-select: text; line-height: 1.45; }
-.u .mention { color: var(--accent); }
+.u .mention { color: var(--accent-text); }
 .a { user-select: text; font-size: 13px; line-height: 1.62; overflow-wrap: anywhere; }
 .a > :first-child { margin-top: 0; } .a > :last-child { margin-bottom: 0; }
 .a p { margin: 0 0 9px; }
@@ -188,7 +193,7 @@ body.side-open #side { display: flex; }
 .a pre code { background: none; padding: 0; }
 .a blockquote { margin: 0 0 9px; padding-left: 10px; border-left: 2px solid var(--line); color: var(--fg-2); }
 .a hr { border: 0; border-top: .5px solid var(--line); margin: 12px 0; }
-.a a { color: var(--accent); text-decoration: none; }
+.a a { color: var(--accent-text); text-decoration: none; }
 .a a:hover { text-decoration: underline; }
 .a a img.lf { width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin-right: 3px; }
 .tbl { margin: 2px 0 10px; border-radius: 9px; box-shadow: 0 0 0 .5px var(--line); overflow-x: auto; background: var(--card); }
@@ -211,7 +216,7 @@ body.side-open #side { display: flex; }
 .step img { width: 12px; height: 12px; border-radius: 2px; }
 .step .d { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg-3); }
 .step .k { color: var(--fg-3); font-size: 11px; }
-.step.error { color: #d93025; }
+.step.error { color: var(--danger); }
 .plan { border-radius: 10px; background: var(--field); padding: 8px 12px; font-size: 12.5px; }
 .plan .ph { font-size: 11px; font-weight: 600; color: var(--fg-3); margin-bottom: 4px; }
 .plan .it { display: flex; gap: 8px; align-items: flex-start; padding: 2px 0; }
@@ -221,11 +226,11 @@ body.side-open #side { display: flex; }
 .plan .it.done span { color: var(--fg-3); text-decoration: line-through; }
 .plan .it.now .bx { box-shadow: inset 0 0 0 1.5px var(--accent); }
 .meta-line { font-size: 11px; color: var(--fg-3); }
-.err { color: #d93025; font-size: 12px; }
+.err { color: var(--danger); font-size: 12px; }
 .perm { border-radius: 10px; padding: 10px 12px; background: var(--field); font-size: 12.5px; }
 .perm .btns { display: flex; gap: 6px; margin-top: 8px; }
 .perm button { padding: 3px 10px; border-radius: 6px; background: var(--card); box-shadow: 0 0 0 .5px var(--card-ring); }
-.perm button.yes { background: var(--accent); color: #fff; box-shadow: none; }
+.perm button.yes { background: var(--accent-strong); color: #fff; box-shadow: none; }
 .empty { padding: 32px 8px; color: var(--fg-3); line-height: 1.55; }
 .empty b { display: block; color: var(--fg-2); font-weight: 600; margin-bottom: 4px; }
 .composer { flex: none; padding: 4px 10px 10px; position: relative; }
@@ -251,8 +256,8 @@ body.side-open #side { display: flex; }
   box-shadow: 0 0 0 .5px var(--menu-ring), 0 10px 30px -8px rgb(0 0 0 / .3); padding: 5px; display: none; max-height: 260px; overflow-y: auto; z-index: 5; }
 .popup.open { display: block; }
 .popup .pi { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 8px; border-radius: 5px; }
-.popup .pi.sel { background: var(--accent); color: #fff; }
-.popup .pi.sel .k { color: rgb(255 255 255 / .8); }
+.popup .pi.sel { background: var(--accent-strong); color: #fff; }
+.popup .pi.sel .k { color: rgb(255 255 255 / .9); }
 .popup .pi img { width: 14px; height: 14px; border-radius: 3px; }
 .popup .pi .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .popup .pi .k { color: var(--fg-3); font-size: 12px; }
@@ -274,8 +279,8 @@ body.cmdk #cmdk { display: block; }
 .cmdk-in input::placeholder { color: var(--fg-3); }
 #cmdk-list { max-height: 50vh; overflow-y: auto; padding: 5px; }
 .ci { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 9px; border-radius: 6px; }
-.ci.sel { background: var(--accent); color: #fff; }
-.ci.sel .s, .ci.sel .k, .ci.sel .ic { color: rgb(255 255 255 / .8); }
+.ci.sel { background: var(--accent-strong); color: #fff; }
+.ci.sel .s, .ci.sel .k, .ci.sel .ic { color: rgb(255 255 255 / .9); }
 .ci img, .ci .ic { width: 16px; height: 16px; border-radius: 3px; flex: none; display: grid; place-items: center; color: var(--fg-2); }
 .ci .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ci .s { color: var(--fg-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
@@ -293,66 +298,85 @@ body.glance #glance { display: flex; }
 #toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 10px); opacity: 0; transition: .2s; z-index: 20; pointer-events: none;
   background: var(--menu); padding: 7px 12px; border-radius: 8px; box-shadow: 0 0 0 .5px var(--menu-ring), var(--shadow); font-size: 12px; }
 #toast.on { transform: translate(-50%, 0); opacity: 1; }
+
+/* ── Keyboard focus and motion ───────────────────────── */
+.sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.row:focus-visible, .rows .r:focus-visible, .act-head:focus-visible, .fav:focus-visible { outline-offset: -2px; }
+#url:focus-within { background: var(--selected); }
+#url:has(#url-host:focus-visible) { box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-soft); }
+#url-host:focus-visible { outline: none; }
+#url:focus-within .act, .row:focus-visible .x { opacity: 1; }
+.chip select:focus-visible { outline: none; }
+.chip:has(select:focus-visible) { box-shadow: 0 0 0 2px var(--accent); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important; transition-delay: 0s !important; scroll-behavior: auto !important; }
+  .shimmer { animation: none; background: none; color: var(--fg-2) !important; }
+  #pip:hover { transform: none; }
+}
 </style>
 </head>
 <body>
 <div id="app">
-  <aside id="sidebar">
+  <aside id="sidebar" role="navigation" aria-label="Sidebar">
     <div class="sb-top" data-drag>
       <span class="grow" data-drag></span>
-      <button class="ib" id="sb-toggle" title="Hide Sidebar (⌘S)"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M9 4.5v15"/></svg></button>
-      <button class="ib" id="back" title="Back (⌘[)"><svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
-      <button class="ib" id="fwd" title="Forward (⌘])"><svg class="i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
-      <button class="ib" id="reload" title="Reload (⌘R)"><svg class="i" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5"/><path d="M20 4v4.5h-4.5"/></svg></button>
+      <button class="ib" id="sb-toggle" title="Hide Sidebar (⌘S)" aria-label="Hide Sidebar" aria-keyshortcuts="Meta+S"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M9 4.5v15"/></svg></button>
+      <button class="ib" id="back" title="Back (⌘[)" aria-label="Back" aria-keyshortcuts="Meta+["><svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+      <button class="ib" id="fwd" title="Forward (⌘])" aria-label="Forward" aria-keyshortcuts="Meta+]"><svg class="i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+      <button class="ib" id="reload" title="Reload (⌘R)" aria-label="Reload" aria-keyshortcuts="Meta+R"><svg class="i" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5"/><path d="M20 4v4.5h-4.5"/></svg></button>
     </div>
     <div id="url" title="Edit address (⌘L)">
-      <span class="lead" id="url-lead"></span><span class="h empty" id="url-host">Search or enter address</span>
-      <button class="act" id="url-copy" title="Copy link (⇧⌘C)"><svg class="i" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg></button>
-      <button class="act" id="url-pin" title="Pin to this space (⌘D)"><svg class="i" viewBox="0 0 24 24"><path d="M12 17v4M9 3h6l-1 6 3 3v2H7v-2l3-3Z"/></svg></button>
+      <span class="lead" id="url-lead"></span><span class="h empty" id="url-host" role="button" tabindex="0" aria-keyshortcuts="Meta+L">Search or enter address</span>
+      <button class="act" id="url-copy" title="Copy link (⇧⌘C)" aria-label="Copy Link" aria-keyshortcuts="Shift+Meta+C"><svg class="i" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg></button>
+      <button class="act" id="url-pin" title="Pin to this space (⌘D)" aria-label="Pin to This Space" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><path d="M12 17v4M9 3h6l-1 6 3 3v2H7v-2l3-3Z"/></svg></button>
       <span class="bar"></span>
     </div>
     <div class="sb-scroll">
-      <div class="favs" id="favs"></div>
-      <div class="space-head" id="space-head"></div>
-      <div id="pinned"></div>
+      <div class="favs" id="favs" role="group" aria-label="Favorites"></div>
+      <div class="space-head" id="space-head" role="heading" aria-level="2"></div>
+      <div id="pinned" role="tablist" aria-label="Pinned Tabs" aria-orientation="vertical"></div>
       <div class="divider" id="pin-divider"></div>
-      <div class="row dim" id="new-tab"><span class="fv"><svg class="i" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg></span><span class="t">New Tab</span></div>
-      <div id="tabs"></div>
-      <div class="label">Chats<button class="ib" id="new-chat" title="New Chat (⌘N)"><svg class="i" viewBox="0 0 24 24"><path d="M12 20h8"/><path d="M16.5 4.5a2 2 0 0 1 3 3L8 19l-4 1 1-4Z"/></svg></button></div>
-      <div id="chats"></div>
+      <div class="row dim" id="new-tab" role="button" tabindex="0" aria-keyshortcuts="Meta+T"><span class="fv"><svg class="i" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg></span><span class="t">New Tab</span></div>
+      <div id="tabs" role="tablist" aria-label="Tabs" aria-orientation="vertical"></div>
+      <div id="tab-hint" hidden>Press Delete to close.</div>
+      <div id="pin-hint" hidden>Press Delete to unpin.</div>
+      <div class="label"><span role="heading" aria-level="2">Chats</span><button class="ib" id="new-chat" title="New Chat (⌘N)" aria-label="New Chat" aria-keyshortcuts="Meta+N"><svg class="i" viewBox="0 0 24 24"><path d="M12 20h8"/><path d="M16.5 4.5a2 2 0 0 1 3 3L8 19l-4 1 1-4Z"/></svg></button></div>
+      <div id="chats" role="group" aria-label="Chats"></div>
     </div>
     <div class="sb-bottom">
-      <button class="ib" id="cmd-btn" title="Command Bar (⌘K)"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg></button>
-      <div class="spaces" id="spaces"></div>
-      <button class="ib" id="add-space" title="New Space"><svg class="i" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg></button>
-      <button class="ib" id="assist" title="Assistant (⌘E)"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M15 4.5v15"/></svg></button>
+      <button class="ib" id="cmd-btn" title="Command Bar (⌘K)" aria-label="Command Bar" aria-keyshortcuts="Meta+K"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg></button>
+      <div class="spaces" id="spaces" role="group" aria-label="Spaces"></div>
+      <button class="ib" id="add-space" title="New Space" aria-label="New Space"><svg class="i" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg></button>
+      <button class="ib" id="assist" title="Assistant (⌘E)" aria-label="Assistant" aria-keyshortcuts="Meta+E" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M15 4.5v15"/></svg></button>
     </div>
   </aside>
 
   <section id="main">
-    <div id="panes">
+    <div id="panes" role="main" aria-label="Page">
       <div class="pane" id="pane-main">
         <img class="frozen" id="frozen-main" alt="">
         <div class="page" id="ntp">
           <div class="start">
             <label class="omni">
               <svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
-              <textarea id="ob" rows="1" spellcheck="false" placeholder="Search or enter address"></textarea>
-              <div class="seg"><button data-mode="search" class="on">Search</button><button data-mode="ask">Ask</button></div>
+              <textarea id="ob" rows="1" spellcheck="false" placeholder="Search or enter address" aria-label="Search or enter address"></textarea>
+              <div class="seg" role="group" aria-label="Mode"><button data-mode="search" class="on">Search</button><button data-mode="ask">Ask</button></div>
             </label>
             <div class="omni-foot">
               <span><kbd>Tab</kbd> switch</span><span class="grow"></span>
-              <span class="chip ask-only" title="Model"><span class="model-name">Model</span><svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg><select class="model-select"></select></span>
+              <span class="chip ask-only" title="Model"><span class="model-name">Model</span><svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg><select class="model-select" aria-label="Model"></select></span>
             </div>
             <div id="start-secs"></div>
           </div>
         </div>
         <div class="page" id="chatpage">
           <div class="cp-head" data-drag>
-            <span class="t" id="cp-title">New Chat</span>
-            <button class="ib" id="cp-dock" title="Dock beside the page (⌘E)"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M15 4.5v15"/></svg></button>
+            <span class="t" id="cp-title" role="heading" aria-level="1">New Chat</span>
+            <button class="ib" id="cp-dock" title="Dock beside the page (⌘E)" aria-label="Dock Beside the Page" aria-keyshortcuts="Meta+E"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M15 4.5v15"/></svg></button>
           </div>
-          <div id="pip" title="Open the agent's page">
+          <div id="pip" title="Open the agent's page" role="button" tabindex="0" aria-label="Open the Agent's Page">
             <img id="pip-img" alt="">
             <div class="cap"><img id="pip-fav" alt=""><span class="h" id="pip-host"></span><span id="pip-live"></span><span class="open">Open ↗</span></div>
           </div>
@@ -361,12 +385,12 @@ body.glance #glance { display: flex; }
       </div>
       <div class="pane" id="pane-split"><img class="frozen" id="frozen-split" alt=""></div>
     </div>
-    <aside id="side">
+    <aside id="side" aria-label="Assistant">
       <div class="side-head" data-drag>
-        <span class="t" id="side-title">Assistant</span>
-        <button class="ib" id="side-new" title="New Chat"><svg class="i" viewBox="0 0 24 24"><path d="M12 20h8"/><path d="M16.5 4.5a2 2 0 0 1 3 3L8 19l-4 1 1-4Z"/></svg></button>
-        <button class="ib" id="side-expand" title="Open Full Chat"><svg class="i" viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></button>
-        <button class="ib" id="side-close" title="Close (⌘E)"><svg class="i" viewBox="0 0 24 24"><path d="M17 7 7 17M7 7l10 10"/></svg></button>
+        <span class="t" id="side-title" role="heading" aria-level="2">Assistant</span>
+        <button class="ib" id="side-new" title="New Chat" aria-label="New Chat"><svg class="i" viewBox="0 0 24 24"><path d="M12 20h8"/><path d="M16.5 4.5a2 2 0 0 1 3 3L8 19l-4 1 1-4Z"/></svg></button>
+        <button class="ib" id="side-expand" title="Open Full Chat" aria-label="Open Full Chat"><svg class="i" viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></button>
+        <button class="ib" id="side-close" title="Close (⌘E)" aria-label="Close Assistant" aria-keyshortcuts="Meta+E"><svg class="i" viewBox="0 0 24 24"><path d="M17 7 7 17M7 7l10 10"/></svg></button>
       </div>
       <div class="chat-host" id="chat-side"></div>
     </aside>
@@ -374,37 +398,38 @@ body.glance #glance { display: flex; }
 </div>
 
 <div id="overlay">
-  <div class="scrim" id="scrim"></div>
-  <div id="cmdk">
+  <div class="scrim" id="scrim" aria-hidden="true"></div>
+  <div id="cmdk" role="dialog" aria-modal="true" aria-label="Command Bar">
     <img class="backdrop" alt="">
-    <div class="cmdk-in"><span id="cmdk-icon"></span><input id="cmdk-input" spellcheck="false" autocomplete="off"></div>
-    <div id="cmdk-list"></div>
+    <div class="cmdk-in"><span id="cmdk-icon"></span><input id="cmdk-input" spellcheck="false" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cmdk-list"></div>
+    <div id="cmdk-list" role="listbox" aria-label="Results"></div>
   </div>
-  <div id="glance">
+  <div id="glance" role="dialog" aria-modal="true" aria-labelledby="glance-title">
     <img class="backdrop" alt="">
     <div class="glance-head">
       <span class="t" id="glance-title"></span>
-      <button class="gbtn" id="glance-split">Split</button>
-      <button class="gbtn" id="glance-open">Open</button>
-      <button class="ib" id="glance-close" title="Close (Esc)"><svg class="i" viewBox="0 0 24 24"><path d="M17 7 7 17M7 7l10 10"/></svg></button>
+      <button class="gbtn" id="glance-split" aria-label="Open in Split View">Split</button>
+      <button class="gbtn" id="glance-open" aria-label="Open as Tab">Open</button>
+      <button class="ib" id="glance-close" title="Close (Esc)" aria-label="Close Glance" aria-keyshortcuts="Escape"><svg class="i" viewBox="0 0 24 24"><path d="M17 7 7 17M7 7l10 10"/></svg></button>
     </div>
     <div id="glance-frame"></div>
   </div>
 </div>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+<div id="announcer" class="sr" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <template id="chat-tpl">
   <div class="chat-host">
-    <div class="log"><div class="inner"></div></div>
+    <div class="log" role="log" aria-live="off" aria-label="Conversation"><div class="inner"></div></div>
     <div class="composer">
-      <div class="popup"></div>
+      <div class="popup" id="chat-popup" role="listbox" aria-label="Suggestions"></div>
       <div class="box">
-        <div class="mentions"></div>
-        <textarea rows="1" placeholder="Ask anything, or tell it what to do · @ adds tabs · / shortcuts"></textarea>
+        <div class="mentions" role="group" aria-label="Included Tabs"></div>
+        <textarea rows="1" placeholder="Ask anything, or tell it what to do · @ adds tabs · / shortcuts" aria-label="Message the assistant" aria-autocomplete="list" aria-controls="chat-popup"></textarea>
         <div class="bar">
-          <span class="chip" title="Model"><span class="model-name">Model</span><svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg><select class="model-select"></select></span>
+          <span class="chip" title="Model"><span class="model-name">Model</span><svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg><select class="model-select" aria-label="Model"></select></span>
           <span class="grow"></span>
-          <button class="send" title="Send"><svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+          <button class="send" title="Send" aria-label="Send"><svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
         </div>
       </div>
     </div>
@@ -421,7 +446,10 @@ window.addEventListener('unhandledrejection', (e) => window.ipc && window.ipc.po
 try {
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const ipc = (msg) => window.ipc && window.ipc.postMessage(JSON.stringify(msg));
+// Commands apply in order, so a focus request never overtakes the command that opens its page.
+let ipcChain = Promise.resolve();
+const ipc = (msg) => (ipcChain = ipcChain.then(() => window.ipc && window.ipc.postMessage(JSON.stringify(msg))).catch(() => {}));
+for (const root of [document, $('#chat-tpl').content]) root.querySelectorAll('svg').forEach((s) => s.setAttribute('aria-hidden', 'true'));
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const store = { get(k, d) { try { const v = localStorage.getItem('aside.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
                 set(k, v) { try { localStorage.setItem('aside.' + k, JSON.stringify(v)); } catch {} } };
@@ -453,9 +481,12 @@ const ICON = {
   sidebar: '<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M9 4.5v15"/>',
   pin: '<path d="M12 17v4M9 3h6l-1 6 3 3v2H7v-2l3-3Z"/>',
 };
-const icon = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24">${ICON[n] || ICON.globe}</svg>`;
+const icon = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICON[n] || ICON.globe}</svg>`;
 let toastTimer;
-function toast(msg) { const el = $('#toast'); el.textContent = msg; el.classList.add('on'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('on'), 1600); }
+// Live regions only announce changes, so a repeated message is cleared first.
+function speak(el, msg) { el.textContent = ''; setTimeout(() => { el.textContent = msg; }, 30); }
+function toast(msg) { const el = $('#toast'); speak(el, msg); el.classList.add('on'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('on'), 1600); }
+function announce(msg) { speak($('#announcer'), msg); }
 async function post(url, body) {
   try { return await (await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json(); }
   catch (e) { return { error: String(e) }; }
@@ -504,13 +535,26 @@ window.asideShell = {
     switch (name) {
       case 'commandBar': openCmdk(''); break;
       case 'editUrl': openCmdk(onWeb() ? activeTab().url : '', true); break;
-      case 'toggleSidebar': document.body.classList.toggle('sb-hidden'); layoutSoon(); break;
+      case 'toggleSidebar':
+        if (document.body.classList.toggle('sb-hidden') && $('#sidebar').contains(document.activeElement)) leaveShell();
+        layoutSoon(); break;
       case 'toggleAssistant': toggleSide(); break;
       case 'toggleSplit': toggleSplit(); break;
       case 'newChat': newChat(true); break;
       case 'bookmark': togglePin(); break;
       case 'copyUrl': copyUrl(); break;
-      case 'glanceOpened': S.overlay = 'glance'; freeze(); render(); break;
+      case 'glanceOpened':
+        if (S.overlay !== 'glance') S.returnFocus = document.hasFocus() ? document.activeElement : null;
+        S.overlay = 'glance'; freeze(); render(); ipc({ cmd: 'focus', target: 'glance' }); break;
+      case 'closeOverlay': if (S.overlay) closeOverlay(); break;
+      // Native focus arrived from a page view or wrapped around; place it in the DOM.
+      case 'focusSidebar': focusSidebar(); break;
+      case 'focusFirst': focusEdge(S.overlay ? dialogEl() : document.body, false); break;
+      case 'focusLast': focusEdge(S.overlay ? dialogEl() : document.body, true); break;
+      case 'focusAfterPage': focusEdge(S.overlay ? dialogEl() : S.side && onWeb() && focusables($('#side')).length ? $('#side') : $('#sidebar'), false); break;
+      case 'focusBeforePage': focusEdge(S.overlay ? dialogEl() : $('#sidebar'), true); break;
+      case 'focusGlance': focusEdge($('#glance'), false); break;
+      case 'focusGlanceEnd': focusEdge($('#glance'), true); break;
     }
   },
   // The agent is working in tab `id`.
@@ -549,6 +593,13 @@ function patch(el, html) {
   while (el.children.length > want.length) el.lastElementChild.remove();
 }
 function render() {
+  // Re-rendered rows replace focused ones; focus follows the row's id.
+  const focusedEl = document.activeElement, focusedId = focusedEl && focusedEl.id;
+  renderView();
+  const again = focusedId && !focusedEl.isConnected && document.getElementById(focusedId);
+  if (again) { if (again.getAttribute('role') === 'tab') rove(again); again.focus({ preventScroll: true }); }
+}
+function renderView() {
   const t = activeTab();
   const web = onWeb(), chatView = S.view === 'chat', ntp = !web && !chatView;
   const split = web && S.split != null && tabById(S.split)?.kind === 'web';
@@ -566,12 +617,16 @@ function render() {
   document.body.classList.toggle('agent-here', working && web && agentTabOf(chat.id) === t.id);
   for (const id of ['#back', '#fwd', '#reload']) $(id).disabled = !web;
   $('#assist').classList.toggle('on', S.side && web);
+  $('#assist').setAttribute('aria-pressed', String(S.side && web));
+  $('#app').inert = !!S.overlay;
 
   // Address
   const h = $('#url-host');
   if (web) { h.textContent = host(t.url) || t.url; h.classList.remove('empty'); patch($('#url-lead'), t.url.startsWith('https:') ? icon('lock') : icon('globe')); }
   else { h.textContent = chatView ? (chat.title || 'New Chat') : 'Search or enter address'; h.classList.toggle('empty', !chatView); patch($('#url-lead'), chatView ? icon('chat') : icon('search')); }
   $('#url-copy').style.display = $('#url-pin').style.display = web ? '' : 'none';
+  h.setAttribute('aria-label', web ? `Address: ${t.url}` : chatView ? `Chat: ${chat.title || 'New Chat'}` : 'Search or enter address');
+  $('#url-pin').setAttribute('aria-pressed', String(web && pinnedHere().some((p) => p.url === t.url)));
 
   // The one chat component lives in the full view or the side dock.
   const host_ = chatView ? $('#chat-main') : $('#chat-side');
@@ -591,7 +646,7 @@ function render() {
 function renderSidebar() {
   const t = activeTab(), web = onWeb();
   patch($('#favs'), S.favs.map((u, i) =>
-    `<button class="fav ${web && host(t.url) === host(u) ? 'active' : ''}" data-i="${i}" title="${esc(siteName(u))}"><img src="${esc(favicon(u))}" alt=""></button>`).join(''));
+    `<button class="fav ${web && host(t.url) === host(u) ? 'active' : ''}" data-i="${i}" title="${esc(siteName(u))}" aria-label="${esc(siteName(u))}"><img src="${esc(favicon(u))}" alt=""></button>`).join(''));
   $$('#favs .fav').forEach((b) => {
     b.onclick = () => { const u = S.favs[b.dataset.i]; const open = spaceTabs().find((x) => host(x.url) === host(u)); S.view = 'tab'; if (open) ipc({ cmd: 'activate', id: open.id }); else ipc({ cmd: 'newTab', url: u }); };
     b.oncontextmenu = (e) => { e.preventDefault(); S.favs.splice(b.dataset.i, 1); store.set('favs', S.favs); render(); toast('Removed from Favorites'); };
@@ -604,7 +659,8 @@ function renderSidebar() {
   patch($('#pinned'), pins.map((p, i) => {
     const live = spaceTabs().find((x) => x.url === p.url || host(x.url) === host(p.url) && x.url.startsWith(p.url));
     const active = live && live.id === S.active && S.view === 'tab';
-    return `<div class="row ${active ? 'active' : ''} ${live ? '' : 'sleeping'}" data-i="${i}" title="${esc(p.url)}"><img class="fv" src="${esc(favicon(p.url))}" alt=""><span class="t">${esc(p.title || host(p.url))}</span><span class="x" title="Unpin">${icon('x')}</span></div>`;
+    const name = `${p.title || host(p.url)}${live ? '' : ', not loaded'}`;
+    return `<div class="row ${active ? 'active' : ''} ${live ? '' : 'sleeping'}" role="tab" id="pin-${i}" tabindex="-1" aria-selected="${!!active}" aria-label="${esc(name)}" aria-describedby="pin-hint" data-i="${i}" title="${esc(p.url)}"><img class="fv" src="${esc(favicon(p.url))}" alt=""><span class="t">${esc(p.title || host(p.url))}</span><span class="x" title="Unpin" aria-hidden="true">${icon('x')}</span></div>`;
   }).join(''));
   $('#pin-divider').style.display = pins.length ? '' : 'none';
   $$('#pinned .row').forEach((r) => r.onclick = (e) => {
@@ -622,7 +678,9 @@ function renderSidebar() {
   patch($('#tabs'), list.map((x) => {
     const lead = x.loading ? '<span class="spin"></span>' : `<img class="fv" src="${esc(favicon(x.url, x.icon))}" alt="" onerror="this.style.visibility='hidden'">`;
     const active = (x.id === S.active || x.id === S.split) && S.view === 'tab';
-    return `<div class="row ${active ? 'active' : ''}" data-id="${x.id}" title="${esc(x.url)}">${lead}<span class="t">${esc(x.title || host(x.url) || x.url)}</span>${x.id === agentTab && chat.busy ? '<span class="pulse" title="The agent is working here"></span>' : ''}${x.id === S.split ? '<span class="tag">split</span>' : ''}<span class="x" title="Close Tab (⌘W)">${icon('x')}</span></div>`;
+    const working = x.id === agentTab && chat.busy;
+    const name = `${x.title || host(x.url) || x.url}${x.loading ? ', loading' : ''}${x.suspended ? ', sleeping' : ''}${working ? ', assistant working' : ''}${x.id === S.split ? ', in split view' : ''}`;
+    return `<div class="row ${active ? 'active' : ''}" role="tab" id="tab-${x.id}" tabindex="-1" aria-selected="${x.id === S.active && S.view === 'tab'}" aria-label="${esc(name)}" aria-describedby="tab-hint" data-id="${x.id}" title="${esc(x.url)}">${lead}<span class="t">${esc(x.title || host(x.url) || x.url)}</span>${working ? '<span class="pulse" title="The agent is working here"></span>' : ''}${x.id === S.split ? '<span class="tag">split</span>' : ''}<span class="x" title="Close Tab (⌘W)" aria-hidden="true">${icon('x')}</span></div>`;
   }).join(''));
   $('#new-tab').classList.toggle('active', !web && S.view !== 'chat');
   $$('#tabs .row').forEach((r) => r.onclick = (e) => {
@@ -636,13 +694,47 @@ function renderSidebar() {
   patch($('#chats'), S.sessions.slice(0, 8).map((s) => {
     const lead = s.busy ? '<span class="pulse"></span>' : `<span class="fv">${icon('chat')}</span>`;
     const active = s.id === chat.id && (S.view === 'chat' || (S.side && web));
-    return `<div class="row ${active ? 'active' : ''}" data-id="${esc(s.id)}">${lead}<span class="t">${esc(s.title)}</span></div>`;
+    return `<div class="row ${active ? 'active' : ''}" role="button" tabindex="0" id="chat-${esc(s.id)}" ${active ? 'aria-current="true"' : ''} aria-label="${esc(s.title)}${s.busy ? ', working' : ''}" data-id="${esc(s.id)}">${lead}<span class="t">${esc(s.title)}</span></div>`;
   }).join(''));
   $$('#chats .row').forEach((r) => r.onclick = () => openChat(r.dataset.id, true));
 
-  patch($('#spaces'), S.spaces.map((s) => `<button class="space-dot ${s.id === S.space ? 'on' : ''}" style="--c:${spaceColor(s)}" data-id="${s.id}" title="${esc(s.name)}"></button>`).join(''));
+  patch($('#spaces'), S.spaces.map((s) => `<button class="space-dot ${s.id === S.space ? 'on' : ''}" style="--c:${spaceColor(s)}" data-id="${s.id}" title="${esc(s.name)}" aria-label="${esc(s.name)} space" aria-pressed="${s.id === S.space}"></button>`).join(''));
   $$('#spaces .space-dot').forEach((b) => b.onclick = () => switchSpace(Number(b.dataset.id)));
+  rove();
 }
+// The sidebar's tab lists are one keyboard stop; arrows move between rows.
+function tabRows() { return $$('#pinned [role=tab], #tabs [role=tab]'); }
+function rove(to) {
+  const rows = tabRows();
+  const target = to || rows.find((r) => r === document.activeElement) || rows.find((r) => r.getAttribute('aria-selected') === 'true') || rows[0];
+  rows.forEach((r) => { r.tabIndex = r === target ? 0 : -1; });
+  return target;
+}
+$('#sidebar').addEventListener('keydown', (e) => {
+  const row = e.target.closest && e.target.closest('[role=tab]');
+  if (!row || e.metaKey || e.ctrlKey || e.altKey) return;
+  const rows = tabRows(), i = rows.indexOf(row);
+  let next;
+  switch (e.key) {
+    case 'ArrowDown': next = rows[(i + 1) % rows.length]; break;
+    case 'ArrowUp': next = rows[(i - 1 + rows.length) % rows.length]; break;
+    case 'Home': next = rows[0]; break;
+    case 'End': next = rows[rows.length - 1]; break;
+    case 'Enter': case ' ': e.preventDefault(); row.click(); return;
+    case 'Delete': case 'Backspace': {
+      e.preventDefault();
+      const neighbor = rows[i + 1] || rows[i - 1];
+      if (neighbor) rove(neighbor).focus(); else $('#new-tab').focus();
+      const label = row.getAttribute('aria-label');
+      if (row.closest('#pinned')) { pinnedHere().splice(+row.dataset.i, 1); store.set('pinned', S.pinned); render(); announce(`Unpinned ${label}`); }
+      else { ipc({ cmd: 'close', id: Number(row.dataset.id) }); announce(`Closed ${label}`); }
+      return;
+    }
+    default: return;
+  }
+  e.preventDefault();
+  rove(next).focus();
+});
 
 const KNOWN = { 'mail.google.com': 'Gmail', 'news.ycombinator.com': 'Hacker News', 'en.wikipedia.org': 'Wikipedia', 'github.com': 'GitHub',
   'youtube.com': 'YouTube', 'x.com': 'X', 'reddit.com': 'Reddit', 'google.com': 'Google', 'linkedin.com': 'LinkedIn' };
@@ -654,9 +746,9 @@ function renderStart() {
   const chats = S.sessions.slice(0, 5);
   patch($('#start-secs'),
     (chats.length ? `<div class="sec"><h2>Recent chats</h2><div class="rows">${chats.map((s) =>
-      `<div class="r" data-chat="${esc(s.id)}">${s.busy ? '<span class="pulse"></span>' : icon('chat')}<span class="t">${esc(s.title)}</span><span class="s">${s.busy ? 'Working' : ago(s.updated)}</span></div>`).join('')}</div></div>` : '') +
+      `<div class="r" role="button" tabindex="0" data-chat="${esc(s.id)}">${s.busy ? '<span class="pulse"></span>' : icon('chat')}<span class="t">${esc(s.title)}</span><span class="s">${s.busy ? 'Working' : ago(s.updated)}</span></div>`).join('')}</div></div>` : '') +
     (frequent.length ? `<div class="sec"><h2>Frequently visited</h2><div class="rows">${frequent.map((f) =>
-      `<div class="r" data-url="${esc(f.url)}"><img src="${esc(favicon(f.url))}" alt=""><span class="t">${esc(f.title || siteName(f.url))}</span><span class="s">${esc(host(f.url))}</span></div>`).join('')}</div></div>` : ''));
+      `<div class="r" role="link" tabindex="0" data-url="${esc(f.url)}"><img src="${esc(favicon(f.url))}" alt=""><span class="t">${esc(f.title || siteName(f.url))}</span><span class="s">${esc(host(f.url))}</span></div>`).join('')}</div></div>` : ''));
   $$('#start-secs [data-chat]').forEach((r) => r.onclick = () => openChat(r.dataset.chat, true));
   $$('#start-secs [data-url]').forEach((r) => r.onclick = () => openUrl(r.dataset.url));
 }
@@ -786,16 +878,72 @@ function freeze() {
   $$('.frozen').forEach((f) => f.removeAttribute('src'));
   if (onWeb()) ipc({ cmd: 'freeze' });
 }
-function closeOverlay() { if (S.overlay === 'glance') ipc({ cmd: 'glanceClose' }); S.overlay = null; render(); }
+function closeOverlay() { if (S.overlay === 'glance') ipc({ cmd: 'glanceClose' }); S.overlay = null; render(); restoreFocus(); }
 $('#scrim').onclick = closeOverlay;
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.overlay) { e.preventDefault(); closeOverlay(); } });
 
+/* ── Keyboard focus ───────────────────────────────── */
+const FOCUSABLE = 'button, [tabindex], input, textarea, select, a[href]';
+function focusables(root) {
+  return $$(FOCUSABLE, root).filter((el) => !el.disabled && el.tabIndex >= 0 && !el.closest('[inert], [hidden]')
+    && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
+}
+function focusEdge(root, last) { const list = focusables(root); (last ? list[list.length - 1] : list[0])?.focus(); }
+const dialogEl = () => S.overlay === 'glance' ? $('#glance') : $('#cmdk');
+const focusPage = () => ipc({ cmd: 'focus', target: 'page' });
+function focusSidebar() {
+  if (S.overlay) { focusEdge(dialogEl(), false); return; }
+  if (document.body.classList.contains('sb-hidden')) { document.body.classList.remove('sb-hidden'); layoutSoon(); }
+  const row = rove();
+  if (row) row.focus(); else $('#url-host').focus();
+}
+// Focus leaves the shell for the page when one is showing, otherwise the main column.
+function leaveShell() { if (onWeb()) focusPage(); else focusEdge($('#main'), false); }
+function restoreFocus() {
+  const prev = S.returnFocus; S.returnFocus = null;
+  const usable = prev && prev.isConnected && prev !== document.body && !prev.closest('[inert], [hidden]')
+    && prev.getClientRects().length && getComputedStyle(prev).visibility !== 'hidden';
+  if (!usable) { leaveShell(); return; }
+  if (prev.getAttribute('role') === 'tab') rove(prev);
+  prev.focus();
+}
+// Non-native buttons and links activate from the keyboard like native ones.
+document.addEventListener('keydown', (e) => {
+  const el = e.target, role = el.getAttribute && el.getAttribute('role');
+  if (e.defaultPrevented || !role || el.matches(FOCUSABLE.replace('[tabindex], ', ''))) return;
+  if ((role === 'button' && (e.key === 'Enter' || e.key === ' ')) || (role === 'link' && e.key === 'Enter')) { e.preventDefault(); el.click(); }
+});
+// Tab order: sidebar, then the page view, then the assistant; dialogs keep focus inside.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab' || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+  const back = e.shiftKey, cur = document.activeElement;
+  if (S.overlay) {
+    const list = focusables(dialogEl()), i = list.indexOf(cur);
+    e.preventDefault();
+    if (S.overlay === 'glance' && i >= 0 && (back ? i === 0 : i === list.length - 1)) { ipc({ cmd: 'focus', target: 'glance' }); return; }
+    list[i < 0 ? 0 : (i + (back ? -1 : 1) + list.length) % list.length]?.focus();
+    return;
+  }
+  const web = onWeb(), all = focusables(document.body), bar = focusables($('#sidebar'));
+  const side = S.side && web ? focusables($('#side')) : [];
+  if (!all.length) return;
+  const go = (fn) => { e.preventDefault(); fn(); };
+  if (!back && web && cur === bar[bar.length - 1]) return go(focusPage);
+  if (back && web && side.length && cur === side[0]) return go(focusPage);
+  if (!back && cur === all[all.length - 1]) return go(() => all[0].focus());
+  if (back && (cur === all[0] || !all.includes(cur))) return go(() => side.length ? side[side.length - 1].focus() : web ? focusPage() : all[all.length - 1].focus());
+});
+
 let cmdkItems = [], cmdkSel = 0, cmdkUrlMode = false;
 function openCmdk(value, urlMode) {
+  // Without document focus the user came from the page, so focus returns there.
+  if (S.overlay !== 'cmdk') S.returnFocus = document.hasFocus() ? document.activeElement : null;
   cmdkUrlMode = !!urlMode; freeze(); S.overlay = 'cmdk'; render();
   const inp = $('#cmdk-input'); inp.value = value || '';
   inp.placeholder = urlMode ? 'Search or enter address' : 'Search tabs, history and chats, or ask the assistant';
-  updateCmdk(); setTimeout(() => { inp.focus(); inp.select(); }, 20);
+  inp.setAttribute('aria-label', inp.placeholder);
+  $('#cmdk').setAttribute('aria-label', urlMode ? 'Edit Address' : 'Command Bar');
+  updateCmdk(); inp.focus(); setTimeout(() => { inp.focus(); inp.select(); }, 20);
 }
 function updateCmdk() {
   const q = $('#cmdk-input').value.trim(), ql = q.toLowerCase();
@@ -803,13 +951,13 @@ function updateCmdk() {
   const items = [];
   if (q) {
     const isUrl = !q.includes(' ') && /\.|^localhost/.test(q);
-    items.push({ t: q, s: isUrl ? 'Open' : 'Search Google', ic: isUrl ? 'globe' : 'search', run: () => openUrl(q, !cmdkUrlMode) });
+    items.push({ t: q, s: isUrl ? 'Open' : 'Search Google', ic: isUrl ? 'globe' : 'search', page: true, run: () => openUrl(q, !cmdkUrlMode) });
     items.push({ t: q, s: 'Ask the assistant  ⌘↩', ic: 'chat', run: () => askAgent(q) });
   }
   for (const t of S.tabs.filter((t) => t.kind === 'web' && q && match(t.title, t.url)).slice(0, 5))
-    items.push({ g: 'Switch to Tab', t: t.title || t.url, s: host(t.url), img: favicon(t.url, t.icon), run: () => { S.view = 'tab'; const sp = S.tabSpace.get(t.id); if (sp != null) S.space = sp; ipc({ cmd: 'activate', id: t.id }); } });
+    items.push({ g: 'Switch to Tab', t: t.title || t.url, s: host(t.url), img: favicon(t.url, t.icon), page: true, run: () => { S.view = 'tab'; const sp = S.tabSpace.get(t.id); if (sp != null) S.space = sp; ipc({ cmd: 'activate', id: t.id }); } });
   for (const h of S.hist.filter((h) => q && match(h.title, h.url) && !S.tabs.some((t) => t.url === h.url)).slice(0, 6))
-    items.push({ g: 'History', t: h.title || h.url, s: host(h.url), img: favicon(h.url), run: () => openUrl(h.url, !cmdkUrlMode) });
+    items.push({ g: 'History', t: h.title || h.url, s: host(h.url), img: favicon(h.url), page: true, run: () => openUrl(h.url, !cmdkUrlMode) });
   for (const s of S.sessions.filter((s) => q && match(s.title)).slice(0, 3))
     items.push({ g: 'Chats', t: s.title, s: ago(s.updated), ic: 'chat', run: () => openChat(s.id, true) });
   const acts = [
@@ -825,19 +973,33 @@ function updateCmdk() {
   $('#cmdk-icon').innerHTML = icon(q && !q.includes(' ') && /\./.test(q) ? 'globe' : 'search');
 }
 function drawCmdk() {
-  let g;
-  $('#cmdk-list').innerHTML = cmdkItems.map((it, i) => {
-    const head = it.g && it.g !== g ? `<div class="cg">${esc(it.g)}</div>` : ''; g = it.g;
+  let g, html = '';
+  cmdkItems.forEach((it, i) => {
+    if (i === 0 || it.g !== g) {
+      if (i) html += '</div>';
+      html += it.g ? `<div role="group" aria-labelledby="cmdk-g${i}"><div class="cg" id="cmdk-g${i}" aria-hidden="true">${esc(it.g)}</div>` : '<div role="group" aria-label="Suggestions">';
+      g = it.g;
+    }
     const lead = it.img ? `<img src="${esc(it.img)}" alt="">` : `<span class="ic">${icon(it.ic)}</span>`;
-    return `${head}<div class="ci ${i === cmdkSel ? 'sel' : ''}" data-i="${i}">${lead}<span class="t">${esc(it.t)}</span>${it.s ? `<span class="s">${esc(it.s)}</span>` : ''}${it.k ? `<span class="k">${esc(it.k)}</span>` : ''}</div>`;
-  }).join('');
+    html += `<div class="ci ${i === cmdkSel ? 'sel' : ''}" role="option" id="cmdk-opt${i}" aria-selected="${i === cmdkSel}" data-i="${i}">${lead}<span class="t">${esc(it.t)}</span>${it.s ? `<span class="s">${esc(it.s)}</span>` : ''}${it.k ? `<span class="k">${esc(it.k)}</span>` : ''}</div>`;
+  });
+  $('#cmdk-list').innerHTML = html + (cmdkItems.length ? '</div>' : '');
+  const inp = $('#cmdk-input');
+  inp.setAttribute('aria-expanded', String(cmdkItems.length > 0));
+  if (cmdkItems.length) inp.setAttribute('aria-activedescendant', 'cmdk-opt' + cmdkSel); else inp.removeAttribute('aria-activedescendant');
   $$('#cmdk-list .ci').forEach((el) => {
     el.onmousemove = () => { if (cmdkSel !== +el.dataset.i) { cmdkSel = +el.dataset.i; drawCmdk(); } };
     el.onclick = () => runCmdk(+el.dataset.i);
   });
   $('#cmdk-list .ci.sel')?.scrollIntoView({ block: 'nearest' });
 }
-function runCmdk(i) { const it = cmdkItems[i]; if (!it) return; S.overlay = null; render(); it.run(); }
+function runCmdk(i) {
+  const it = cmdkItems[i]; if (!it) return;
+  S.overlay = null; S.returnFocus = null; render(); it.run();
+  // Actions that open a page hand it focus; the rest return to the shell if nothing took focus.
+  if (it.page) focusPage();
+  else setTimeout(() => { if (!document.activeElement || document.activeElement === document.body) leaveShell(); }, 60);
+}
 $('#cmdk-input').addEventListener('input', updateCmdk);
 $('#cmdk-input').addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown') { e.preventDefault(); cmdkSel = Math.min(cmdkSel + 1, cmdkItems.length - 1); drawCmdk(); }
@@ -860,15 +1022,17 @@ $('#glance-split').onclick = () => { S.overlay = null; ipc({ cmd: 'glancePromote
 const ob = $('#ob');
 function setNtpMode(m) {
   S.ntpMode = m;
-  $$('.seg button').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
+  $$('.seg button').forEach((b) => { b.classList.toggle('on', b.dataset.mode === m); b.setAttribute('aria-pressed', String(b.dataset.mode === m)); });
   ob.placeholder = m === 'ask' ? 'Ask anything, or describe a task for the agent' : 'Search or enter address';
+  ob.setAttribute('aria-label', ob.placeholder);
   $$('.ask-only').forEach((el) => el.style.visibility = m === 'ask' ? 'visible' : 'hidden');
   ob.focus();
 }
 $$('.seg button').forEach((b) => b.onclick = () => setNtpMode(b.dataset.mode));
 ob.addEventListener('input', () => { ob.style.height = 'auto'; ob.style.height = Math.min(ob.scrollHeight, 140) + 'px'; });
 ob.addEventListener('keydown', (e) => {
-  if (e.key === 'Tab') { e.preventDefault(); setNtpMode(S.ntpMode === 'ask' ? 'search' : 'ask'); return; }
+  // Tab switches modes while typing; an empty field lets Tab move focus on.
+  if (e.key === 'Tab' && !e.shiftKey && ob.value.trim()) { e.preventDefault(); setNtpMode(S.ntpMode === 'ask' ? 'search' : 'ask'); return; }
   if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
   e.preventDefault();
   const text = ob.value.trim(); if (!text) return;
@@ -1006,7 +1170,7 @@ const chat = {
   el: $('#chat-tpl').content.firstElementChild.cloneNode(true),
   q(sel) { return $(sel, this.el); },
   reset() {
-    this.id = null; this.title = ''; this.roles.clear(); this.parts.clear(); this.act = null; this.mentions = [];
+    this.id = null; this.title = ''; this.roles.clear(); this.parts.clear(); this.act = null; this.mentions = []; this.lastText = '';
     pip.loadedFor = null;
     this.q('.inner').innerHTML = `<div class="empty"><b>Assistant</b>It can read and operate your pages, research in the background without touching your tabs, and work while you browse. Type @ to include tabs, / for shortcuts.</div>`;
     this.setBusy(false);
@@ -1020,7 +1184,10 @@ const chat = {
   setBusy(b) {
     if (b && !this.busy) this.started = Date.now();
     const was = this.busy; this.busy = b;
-    this.q('.send').innerHTML = b ? '<svg class="i" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor"/></svg>' : '<svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+    this.q('.send').innerHTML = b ? '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor"/></svg>' : '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+    this.q('.send').setAttribute('aria-label', b ? 'Stop' : 'Send');
+    if (b && !was) announce('The assistant is working');
+    if (!b && was && this.id) announce(`The assistant replied${this.lastText ? ': ' + this.lastText.replace(/[*_`#>|]/g, '').slice(0, 280) : ''}`);
     if (!b) {
       this.closeAct();
       if (was && this.started) { const s = Math.round((Date.now() - this.started) / 1000); if (s > 4) this.add('meta-line', `Worked for ${s >= 60 ? Math.floor(s / 60) + 'm ' : ''}${s % 60}s`); }
@@ -1032,7 +1199,7 @@ const chat = {
     const t = activeTab();
     const showCtx = onWeb() && !this.mentions.includes(t.id);
     const chips = this.mentions.map((id) => tabById(id)).filter(Boolean).map((m) =>
-      `<span class="mchip" data-id="${m.id}"><img src="${esc(favicon(m.url, m.icon))}" alt=""><span>${esc(m.title || host(m.url))}</span><button>${icon('x')}</button></span>`);
+      `<span class="mchip" data-id="${m.id}"><img src="${esc(favicon(m.url, m.icon))}" alt=""><span>${esc(m.title || host(m.url))}</span><button aria-label="Remove ${esc(m.title || host(m.url))}">${icon('x')}</button></span>`);
     if (showCtx) chips.unshift(`<span class="mchip ctx" title="The assistant works on this page"><img src="${esc(favicon(t.url, t.icon))}" alt=""><span>${esc(t.title || host(t.url))}</span></span>`);
     this.q('.mentions').innerHTML = chips.join('');
     $$('.mentions .mchip[data-id] button', this.el).forEach((b) => b.onclick = () => { this.mentions = this.mentions.filter((x) => x !== Number(b.closest('.mchip').dataset.id)); this.renderMentions(); });
@@ -1040,8 +1207,8 @@ const chat = {
   userMsg(text) { this.closeAct(); this.add('u', esc(text).replace(/(^|\s)(@[^\s@]+)/g, '$1<span class="mention">$2</span>')); },
   ensureAct() {
     if (this.act) return this.act;
-    const el = this.add('act', `<div class="act-head">${icon('chev', 'i chev')}<span class="lbl"></span><span class="favs-stack"></span></div><div class="act-body"></div>`);
-    $('.act-head', el).onclick = () => el.classList.toggle('open');
+    const el = this.add('act', `<div class="act-head" role="button" tabindex="0" aria-expanded="false">${icon('chev', 'i chev')}<span class="lbl"></span><span class="favs-stack" aria-hidden="true"></span></div><div class="act-body"></div>`);
+    $('.act-head', el).onclick = (e) => e.currentTarget.setAttribute('aria-expanded', String(el.classList.toggle('open')));
     this.act = { el, steps: [], sites: [] };
     return this.act;
   },
@@ -1089,7 +1256,7 @@ const chat = {
     let p = this.parts.get(id);
     if (!p) { this.closeAct(); p = { kind: 'text', el: this.add('a', ''), text: '' }; this.parts.set(id, p); }
     if (p.kind !== 'text') return;
-    p.text = text; p.el.innerHTML = md(text); this.scroll();
+    p.text = text; p.el.innerHTML = md(text); this.lastText = text; this.scroll();
   },
   onPart(part) {
     if (part.sessionID !== this.id || this.roles.get(part.messageID) === 'user') return;
@@ -1147,12 +1314,12 @@ const chat = {
     else if (slash) { const q = slash[1].toLowerCase(); this.pop = { kind: '/', items: SKILLS.filter((s) => s.k.slice(1).startsWith(q)) }; }
     else this.pop = null;
     const pop = this.q('.popup');
-    if (!this.pop || !this.pop.items.length) { pop.classList.remove('open'); this.pop = null; return; }
+    if (!this.pop || !this.pop.items.length) { pop.classList.remove('open'); input.removeAttribute('aria-activedescendant'); this.pop = null; return; }
     this.popSel = Math.min(this.popSel, this.pop.items.length - 1);
-    pop.innerHTML = `<div class="ph">${this.pop.kind === '@' ? 'Include a tab' : 'Shortcuts'}</div>` + this.pop.items.map((it, i) => this.pop.kind === '@'
-      ? `<div class="pi ${i === this.popSel ? 'sel' : ''}" data-i="${i}"><img src="${esc(favicon(it.url, it.icon))}" alt=""><span class="t">${esc(it.title || it.url)}</span><span class="k">${esc(host(it.url))}</span></div>`
-      : `<div class="pi ${i === this.popSel ? 'sel' : ''}" data-i="${i}"><span class="t">${esc(it.k)}</span><span class="k">${esc(it.d)}</span></div>`).join('');
-    pop.classList.add('open');
+    pop.innerHTML = `<div class="ph" aria-hidden="true">${this.pop.kind === '@' ? 'Include a tab' : 'Shortcuts'}</div>` + this.pop.items.map((it, i) => this.pop.kind === '@'
+      ? `<div class="pi ${i === this.popSel ? 'sel' : ''}" role="option" id="chat-opt${i}" aria-selected="${i === this.popSel}" data-i="${i}"><img src="${esc(favicon(it.url, it.icon))}" alt=""><span class="t">${esc(it.title || it.url)}</span><span class="k">${esc(host(it.url))}</span></div>`
+      : `<div class="pi ${i === this.popSel ? 'sel' : ''}" role="option" id="chat-opt${i}" aria-selected="${i === this.popSel}" data-i="${i}"><span class="t">${esc(it.k)}</span><span class="k">${esc(it.d)}</span></div>`).join('');
+    pop.classList.add('open'); input.setAttribute('aria-activedescendant', 'chat-opt' + this.popSel);
     $$('.pi', pop).forEach((el) => el.onmousedown = (e) => { e.preventDefault(); this.pick(+el.dataset.i); });
   },
   pick(i) {
@@ -1160,7 +1327,7 @@ const chat = {
     const input = this.q('textarea');
     if (this.pop.kind === '@') { const v = input.value, pos = input.selectionStart; input.value = v.slice(0, this.pop.start) + v.slice(pos); this.mentions.push(it.id); this.renderMentions(); }
     else input.value = it.p;
-    this.pop = null; this.q('.popup').classList.remove('open'); input.focus(); input.dispatchEvent(new Event('input'));
+    this.pop = null; this.q('.popup').classList.remove('open'); input.removeAttribute('aria-activedescendant'); input.focus(); input.dispatchEvent(new Event('input'));
   },
 };
 function errText(err) { return err?.data?.message || err?.message || err?.name || 'Something went wrong'; }
@@ -1171,11 +1338,11 @@ input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); chat.popSel = (chat.popSel + 1) % chat.pop.items.length; chat.updatePopup(); return; }
     if (e.key === 'ArrowUp') { e.preventDefault(); chat.popSel = (chat.popSel - 1 + chat.pop.items.length) % chat.pop.items.length; chat.updatePopup(); return; }
     if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); chat.pick(chat.popSel); return; }
-    if (e.key === 'Escape') { e.preventDefault(); chat.pop = null; chat.q('.popup').classList.remove('open'); return; }
+    if (e.key === 'Escape') { e.preventDefault(); chat.pop = null; chat.q('.popup').classList.remove('open'); input.removeAttribute('aria-activedescendant'); return; }
   }
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
 });
-input.addEventListener('blur', () => setTimeout(() => chat.q('.popup').classList.remove('open'), 100));
+input.addEventListener('blur', () => setTimeout(() => { chat.q('.popup').classList.remove('open'); input.removeAttribute('aria-activedescendant'); }, 100));
 chat.q('.send').onclick = submit;
 function submit() {
   if (chat.busy) { post('/api/abort', { sessionID: chat.id }); return; }
@@ -1235,6 +1402,7 @@ function onEvent(ev) {
     case 'session.error': if (p.sessionID === chat.id && p.error?.name !== 'MessageAbortedError') chat.add('err', esc(errText(p.error))); break;
     case 'permission.asked': {
       if (p.sessionID !== chat.id) break;
+      announce(`The assistant asks to use ${p.permission}`);
       const el = chat.add('perm', `The assistant wants to use <b>${esc(p.permission)}</b>${p.patterns?.length ? ' on <code>' + esc(p.patterns.join(', ')) + '</code>' : ''}
         <div class="btns"><button class="yes" data-r="once">Allow once</button><button data-r="always">Always</button><button data-r="reject">Deny</button></div>`);
       $$('button', el).forEach((b) => b.onclick = async () => {
