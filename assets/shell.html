@@ -66,8 +66,6 @@ kbd { font: 11px/16px var(--font); padding: 0 5px; border-radius: 4px; border: .
 .ib.on { color: var(--accent); }
 
 #app { display: flex; height: 100vh; padding: 0 6px 6px 0; }
-/* Arc: the window takes on the current space's colour; the sidebar sits on it. */
-html.opaque body { background: color-mix(in srgb, var(--c, #0a84ff) 9%, var(--window)); transition: background .3s; }
 
 /* ── Sidebar ─────────────────────────────────────────── */
 /* Showing or hiding it resizes the page once: page views re-lay out on every size change,
@@ -79,9 +77,11 @@ body.sb-reveal #sidebar { animation: sb-in .2s cubic-bezier(.2,.8,.2,1); }
 body.sb-hidden #app { padding-left: 6px; }
 /* Drawn by AppKit on the window glass instead (ATRIUM_NATIVE_CHROME=1). */
 .native-chrome .sb-top > button, .native-chrome #url, .native-chrome .sb-scroll { visibility: hidden; }
-.sb-top { height: 40px; flex: none; display: flex; align-items: center; gap: 0; padding-left: 70px; }
+.sb-top { height: 40px; flex: none; display: flex; align-items: center; gap: 1px; padding-left: 72px; }
 .sb-top .grow { flex: 1; align-self: stretch; }
-.sb-top .ib { width: 26px; height: 26px; }
+.sb-top .ib { width: 26px; height: 26px; color: var(--fg-3); }
+.sb-top .ib:hover:not(:disabled) { color: var(--fg); }
+.sb-top .ib svg.i { width: 15px; height: 15px; }
 #url { height: 36px; flex: none; margin: 2px 0 12px; border-radius: 10px; background: var(--well); display: flex; align-items: center; gap: 7px; padding: 0 6px 0 11px;
   box-shadow: inset 0 0 0 .5px var(--line); position: relative; overflow: hidden; transition: background .12s; }
 #url:hover { background: var(--selected); }
@@ -158,10 +158,13 @@ img + .mono { display: none; }
 body.sb-hidden #peek-zone { display: block; }
 .native-chrome #peek-zone { display: none !important; }
 body.sb-hidden.peek #sidebar { position: fixed; left: 6px; top: 6px; bottom: 6px; z-index: 9; margin-left: 0; opacity: 1; visibility: visible;
-  border-radius: 12px; background: color-mix(in srgb, var(--c, #0a84ff) 9%, var(--window));
+  border-radius: 12px; background: var(--window);
   box-shadow: 0 0 0 .5px var(--menu-ring), 0 24px 60px -12px rgb(0 0 0 / .45); animation: peek-in .24s cubic-bezier(.2,.8,.2,1); }
-body.sb-hidden.peek #sidebar .sb-top { padding-left: 64px; height: 34px; }
+body.sb-hidden.peek.peek-out #sidebar { animation: peek-out .2s cubic-bezier(.4,0,.7,.2) forwards; }
+/* The peeked buttons sit exactly over the top bar's. */
+body.sb-hidden.peek #sidebar .sb-top { padding-left: 66px; height: 26px; margin-bottom: 8px; }
 @keyframes peek-in { from { transform: translateX(calc(-100% - 12px)); } }
+@keyframes peek-out { to { transform: translateX(calc(-100% - 12px)); } }
 
 /* Top bar: the address and navigation when the sidebar is hidden (Arc's toolbar). */
 #col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -458,10 +461,10 @@ body.finding #findbar { display: flex; }
   <aside id="sidebar" role="navigation" aria-label="Sidebar">
     <div class="sb-top" data-drag>
       <button class="ib" id="sb-toggle" title="Hide Sidebar (⌘S)" aria-label="Hide Sidebar" aria-keyshortcuts="Meta+S"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M9 4.5v15"/></svg></button>
-      <span class="grow" data-drag></span>
       <button class="ib" id="back" title="Back (⌘[)" aria-label="Back" aria-keyshortcuts="Meta+["><svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
       <button class="ib" id="fwd" title="Forward (⌘])" aria-label="Forward" aria-keyshortcuts="Meta+]"><svg class="i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
       <button class="ib" id="reload" title="Reload (⌘R)" aria-label="Reload" aria-keyshortcuts="Meta+R"><svg class="i" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5"/><path d="M20 4v4.5h-4.5"/></svg></button>
+      <span class="grow" data-drag></span>
     </div>
     <div id="url" title="Edit address (⌘L)">
       <span class="lead" id="url-lead"></span><span class="h empty" id="url-host" role="button" tabindex="0" aria-keyshortcuts="Meta+L">Search or enter address</span>
@@ -734,7 +737,7 @@ window.atriumShell = {
       case 'editUrl': if (!topEdit.open()) openCmdk(onWeb() ? activeTab().url : '', true); break;
       case 'toggleSidebar': {
         const peeking = S.peek;
-        peek.close(false); topEdit.close();
+        peek.close(false, true); topEdit.close();
         const hidden = document.body.classList.toggle('sb-hidden');
         if (hidden && $('#sidebar').contains(document.activeElement)) leaveShell();
         // A peeked sidebar is already on screen, so it stays put rather than easing in again.
@@ -1324,9 +1327,10 @@ function closeOverlay() { if (S.overlay === 'glance') ipc({ cmd: 'glanceClose' }
 /* ── Peek: the hidden sidebar over the page (Arc) ─── */
 // Page views draw above the shell, so the page is swapped for its snapshot before the sidebar shows.
 const peek = {
-  timer: null, fallback: null, waiting: false,
+  timer: null, fallback: null, waiting: false, closing: null,
   enter() {
     clearTimeout(this.timer);
+    if (this.closing) { this.cancelClose(); return; }
     if (S.peek || this.waiting || S.overlay || nativeChrome() || !document.body.classList.contains('sb-hidden')) return;
     this.timer = setTimeout(() => {
       if (!onWeb()) { this.show(); return; }
@@ -1347,17 +1351,26 @@ const peek = {
     S.peek = true; render();
   },
   leave() { clearTimeout(this.timer); this.timer = setTimeout(() => this.close(), 280); },
-  close(refocus = true) {
+  // Slides back to the edge on the page's snapshot, then shows the page again.
+  close(refocus = true, instant = false) {
     clearTimeout(this.timer); clearTimeout(this.fallback); this.waiting = false;
     if (!S.peek) return;
-    S.peek = false; render();
-    if (refocus && onWeb() && !S.overlay) focusPage();
+    const done = () => {
+      this.cancelClose();
+      S.peek = false; render();
+      if (refocus && onWeb() && !S.overlay) focusPage();
+    };
+    if (instant) { done(); return; }
+    if (this.closing) return;
+    document.body.classList.add('peek-out');
+    this.closing = setTimeout(done, 200);
   },
+  cancelClose() { clearTimeout(this.closing); this.closing = null; document.body.classList.remove('peek-out'); },
 };
 $('#peek-zone').addEventListener('mouseenter', () => peek.enter());
 // Leaving the edge before the sidebar is out cancels it.
 $('#peek-zone').addEventListener('mouseleave', () => { if (S.peek) peek.leave(); else peek.close(false); });
-$('#sidebar').addEventListener('mouseenter', () => { if (S.peek) clearTimeout(peek.timer); });
+$('#sidebar').addEventListener('mouseenter', () => { if (S.peek) { clearTimeout(peek.timer); if (peek.closing) peek.cancelClose(); } });
 $('#sidebar').addEventListener('mouseleave', () => { if (S.peek) peek.leave(); });
 // Choosing a page from the peeked sidebar shows it right away.
 $('#sidebar').addEventListener('click', (e) => {
