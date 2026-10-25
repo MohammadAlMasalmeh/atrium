@@ -57,14 +57,15 @@ ordered in, so Chromium keeps a live compositor, but it is fully transparent,
 has no shadow, ignores mouse events, is excluded from window cycling, and is
 moved toward the screen edge (macOS keeps part of the frame on a display) and
 ordered behind other windows. Chromium's macOS occlusion tracking is disabled in
-this mode so the window still paints. Screenshots and evaluation work; pages
-report `document.visibilityState === "hidden"`, so visibility-dependent page
-behavior differs from a normal window. Keyboard focus, real input, and native
-dialogs are not testable this way. Never use it for a real profile.
+this mode so the window still paints. Screenshots and evaluation work, and the
+selected tab reports `document.visibilityState === "visible"`, so permission
+prompts reach the app. Keyboard focus, real input, and native dialogs are not
+testable this way. Never use it for a real profile.
 
-Verified on macOS 26 with the smoke, lifecycle, and persistence checks: the
-frontmost application never changed to the test instance, the window reported
-`alpha 0` and not on screen, and screenshots contained the rendered fixture.
+Verified on macOS 26 with every integration check listed below: a watchdog
+polling `lsappinfo front` never saw the test instance frontmost, the window
+server listed its window at `alpha 0` with most of the frame off the display,
+and screenshots contained the rendered fixture.
 
 `tools/build-chromium.sh --release` creates a complete development app with the
 CEF framework, sandbox helper executables, Chromium credits, and verified ad hoc
