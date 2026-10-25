@@ -1,9 +1,9 @@
 //! Release signing tool for the auto-updater.
 //!
-//!   atrium_sign_update keygen --secret KEY.pk8 [--public KEY.pub]
-//!   atrium_sign_update public --secret KEY.pk8                          (prints the public key)
-//!   atrium_sign_update sign --secret KEY.pk8 --version 1.2.3 ARCHIVE   (writes ARCHIVE.sig)
-//!   atrium_sign_update verify --public KEY.pub --version 1.2.3 ARCHIVE [--signature FILE]
+//!   atrium_sign_update keygen --secret <path-to-secret-key> [--public <path-to-public-key>]
+//!   atrium_sign_update public --secret <path-to-secret-key>                          (prints the public key)
+//!   atrium_sign_update sign --secret <path-to-secret-key> --version 1.2.3 ARCHIVE   (writes ARCHIVE.sig)
+//!   atrium_sign_update verify --public <path-to-public-key> --version 1.2.3 ARCHIVE [--signature FILE]
 //!
 //! The secret key is a base64 PKCS#8 Ed25519 document; keep it out of the repository.
 //! `--secret-env NAME` reads it from an environment variable instead (CI secrets).

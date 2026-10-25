@@ -7,8 +7,9 @@ the network and stores on disk. It is based on reading the source code in this
 repository (October 2026). It covers this project's code; Chromium, OpenCode, AI
 model providers, and websites have their own behavior and policies.
 
-**Summary:** this project's code has no telemetry, analytics, crash reporting,
-accounts, or app update checks. It talks to the websites you open, to the OpenCode
+**Summary:** this project's code has no telemetry, analytics, accounts, or crash
+report uploads. Release builds that embed an update key check GitHub Releases for
+updates; source builds don't. It talks to the websites you open, to the OpenCode
 server you connect, and to its own loopback API. When you use the assistant, page
 content is sent to OpenCode, which forwards it to whatever AI model provider
 OpenCode is configured to use. **Chromium itself contacts Google in the
@@ -27,19 +28,22 @@ this off yet; see below.
 | OpenCode | `http://127.0.0.1:4097` by default, or the endpoint you configure | At startup and while the assistant is used |
 | Local API | `http://127.0.0.1:<port>` (default 7777) | Shell, `atrium mcp`, and `atrium ask` |
 | Chromium background services | Google (component updater and network time servers) | Shortly after startup and periodically |
+| App updates | `https://api.github.com/repos/<repo>/releases/latest`, then the release's download URL | Only in builds with an embedded update key and repository: a minute after launch, then every 6 hours, unless turned off |
+| Extension installs and updates | `https://clients2.google.com/service/update2/crx` (Chrome Web Store) | When you install an extension or check for extension updates |
 
 Nothing else in the Rust code or the browser shell opens a network connection.
-The only HTTP clients in the Rust code talk to the OpenCode endpoint and to the
-loopback API. There is no app update checker, no download of Chrome Web Store
-extensions, and no remote configuration.
+Besides the OpenCode endpoint and the loopback API, the Rust code's HTTP clients
+are the app updater and the Chrome Web Store client listed above. There is no
+remote configuration.
 
 ### Websites and Chromium
 
 Pages load in Chromium (CEF 156) with a persistent profile, so websites receive
 what any Chromium browser sends: your IP address, cookies for that site, the user
 agent, and so on. This project does not configure Google API keys, sign-in, sync,
-or CEF crash reporting (the bundle has no `crash_reporter.cfg`), and it opens no
-remote debugging port.
+or crash report uploads. The bundle's `crash_reporter.cfg` has no `ServerURL`, so
+crash dumps are only written under `<data dir>/chromium` and never sent anywhere.
+It opens no remote debugging port.
 
 ### Chromium's background connections to Google
 

@@ -343,9 +343,10 @@ async fn debug_shell(State(app): Shared, body: String) -> Json<Value> {
     })
 }
 
-/// Test-only DevTools access, enabled in debug builds or with `ATRIUM_DEBUG_API=1`.
+/// Test-only DevTools access, enabled in debug builds or with `ATRIUM_DEBUG_API=1` in a
+/// test instance (`ATRIUM_MOCK_KEYCHAIN=1`).
 fn debug_api() -> bool {
-    cfg!(debug_assertions) || std::env::var_os("ATRIUM_DEBUG_API").is_some_and(|v| v == "1")
+    cfg!(debug_assertions) || (std::env::var_os("ATRIUM_DEBUG_API").is_some_and(|v| v == "1") && crate::migration::mock_keychain())
 }
 
 const DEBUG_CDP_METHODS: &[&str] = &[

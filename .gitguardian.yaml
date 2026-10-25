@@ -1,0 +1,7 @@
+version: 2
+secret:
+  ignored_paths:
+    # Synthetic credentials for end-to-end and unit tests; none are real.
+    - "tools/test_*.py"
+    - "tools/password_fixture.py"
+    - "tools/fixtures/**"

@@ -73,7 +73,8 @@ the bundle.
   pages; shell evaluation is disabled in release builds.
 - Site icons come from the pages themselves and are cached locally; no
   third-party favicon service is used.
-- This project adds no telemetry, crash reporting, or update checks. Chromium's
+- This project adds no telemetry or crash report uploads (crash dumps stay local).
+  Only release builds with an embedded update key check GitHub for updates. Chromium's
   component updater and network time service still contact Google; see
   [PRIVACY.md](PRIVACY.md).
 - Backend APIs for explicit Chrome import (bookmarks with folders, history visits,

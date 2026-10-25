@@ -117,10 +117,10 @@ fn read_api_token() -> Option<String> {
 }
 
 /// Scripting the shell is for debug builds and test instances started with
-/// `ATRIUM_TEST_SHELL_EVAL=1`; it still requires the API token.
+/// `ATRIUM_TEST_SHELL_EVAL=1` and `ATRIUM_MOCK_KEYCHAIN=1`; it still requires the API token.
 fn shell_eval_enabled() -> bool {
     static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ENABLED.get_or_init(|| cfg!(debug_assertions) || std::env::var_os("ATRIUM_TEST_SHELL_EVAL").is_some_and(|v| v == "1"))
+    *ENABLED.get_or_init(|| cfg!(debug_assertions) || (std::env::var_os("ATRIUM_TEST_SHELL_EVAL").is_some_and(|v| v == "1") && migration::mock_keychain()))
 }
 
 /// Session URLs, the server address, and the Chromium profile stay private to this user.
