@@ -221,6 +221,8 @@ body.agent-here #pane-main { box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px var(
 .page { position: absolute; inset: 0; overflow-y: auto; display: none; }
 .frozen { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top left; display: none; }
 body.is-frozen .frozen { display: block; }
+/* A sleeping tab's last look, shown while its page loads again out of sight. */
+.waking { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top left; display: none; }
 
 /* Start page */
 #ntp { background: var(--card); }
@@ -532,6 +534,7 @@ body.finding #findbar { display: flex; }
           <button class="ib" id="find-next" title="Next (⌘G)"><svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
           <button class="ib" id="find-close" title="Done (Esc)"><svg class="i" viewBox="0 0 24 24"><path d="M17 7 7 17M7 7l10 10"/></svg></button>
         </div>
+        <img class="waking" id="waking-main" alt="">
         <img class="frozen" id="frozen-main" alt="">
         <div class="page" id="ntp">
           <div class="start">
@@ -560,7 +563,7 @@ body.finding #findbar { display: flex; }
           <div class="chat-host" id="chat-main"></div>
         </div>
       </div>
-      <div class="pane" id="pane-split"><img class="frozen" id="frozen-split" alt=""></div>
+      <div class="pane" id="pane-split"><img class="waking" id="waking-split" alt=""><img class="frozen" id="frozen-split" alt=""></div>
     </div>
     <aside id="side" aria-label="Assistant">
       <div class="side-head" data-drag>
@@ -726,7 +729,7 @@ const agentTabOf = (sid) => { const id = S.agentTabs.get(sid); return id != null
 window.atriumShell = {
   state(st) {
     const prev = S.active;
-    S.tabs = st.tabs.filter((t) => t.kind !== 'scratch'); S.active = st.active; S.split = st.split; S.glance = st.glance;
+    S.tabs = st.tabs.filter((t) => t.kind !== 'scratch'); S.active = st.active; S.split = st.split; S.glance = st.glance; S.waking = st.waking || {};
     // An agent tab the user opens becomes one of theirs.
     S.agentOwned.delete(S.active); S.agentOwned.delete(S.split);
     for (const id of S.agentOwned) if (!tabById(id)) S.agentOwned.delete(id);
@@ -867,6 +870,19 @@ function render() {
   if (again && document.hasFocus()) again.focus({ preventScroll: true });
   else if (again) pendingFocus = again.id;
 }
+// A waking tab looks as it did when it went to sleep until its live page is ready.
+function showWaking(img, id) {
+  const url = id != null && S.waking?.[id];
+  img.dataset.id = url ? id : '';
+  if (url && img.getAttribute('src') !== url) img.src = url;
+  img.style.display = url ? 'block' : 'none';
+}
+// Reaching for the page hands over the live one at once rather than ignoring the input.
+for (const img of document.querySelectorAll('.waking')) {
+  const wake = () => { if (img.dataset.id) ipc({ cmd: 'wake', id: Number(img.dataset.id) }); };
+  img.addEventListener('pointerdown', wake);
+  img.addEventListener('wheel', wake, { passive: true });
+}
 function renderView() {
   const t = activeTab();
   const web = onWeb(), chatView = S.view === 'chat', ntp = !web && !chatView;
@@ -875,6 +891,8 @@ function renderView() {
   document.documentElement.style.setProperty('--c', spaceColor(curSpace()));
   $('#ntp').style.display = ntp ? 'block' : 'none';
   $('#chatpage').style.display = chatView ? 'flex' : 'none';
+  showWaking($('#waking-main'), web ? t.id : null);
+  showWaking($('#waking-split'), split ? S.split : null);
   document.body.classList.toggle('split', !!split);
   document.body.classList.toggle('loading', web && !!t.loading);
   document.body.classList.toggle('side-open', S.side && web);

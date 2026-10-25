@@ -220,6 +220,8 @@ enum Event {
     /// The main frame started loading a document (true) or failed to (false).
     Document(u64, bool),
     Loaded(u64),
+    /// A waking tab has had long enough to load; show it even if it hasn't finished.
+    WakeTimeout(u64),
     Capture(u64, bool),
     Download(u64, u32, bool),
     Popup(String),
@@ -291,6 +293,11 @@ struct Tab {
     agent_until: Instant,
     suspended: bool,
     suspending: bool,
+    /// A sleeping tab's fresh view is loading out of sight while the shell shows the
+    /// page as it was when it went to sleep, so waking never looks like a reload.
+    waking: bool,
+    /// Where the page's look before sleeping is kept in `FROZEN`, for the next wake.
+    snapshot: Option<String>,
     crashed: bool,
     /// The tab that opened this one as a `window.open` popup, while both exist.
     opener: Option<u64>,
@@ -327,6 +334,8 @@ impl Tab {
             agent_until: now,
             suspended: false,
             suspending: false,
+            waking: false,
+            snapshot: None,
             crashed: false,
             opener: None,
             opening: false,
@@ -349,7 +358,7 @@ impl Tab {
             },
             title: self.title.clone(),
             url: self.url.clone(),
-            loading: self.loading,
+            loading: self.loading && !self.waking,
             icon: self.icon.clone(),
             suspended: self.suspended,
             crashed: self.crashed,
@@ -363,7 +372,11 @@ enum Pending {
     Probe(u64),
     Raw(Reply<Result<Json, String>>),
     Unload(u64, (f64, f64)),
+    /// The page as it looks just before it sleeps, shown while it wakes again.
+    Snapshot(u64),
     Inject,
+    /// Like `Inject`, for a waking tab: once the restored page has painted, it replaces the snapshot.
+    Woken(u64),
     /// Steps toward running `expression` in the tab's isolated world, then `then`.
     Frame { expression: String, gesture: bool, then: Box<Pending> },
     World { expression: String, gesture: bool, then: Box<Pending> },
@@ -429,6 +442,13 @@ impl Manager {
             .tab(GLANCE)
             .map(|t| json!({ "title": t.title, "url": t.url, "loading": t.loading }))
             .unwrap_or(Json::Null);
+        state["waking"] = self
+            .tabs
+            .iter()
+            .filter(|t| t.waking)
+            .filter_map(|t| Some((t.id.to_string(), Json::String(format!("/frozen/{}", t.snapshot.as_ref()?)))))
+            .collect::<serde_json::Map<_, _>>()
+            .into();
         self.shell(&format!("window.atriumShell?.state({state})"));
     }
     fn sync_chrome(&self) {
@@ -440,7 +460,7 @@ impl Manager {
             url: t.url.clone(),
             can_back: browser.is_some_and(|b| b.can_go_back() == 1),
             can_forward: browser.is_some_and(|b| b.can_go_forward() == 1),
-            loading: t.loading,
+            loading: t.loading && !t.waking,
         });
     }
     fn shell(&self, js: &str) {
@@ -455,6 +475,7 @@ impl Manager {
         if tab.live || tab.opening || tab.url == "about:blank" {
             return;
         }
+        let waking = tab.suspended && tab.snapshot.is_some();
         let mut client = HostClient::new(self.bridge.clone(), id, self.base.clone(), Default::default());
         // Hidden until layout() places it, so it never flashes at the wrong spot.
         let info = WindowInfo {
@@ -477,9 +498,14 @@ impl Manager {
                 tab.live = true;
                 tab.detached = false;
                 tab.suspended = false;
+                tab.waking = waking;
                 tab.crashed = false;
                 tab.loading = true;
                 tab.document_loading = true;
+            }
+            if waking {
+                let mut timeout = WakeTimeout::new(self.bridge.clone(), id);
+                post_delayed_task(ThreadId::UI, Some(&mut timeout), WAKE_TIMEOUT_MS);
             }
         }
     }
@@ -551,6 +577,7 @@ impl Manager {
     }
     fn remove_tab(&mut self, id: u64) {
         let opener = self.tab(id).and_then(|t| t.opener);
+        self.forget_snapshot(id);
         self.tabs.retain(|t| t.id != id);
         for t in &mut self.tabs {
             if t.opener == Some(id) {
@@ -586,6 +613,7 @@ impl Manager {
             .filter(|id| self.tab(*id).is_some())
             .unwrap_or_else(|| self.new_tab(None, true, false));
         let url = normalize_url(&raw);
+        self.forget_snapshot(id);
         if let Some(t) = self.tab_mut(id) {
             if t.browser.is_none() && is_web(&t.url) {
                 t.back.push(std::mem::replace(&mut t.url, url.clone()));
@@ -596,6 +624,7 @@ impl Manager {
             t.document_loading = true;
             t.scroll = None;
             t.last_used = Instant::now();
+            t.waking = false;
             if let Some(frame) = t.browser.as_ref().and_then(|b| b.main_frame()) {
                 frame.load_url(Some(&CefString::from(url.as_str())));
             }
@@ -633,7 +662,8 @@ impl Manager {
             // visible but outside the window instead of covering the user's page. A peek is
             // brief and a re-shown view starts blank, so the page is parked the same way.
             let parked = self.parked && (Some(t.id) == self.active || Some(t.id) == self.split);
-            let (bounds, visible) = if !visible && (parked || self.capturing(t.id)) {
+            // A waking tab paints out of sight too, so it is ready the moment it replaces its snapshot.
+            let (bounds, visible) = if t.waking || (!visible && (parked || self.capturing(t.id))) {
                 (
                     Rect {
                         x: width + 64,
@@ -706,7 +736,7 @@ impl Manager {
     }
     fn capturing(&self, tab: u64) -> bool {
         self.pending.values().any(|(_, id, pending)| {
-            *id == tab && matches!(pending, Pending::Screenshot(_) | Pending::Frozen(_))
+            *id == tab && matches!(pending, Pending::Screenshot(_) | Pending::Frozen(_) | Pending::Snapshot(_))
         })
     }
     fn cdp(&mut self, tab: u64, method: &str, params: Json, pending: Pending) {
@@ -731,7 +761,7 @@ impl Manager {
             self.fail(pending, message.into());
             return;
         };
-        let capture = matches!(&pending, Pending::Screenshot(_) | Pending::Frozen(_));
+        let capture = matches!(&pending, Pending::Screenshot(_) | Pending::Frozen(_) | Pending::Snapshot(_));
         self.next_call += 1;
         let call = self.next_call;
         let mut dict = parse_json(
@@ -802,6 +832,13 @@ impl Manager {
             Pending::Raw(reply) => {
                 let _ = reply.send(Err(message));
             }
+            // Without a snapshot the tab still sleeps; it just wakes the plain way.
+            Pending::Snapshot(id) => {
+                if self.can_suspend(id) {
+                    self.suspend(id);
+                }
+            }
+            Pending::Woken(id) => self.woken(id),
             Pending::Frozen(_) | Pending::Inject | Pending::Pw(..) => {}
         }
     }
@@ -827,7 +864,7 @@ impl Manager {
         } else {
             None
         };
-        if matches!(&pending, Pending::Screenshot(_) | Pending::Frozen(_)) {
+        if matches!(&pending, Pending::Screenshot(_) | Pending::Frozen(_) | Pending::Snapshot(_)) {
             self.layout();
         }
         match pending {
@@ -892,6 +929,23 @@ impl Manager {
                 }
             }
             Pending::Inject => {}
+            Pending::Woken(id) => self.woken(id),
+            Pending::Snapshot(id) => {
+                use base64::Engine;
+                let bytes = data["data"].as_str().and_then(|d| base64::engine::general_purpose::STANDARD.decode(d).ok());
+                if self.can_suspend(id) {
+                    if let Some(bytes) = bytes.filter(|_| error.is_none()) {
+                        // A new name each time, so the shell never shows a cached older look.
+                        let key = format!("tab-{id}-{}", uuid::Uuid::new_v4().simple());
+                        FROZEN.lock().unwrap().insert(key.clone(), bytes);
+                        self.forget_snapshot(id);
+                        if let Some(tab) = self.tab_mut(id) {
+                            tab.snapshot = Some(key);
+                        }
+                    }
+                    self.suspend(id);
+                }
+            }
             Pending::Pw(tab, step) => self.pw_step(tab, step, error, data),
             Pending::Probe(id) => {
                 let scroll = &data["result"]["value"];
@@ -917,7 +971,8 @@ impl Manager {
                     if let Some(tab) = self.tab_mut(id) {
                         tab.scroll = Some(scroll).filter(|s| *s != (0.0, 0.0));
                     }
-                    self.suspend(id);
+                    // Captured while the page is still alive, so waking can show it as it was.
+                    self.cdp(id, "Page.captureScreenshot", json!({ "format": "jpeg", "quality": 80 }), Pending::Snapshot(id));
                 }
             }
         }
@@ -938,6 +993,19 @@ impl Manager {
                 host.close_browser(0);
             }
         }
+    }
+    fn forget_snapshot(&mut self, id: u64) {
+        if let Some(key) = self.tab_mut(id).and_then(|t| t.snapshot.take()) {
+            FROZEN.lock().unwrap().remove(&key);
+        }
+    }
+    /// Replaces a waking tab's snapshot with its live view.
+    fn woken(&mut self, id: u64) {
+        let Some(tab) = self.tab_mut(id).filter(|t| t.waking) else { return };
+        tab.waking = false;
+        self.forget_snapshot(id);
+        self.layout();
+        self.push(false);
     }
     /// The tab's back and forward lists, joining the live view's entries with
     /// history saved from its earlier views.
@@ -972,6 +1040,7 @@ impl Manager {
         let (mut older, mut newer) = self.history(id);
         let target = if back { older.pop() } else { (!newer.is_empty()).then(|| newer.remove(0)) };
         let target = target.ok_or_else(|| format!("There is no page to go {}", if back { "back" } else { "forward" }))?;
+        self.forget_snapshot(id);
         let tab = self.tab_mut(id).ok_or("No page is open")?;
         let current = std::mem::replace(&mut tab.url, target);
         if is_web(&current) {
@@ -984,6 +1053,7 @@ impl Manager {
         tab.document_loading = true;
         tab.last_used = Instant::now();
         tab.reopen = tab.browser.is_some();
+        tab.waking = false;
         let live = tab.reopen;
         self.session_dirty = true;
         if live {
@@ -1309,6 +1379,8 @@ impl Manager {
                     self.create_view(id);
                 }
             }
+            // The user reached for a waking page: hand them the live one as it stands.
+            "wake" => self.woken(m["id"].as_u64().unwrap_or(0)),
             "close" => self.close(m["id"].as_u64().unwrap_or(0)),
             "split" => {
                 self.split = m["id"].as_u64().filter(|id| Some(*id) != self.active);
@@ -1541,6 +1613,7 @@ impl Manager {
                 }
                 self.push(false);
             }
+            Event::WakeTimeout(id) => self.woken(id),
             Event::Document(id, loading) => {
                 if let Some(t) = self.tab_mut(id) {
                     t.document_loading = loading;
@@ -1557,7 +1630,13 @@ impl Manager {
                         .and_then(|t| t.scroll.take())
                         .map(|(x, y)| format!("\nscrollTo({x}, {y});"))
                         .unwrap_or_default();
-                    self.isolated(id, format!("{LIFECYCLE_JS}\n{PAGE_JS}{scroll}"), false, Pending::Inject);
+                    if self.tab(id).is_some_and(|t| t.waking) {
+                        // Two frames after scrolling, the restored page has painted where the snapshot shows it.
+                        let painted = ";\nnew Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(true))))";
+                        self.isolated(id, format!("{LIFECYCLE_JS}\n{PAGE_JS}{scroll}{painted}"), false, Pending::Woken(id));
+                    } else {
+                        self.isolated(id, format!("{LIFECYCLE_JS}\n{PAGE_JS}{scroll}"), false, Pending::Inject);
+                    }
                     self.pw_forms.remove(&id);
                     if self.pw_offers.get(&id).is_some_and(|o| matches!(o["kind"].as_str(), Some("fill" | "generate"))) {
                         self.pw_offer(id, None);
@@ -2060,6 +2139,9 @@ wrap_download_image_callback! {struct FaviconDownload {bridge:Bridge,id:u64,key:
         if crate::favicons::store(&self.key,&bytes).is_ok(){self.bridge.send(Event::FaviconSaved(self.id,self.key.clone()));}
     }
 }}
+/// How long a waking tab may show its snapshot before its live view replaces it anyway.
+const WAKE_TIMEOUT_MS: i64 = 3000;
+wrap_task! {struct WakeTimeout {bridge:Bridge,id:u64} impl Task {fn execute(&self){self.bridge.send(Event::WakeTimeout(self.id));}}}
 wrap_task! {struct Maintenance {bridge:Bridge} impl Task {fn execute(&self){self.bridge.send(Event::Maintenance);if self.bridge.manager.upgrade().is_some(){let mut next=Self::new(self.bridge.clone());post_delayed_task(ThreadId::UI,Some(&mut next),10000);}}}}
 impl Manager {
     /// Chromium must release every browser before the window and message loop go.
