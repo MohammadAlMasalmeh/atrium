@@ -7,12 +7,13 @@ use muda::{
     AboutMetadata, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu,
 };
 use objc2::{
-    define_class, extern_methods, msg_send,
+    class, define_class, extern_methods, msg_send,
     rc::Retained,
     runtime::{AnyObject, Bool, NSObjectProtocol},
-    DefinedClass,
+    sel, DefinedClass,
 };
 use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSEvent};
+use objc2_foundation::NSString;
 use std::{cell::Cell, sync::OnceLock};
 static BRIDGE: OnceLock<Bridge> = OnceLock::new();
 #[derive(Default)]
@@ -32,6 +33,22 @@ define_class!(
         }
         #[unsafe(method(terminate:))]
         unsafe fn terminate(&self, _: &AnyObject) { if let Some(bridge)=BRIDGE.get(){bridge.send(Event::Quit);} }
+        // VoiceOver sets AXEnhancedUserInterface on the application; Voice Control and other
+        // assistive clients set AXManualAccessibility. CEF leaves enabling Chromium's tree to us.
+        #[unsafe(method(accessibilitySetValue:forAttribute:))]
+        unsafe fn accessibility_set_value(&self, value: Option<&AnyObject>, attribute: Option<&NSString>) {
+            if let (Some(attribute), Some(bridge)) = (attribute, BRIDGE.get()) {
+                let name = attribute.to_string();
+                if name == "AXEnhancedUserInterface" || name == "AXManualAccessibility" {
+                    let on = value.is_some_and(|v| {
+                        let numeric: Bool = msg_send![v, respondsToSelector: sel!(intValue)];
+                        numeric.as_bool() && { let n: i32 = msg_send![v, intValue]; n != 0 }
+                    });
+                    bridge.send(Event::Assistive(name, on));
+                }
+            }
+            let _: () = msg_send![super(self), accessibilitySetValue: value, forAttribute: attribute];
+        }
     }
     unsafe impl NSObjectProtocol for AtriumApplication {}
     unsafe impl CrAppProtocol for AtriumApplication {
@@ -79,6 +96,83 @@ pub fn keep_out_of_sight(handle: *mut std::ffi::c_void) {
         let _: () = msg_send![window, setFrameOrigin: origin];
         let _: () = msg_send![window, orderBack: std::ptr::null::<AnyObject>()];
     }
+}
+pub fn voiceover_enabled() -> bool {
+    unsafe {
+        let workspace: *mut AnyObject = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let Some(workspace) = workspace.as_ref() else { return false };
+        let on: Bool = msg_send![workspace, isVoiceOverEnabled];
+        on.as_bool()
+    }
+}
+/// Sends an attribute to the application exactly as an assistive client would, in process.
+pub fn set_application_attribute(name: &str, on: bool) {
+    unsafe {
+        let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+        let value: *mut AnyObject = msg_send![class!(NSNumber), numberWithBool: Bool::new(on)];
+        let _: () = msg_send![app, accessibilitySetValue: value, forAttribute: &*NSString::from_str(name)];
+    }
+}
+/// Walks the window's NSAccessibility tree in process; this needs no TCC permission.
+pub fn accessibility_tree(handle: *mut std::ffi::c_void, max_nodes: usize) -> serde_json::Value {
+    unsafe fn text(object: *mut AnyObject) -> Option<String> {
+        let object = object.as_ref()?;
+        let string: Bool = msg_send![object, isKindOfClass: class!(NSString)];
+        string
+            .as_bool()
+            .then(|| (*(object as *const AnyObject as *const NSString)).to_string())
+            .filter(|s| !s.is_empty())
+    }
+    macro_rules! attribute {
+        ($object:expr, $selector:ident) => {{
+            let responds: Bool = msg_send![$object, respondsToSelector: sel!($selector)];
+            if responds.as_bool() {
+                let value: *mut AnyObject = msg_send![$object, $selector];
+                text(value)
+            } else {
+                None
+            }
+        }};
+    }
+    unsafe fn walk(object: &AnyObject, depth: usize, budget: &mut usize) -> serde_json::Value {
+        *budget = budget.saturating_sub(1);
+        let mut node = serde_json::json!({
+            "role": attribute!(object, accessibilityRole),
+            "title": attribute!(object, accessibilityTitle),
+            "label": attribute!(object, accessibilityLabel),
+            "value": attribute!(object, accessibilityValue),
+        });
+        let responds: Bool = msg_send![object, respondsToSelector: sel!(accessibilityChildren)];
+        if responds.as_bool() && depth < 60 {
+            let children: *mut AnyObject = msg_send![object, accessibilityChildren];
+            if let Some(children) = children.as_ref() {
+                let count: usize = msg_send![children, count];
+                let mut out = Vec::new();
+                for i in 0..count {
+                    if *budget == 0 {
+                        node["truncated"] = true.into();
+                        break;
+                    }
+                    let child: *mut AnyObject = msg_send![children, objectAtIndex: i];
+                    if let Some(child) = child.as_ref() {
+                        out.push(walk(child, depth + 1, budget));
+                    }
+                }
+                node["children"] = out.into();
+            }
+        }
+        node
+    }
+    let view = handle as *mut AnyObject;
+    objc2::rc::autoreleasepool(|_| unsafe {
+        let Some(view) = view.as_ref() else { return serde_json::Value::Null };
+        let window: *mut AnyObject = msg_send![view, window];
+        let Some(window) = window.as_ref() else { return serde_json::Value::Null };
+        let content: *mut AnyObject = msg_send![window, contentView];
+        let Some(content) = content.as_ref() else { return serde_json::Value::Null };
+        let mut budget = max_nodes;
+        walk(content, 0, &mut budget)
+    })
 }
 pub(super) fn menu(bridge: Bridge) -> Menu {
     let _ = BRIDGE.set(bridge.clone());

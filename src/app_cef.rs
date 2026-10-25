@@ -106,6 +106,19 @@ pub enum Op {
         reply: Reply<Vec<bool>>,
     },
     Cookies(Reply<Vec<CookieStored>>),
+    /// A DevTools method on a tab, or on the shell with `SHELL`; the raw result is returned.
+    Cdp {
+        tab: Option<u64>,
+        method: String,
+        params: Json,
+        reply: Reply<Result<Json, String>>,
+    },
+    /// Accessibility state; optionally simulates an assistive client and reads the native tree.
+    Accessibility {
+        assistive: Option<bool>,
+        tree: bool,
+        reply: Reply<Json>,
+    },
 }
 use crate::migration::cookies::{Stored as CookieStored, Write as CookieWrite};
 #[derive(Clone)]
@@ -181,6 +194,8 @@ enum Event {
     Quit,
     DevResult(i32, bool, Json),
     Maintenance,
+    Assistive(String, bool),
+    TakeFocus(u64, bool),
 }
 struct Tab {
     id: u64,
@@ -266,6 +281,7 @@ enum Pending {
     Screenshot(Reply<Result<String, String>>),
     Frozen(&'static str),
     Probe(u64),
+    Raw(Reply<Result<Json, String>>),
 }
 struct Manager {
     rx: mpsc::Receiver<Event>,
@@ -286,6 +302,10 @@ struct Manager {
     pending: HashMap<i32, (Instant, u64, Pending)>,
     popup_views: Vec<BrowserView>,
     closing: Arc<AtomicBool>,
+    voiceover: bool,
+    assistive: std::collections::BTreeSet<String>,
+    accessibility: bool,
+    focus_page_until: Option<Instant>,
 }
 impl Manager {
     fn tab(&self, id: u64) -> Option<&Tab> {
@@ -525,6 +545,56 @@ impl Manager {
             view.set_visible(visible.into());
         }
     }
+    fn update_accessibility(&mut self) {
+        let on = std::env::var_os("ATRIUM_FORCE_ACCESSIBILITY").is_some_and(|v| v == "1")
+            || self.voiceover
+            || !self.assistive.is_empty();
+        if on == self.accessibility {
+            return;
+        }
+        self.accessibility = on;
+        for host in self.tabs.iter().filter_map(|t| t.browser.as_ref()?.host()) {
+            host.set_accessibility_state(if on { State::ENABLED } else { State::DISABLED });
+        }
+    }
+    fn accessibility_state(&self) -> Json {
+        let focused = self
+            .tabs
+            .iter()
+            .find(|t| t.view.as_ref().is_some_and(|v| v.has_focus() != 0))
+            .map(|t| match t.id {
+                SHELL => json!("shell"),
+                GLANCE => json!("glance"),
+                id => json!(id),
+            });
+        json!({
+            "enabled": self.accessibility,
+            "voiceover": self.voiceover,
+            "assistive_clients": self.assistive,
+            "focused_view": focused,
+        })
+    }
+    fn page_visible(&self) -> Option<&BrowserView> {
+        let tab = self.tab(self.active?)?;
+        (!self.covered && !tab.scratch).then_some(tab.view.as_ref()?)
+    }
+    /// Native focus moves between BrowserViews; the shell then places DOM focus with `cmd`.
+    fn focus_shell(&self, cmd: &str) {
+        if let Some(view) = self.tab(SHELL).and_then(|t| t.view.as_ref()) {
+            view.request_focus();
+        }
+        self.cmd(cmd);
+    }
+    fn take_focus(&self, id: u64, next: bool) {
+        match id {
+            SHELL => match self.page_visible() {
+                Some(view) => view.request_focus(),
+                None => self.focus_shell(if next { "focusFirst" } else { "focusLast" }),
+            },
+            GLANCE => self.focus_shell(if next { "focusGlance" } else { "focusGlanceEnd" }),
+            _ => self.focus_shell(if next { "focusAfterPage" } else { "focusBeforePage" }),
+        }
+    }
     fn capturing(&self, tab: u64) -> bool {
         self.pending.values().any(|(_, id, pending)| {
             *id == tab && matches!(pending, Pending::Screenshot(_) | Pending::Frozen(_))
@@ -556,6 +626,9 @@ impl Manager {
                     } else {
                         "The tab is not ready to capture".into()
                     }));
+                }
+                Pending::Raw(r) => {
+                    let _ = r.send(Err("The tab is not open".into()));
                 }
                 _ => {}
             }
@@ -627,6 +700,13 @@ impl Manager {
             self.layout();
         }
         match pending {
+            Pending::Raw(reply) => {
+                let _ = reply.send(if success {
+                    Ok(data)
+                } else {
+                    Err(error.unwrap_or_default())
+                });
+            }
             Pending::Eval(reply) => {
                 let _ = reply.send(error.map_or_else(|| Ok(data["result"]["value"].clone()), Err));
             }
@@ -817,6 +897,22 @@ impl Manager {
                     manager.visit_all_cookies(Some(&mut CookieList::new(sink)));
                 }
             }
+            Op::Cdp { tab, method, params, reply } => match tab.or(self.active) {
+                Some(tab) => self.cdp(tab, &method, params, Pending::Raw(reply)),
+                None => { let _ = reply.send(Err("No page is open".into())); }
+            },
+            Op::Accessibility { assistive, tree, reply } => {
+                if let Some(on) = assistive {
+                    mac::set_application_attribute("AXManualAccessibility", on);
+                }
+                let mut state = self.accessibility_state();
+                if tree {
+                    if let Some(window) = &self.window {
+                        state["native"] = mac::accessibility_tree(window.window_handle(), 6000);
+                    }
+                }
+                let _ = reply.send(state);
+            }
             Op::Memory(reply) => {
                 let r = &self.main_rect;
                 let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": self.tab(SHELL).is_some_and(|t|t.browser.is_some()), "shell_view": self.tab(SHELL).is_some_and(|t|t.view.is_some()), "shell_record": self.tab(SHELL).is_some(), "live_renderers": self.tabs.iter().filter(|t|t.view.is_some()).count(), "tabs": self.tabs.iter().filter(|t| t.id != SHELL).map(|t| json!({"id":t.id,"live":t.view.is_some(),"suspended":t.suspended})).collect::<Vec<_>>(),
@@ -871,7 +967,28 @@ impl Manager {
                     self.new_tab(None, true, false);
                 }
                 self.push(false);
+                if self.covered {
+                    if let Some(view) = self.tab(SHELL).and_then(|t| t.view.as_ref()) {
+                        view.request_focus();
+                    }
+                }
             }
+            "focus" => match m["target"].as_str() {
+                // A command that opens a page asks for focus before the shell uncovers it.
+                Some("page") => match self.page_visible() {
+                    Some(view) => {
+                        view.request_focus();
+                        self.focus_page_until = None;
+                    }
+                    None => self.focus_page_until = Some(Instant::now() + Duration::from_secs(2)),
+                },
+                Some("glance") => {
+                    if let Some(view) = self.tab(GLANCE).and_then(|t| t.view.as_ref()) {
+                        view.request_focus();
+                    }
+                }
+                _ => self.focus_shell("focusSidebar"),
+            },
             "layout" => {
                 if let Some(r) = rect(&m["main"]) {
                     self.main_rect = r;
@@ -888,6 +1005,11 @@ impl Manager {
                 }
                 self.covered = m["on"] == true;
                 self.layout();
+                if self.focus_page_until.take().is_some_and(|until| until > Instant::now()) {
+                    if let Some(view) = self.page_visible() {
+                        view.request_focus();
+                    }
+                }
             }
             "newTab" => {
                 self.new_tab(
@@ -1034,14 +1156,20 @@ impl Manager {
                     mac::keep_out_of_sight(window.window_handle());
                 }
                 self.restore_session();
+                self.voiceover = mac::voiceover_enabled();
+                self.update_accessibility();
                 let mut maintenance = Maintenance::new(self.bridge.clone());
                 post_delayed_task(ThreadId::UI, Some(&mut maintenance), 10000);
             }
             Event::Created(id, browser) => {
                 let mut observer = DevObserver::new(self.bridge.clone());
-                let reg = browser
-                    .host()
+                let host = browser.host();
+                let reg = host
+                    .as_ref()
                     .and_then(|h| h.add_dev_tools_message_observer(Some(&mut observer)));
+                if let (Some(host), true) = (&host, self.accessibility) {
+                    host.set_accessibility_state(State::ENABLED);
+                }
                 if let Some(t) = self.tab_mut(id) {
                     t.browser = Some(browser);
                     t.registration = reg;
@@ -1183,6 +1311,15 @@ impl Manager {
                 self.attach_popups();
             }
             Event::DevResult(id, success, data) => self.finish(id, success, data),
+            Event::Assistive(attribute, on) => {
+                if on {
+                    self.assistive.insert(attribute);
+                } else {
+                    self.assistive.remove(&attribute);
+                }
+                self.update_accessibility();
+            }
+            Event::TakeFocus(id, next) => self.take_focus(id, next),
             Event::Quit => {
                 self.session_dirty = true;
                 self.save_session();
@@ -1316,7 +1453,12 @@ wrap_client! {struct HostClient {bridge:Bridge,id:u64,base:String,popups:Popups}
     fn display_handler(&self)->Option<DisplayHandler>{Some(HostDisplay::new(self.bridge.clone(),self.id))}
     fn load_handler(&self)->Option<LoadHandler>{Some(HostLoad::new(self.bridge.clone(),self.id))}
     fn download_handler(&self)->Option<DownloadHandler>{Some(HostDownload::new(self.bridge.clone(),self.id))}
-    fn keyboard_handler(&self)->Option<KeyboardHandler>{Some(HostKeyboard::new(self.bridge.clone()))}
+    fn keyboard_handler(&self)->Option<KeyboardHandler>{Some(HostKeyboard::new(self.bridge.clone(),self.id))}
+    fn focus_handler(&self)->Option<FocusHandler>{Some(HostFocus::new(self.bridge.clone(),self.id))}
+}}
+// Tabbing past either end of a page or the shell continues in the next BrowserView.
+wrap_focus_handler! {struct HostFocus {bridge:Bridge,id:u64} impl FocusHandler {
+    fn on_take_focus(&self, _browser:Option<&mut Browser>, next:i32){self.bridge.send(Event::TakeFocus(self.id,next!=0));}
 }}
 wrap_life_span_handler! {struct HostLife {bridge:Bridge,id:u64,base:String,popups:Popups} impl LifeSpanHandler {
     fn on_after_created(&self,browser:Option<&mut Browser>){if let Some(b)=browser{if self.id==SHELL{SHELL_BROWSER.store(b.identifier(),Ordering::Release);}self.bridge.send(Event::Created(self.id,b.clone()));}}
@@ -1392,9 +1534,20 @@ wrap_load_handler! {struct HostLoad {bridge:Bridge,id:u64} impl LoadHandler {
 wrap_dev_tools_message_observer! {struct DevObserver {bridge:Bridge} impl DevToolsMessageObserver {
     fn on_dev_tools_method_result(&self, _unused27:Option<&mut Browser>,id:i32,success:i32,result:Option<&[u8]>){self.bridge.send(Event::DevResult(id,success!=0,result.and_then(|r|serde_json::from_slice(r).ok()).unwrap_or(Json::Null)));}
 }}
-wrap_keyboard_handler! {struct HostKeyboard {bridge:Bridge} impl KeyboardHandler {
+wrap_keyboard_handler! {struct HostKeyboard {bridge:Bridge,id:u64} impl KeyboardHandler {
     fn on_pre_key_event(&self, _unused28:Option<&mut Browser>,event:Option<&KeyEvent>, _unused29:*mut u8, _unused30:Option<&mut i32>)->i32{
-        let Some(e)=event else{return 0}; if e.type_!=KeyEventType::RAWKEYDOWN || e.modifiers & (1<<7)==0 {return 0;}
+        let Some(e)=event else{return 0}; if e.type_!=KeyEventType::RAWKEYDOWN {return 0;}
+        // F6 moves focus between the browser UI and the page; Escape leaves Glance.
+        let plain = e.modifiers & ((1<<2)|(1<<3)|(1<<7)) == 0;
+        if plain && e.windows_key_code==117 {
+            self.bridge.send(Event::Command(if self.id==SHELL {json!({"cmd":"focus","target":"page"})} else {json!({"cmd":"focus","target":"shell"})}));
+            return 1;
+        }
+        if plain && e.windows_key_code==27 && self.id==GLANCE {
+            self.bridge.send(Event::Command(json!({"cmd":"shellCommand","name":"closeOverlay"})));
+            return 1;
+        }
+        if e.modifiers & (1<<7)==0 {return 0;}
         let cmd=match e.windows_key_code {84|75=>Some("commandBar"),76=>Some("editUrl"),69=>Some("toggleAssistant"),78=>Some("newChat"),83=>Some("toggleSidebar"),_=>None};
         if let Some(cmd)=cmd{self.bridge.send(Event::Command(json!({"cmd":"shellCommand","name":cmd})));1}else{0}
     }
@@ -1443,6 +1596,10 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
             pending: HashMap::new(),
             popup_views: Vec::new(),
             closing,
+            voiceover: false,
+            assistive: Default::default(),
+            accessibility: false,
+            focus_page_until: None,
         })
     });
     let bridge = manager.lock().unwrap().bridge.clone();
@@ -1547,6 +1704,8 @@ impl Manager {
     }
     fn maintain(&mut self) {
         self.save_session();
+        self.voiceover = mac::voiceover_enabled();
+        self.update_accessibility();
         let now = Instant::now();
         let crashed = self
             .tabs
