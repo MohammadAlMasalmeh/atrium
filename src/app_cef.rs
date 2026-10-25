@@ -1067,6 +1067,11 @@ impl Manager {
             }
             Event::Crashed(id) => self.crashed(id),
             Event::Loaded(id) => {
+                // Onboarding is a shell overlay, and pages under an overlay are hidden,
+                // which defers permission prompts and changes page lifecycle in tests.
+                if id == SHELL && mac::background() {
+                    self.shell("window.atriumOnboarding?.close()");
+                }
                 if id != SHELL {
                     let scroll = self
                         .tab_mut(id)
