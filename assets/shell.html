@@ -290,6 +290,35 @@ body.glance #glance { display: flex; }
 .gbtn { height: 24px; padding: 0 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px; color: var(--fg-2); font-size: 12px; }
 .gbtn:hover { background: var(--hover); color: var(--fg); }
 #glance-frame { flex: 1; margin: 0 5px 5px; border-radius: 8px; background: var(--card); }
+#ext { position: absolute; left: 50%; top: 12vh; width: min(580px, 88vw); max-height: 76vh; transform: translateX(-50%); border-radius: 12px;
+  background: var(--menu); box-shadow: 0 0 0 .5px var(--menu-ring), 0 24px 60px -12px rgb(0 0 0 / .4); display: none; flex-direction: column; overflow: hidden; isolation: isolate; }
+body.ext #ext { display: flex; }
+.ext-head { height: 44px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 14px; border-bottom: .5px solid var(--line); position: relative; }
+.ext-head .t { flex: 1; font-weight: 600; }
+.ext-add { display: flex; gap: 6px; padding: 10px 12px 8px; flex: none; position: relative; }
+.ext-add input { flex: 1; min-width: 0; height: 28px; border: 0; outline: 0; border-radius: 7px; background: var(--field); padding: 0 10px; user-select: text; }
+.ext-add input:focus { box-shadow: 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-soft); }
+.ext-add input::placeholder { color: var(--fg-3); }
+#ext-body { overflow-y: auto; padding: 0 6px 8px; position: relative; }
+#ext-body .err, #ext-body .empty { padding: 6px 8px; }
+.er { display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 4px 8px; border-radius: 8px; }
+.er:hover { background: var(--hover); }
+.er img, .er .ph { width: 20px; height: 20px; border-radius: 4px; flex: none; display: grid; place-items: center; color: var(--fg-3); }
+.er .m { flex: 1; min-width: 0; }
+.er .m div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.er .s { color: var(--fg-3); font-size: 11.5px; }
+.er .s.warn { color: var(--accent); }
+.sw { width: 28px; height: 16px; border-radius: 8px; background: var(--press); position: relative; flex: none; transition: background .15s; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .3); transition: transform .15s; }
+.sw.on { background: var(--accent); }
+.sw.on::after { transform: translateX(12px); }
+#ext .perm { margin: 2px 4px 8px; }
+#ext .perm ul { margin: 6px 0 0; padding-left: 16px; }
+#ext .perm li { margin: 2px 0; }
+#ext .perm li.risk { color: #d93025; }
+#ext .perm code { font: 11px var(--mono); color: var(--fg-3); margin-left: 4px; }
+.ext-note { flex: none; padding: 8px 14px 10px; color: var(--fg-3); font-size: 11.5px; border-top: .5px solid var(--line); position: relative; }
+#ext .gbtn.primary { background: var(--accent); color: #fff; }
 #toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 10px); opacity: 0; transition: .2s; z-index: 20; pointer-events: none;
   background: var(--menu); padding: 7px 12px; border-radius: 8px; box-shadow: 0 0 0 .5px var(--menu-ring), var(--shadow); font-size: 12px; }
 #toast.on { transform: translate(-50%, 0); opacity: 1; }
@@ -324,6 +353,7 @@ body.glance #glance { display: flex; }
     <div class="sb-bottom">
       <button class="ib" id="cmd-btn" title="Command Bar (⌘K)"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg></button>
       <div class="spaces" id="spaces"></div>
+      <button class="ib" id="ext-btn" title="Extensions"><svg class="i" viewBox="0 0 24 24"><path d="M9 4.5a2 2 0 0 1 4 0V6h4v4h-1.5a2 2 0 0 0 0 4H17v4.5H5V14h1.5a2 2 0 0 0 0-4H5V6h4Z"/></svg></button>
       <button class="ib" id="add-space" title="New Space"><svg class="i" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg></button>
       <button class="ib" id="assist" title="Assistant (⌘E)"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M15 4.5v15"/></svg></button>
     </div>
@@ -390,6 +420,13 @@ body.glance #glance { display: flex; }
     </div>
     <div id="glance-frame"></div>
   </div>
+  <div id="ext">
+    <img class="backdrop" alt="">
+    <div class="ext-head"><span class="t">Extensions</span><button class="gbtn" id="ext-updates">Check for Updates</button><button class="gbtn primary" id="ext-restart" style="display:none">Restart to Apply</button><button class="ib" id="ext-close" title="Close (Esc)"><svg class="i" viewBox="0 0 24 24"><path d="M17 7 7 17M7 7l10 10"/></svg></button></div>
+    <div class="ext-add"><input id="ext-input" spellcheck="false" autocomplete="off" placeholder="Chrome Web Store link or extension ID"><button class="gbtn" id="ext-add">Add</button></div>
+    <div id="ext-body"></div>
+    <div class="ext-note">Extensions load when Aside starts, so changes apply after a restart. Extension popups open in a preview window; extensions cannot see or control Aside's tabs.</div>
+  </div>
 </div>
 <div id="toast"></div>
 
@@ -452,6 +489,7 @@ const ICON = {
   copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>',
   sidebar: '<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M9 4.5v15"/>',
   pin: '<path d="M12 17v4M9 3h6l-1 6 3 3v2H7v-2l3-3Z"/>',
+  puzzle: '<path d="M9 4.5a2 2 0 0 1 4 0V6h4v4h-1.5a2 2 0 0 0 0 4H17v4.5H5V14h1.5a2 2 0 0 0 0-4H5V6h4Z"/>',
 };
 const icon = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24">${ICON[n] || ICON.globe}</svg>`;
 let toastTimer;
@@ -562,6 +600,7 @@ function render() {
   document.body.classList.toggle('overlay', !!S.overlay);
   document.body.classList.toggle('cmdk', S.overlay === 'cmdk');
   document.body.classList.toggle('glance', S.overlay === 'glance');
+  document.body.classList.toggle('ext', S.overlay === 'ext');
   document.body.classList.toggle('is-frozen', !!S.overlay && web);
   document.body.classList.toggle('agent-here', working && web && agentTabOf(chat.id) === t.id);
   for (const id of ['#back', '#fwd', '#reload']) $(id).disabled = !web;
@@ -824,6 +863,7 @@ function updateCmdk() {
     { t: 'Split View', k: '⇧⌘=', ic: 'split', run: toggleSplit },
     { t: 'Pin Tab to Space', k: '⌘D', ic: 'pin', run: togglePin },
     { t: 'Copy Link', k: '⇧⌘C', ic: 'copy', run: copyUrl },
+    { t: 'Extensions', ic: 'puzzle', run: () => openExtensions() },
     { t: 'Summarize This Page', ic: 'file', run: () => askAgent(SKILLS[0].p, false) },
   ];
   for (const a of acts.filter((a) => match(a.t)).slice(0, q ? 3 : 6)) items.push({ g: 'Actions', ...a });
@@ -850,6 +890,110 @@ $('#cmdk-input').addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowUp') { e.preventDefault(); cmdkSel = Math.max(cmdkSel - 1, 0); drawCmdk(); }
   else if (e.key === 'Enter') { e.preventDefault(); runCmdk(e.metaKey && $('#cmdk-input').value.trim() ? 1 : cmdkSel); }
 });
+
+/* ── Extensions ───────────────────────────────────── */
+const ext = { data: null, review: null, busy: false, error: '' };
+const PERM_TEXT = {
+  tabs: 'Read your browsing history', history: 'Read and change your browsing history', bookmarks: 'Read and change your bookmarks',
+  cookies: 'Read and change cookies', downloads: 'Manage your downloads', clipboardRead: 'Read data you copy and paste',
+  clipboardWrite: 'Modify data you copy and paste', declarativeNetRequest: 'Block content on any page', declarativeNetRequestWithHostAccess: 'Block or change requests on sites it can access',
+  webRequest: 'Observe your network requests', webNavigation: 'Read your browsing history', scripting: 'Run scripts on sites it can access',
+  userScripts: 'Run user scripts that have not been reviewed by Google', nativeMessaging: 'Communicate with apps on this Mac', debugger: 'Access the page debugger backend',
+  management: 'Manage your apps, extensions, and themes', proxy: 'Change proxy settings', privacy: 'Change privacy-related settings',
+  notifications: 'Display notifications', geolocation: 'Detect your physical location', storage: 'Store data in the browser', unlimitedStorage: 'Store unlimited data',
+  contextMenus: 'Add items to context menus', alarms: 'Schedule background work', offscreen: 'Run hidden documents', activeTab: 'Access the current site when you use it',
+  topSites: 'Read your most visited sites', pageCapture: 'Save pages', tabCapture: 'Capture tab content', desktopCapture: 'Capture your screen',
+};
+const broadHost = (p) => p === '<all_urls>' || /^(\*|https?):\/\/\*\/\*$/.test(p);
+function permLines(items, risky) {
+  const hosts = items.filter((p) => p.includes('://') || p === '<all_urls>'), perms = items.filter((p) => !hosts.includes(p));
+  const lines = [];
+  if (hosts.some(broadHost)) lines.push({ t: 'Read and change all your data on all websites', raw: hosts.filter(broadHost).join(', '), risk: true });
+  const specific = [...new Set(hosts.filter((h) => !broadHost(h)).map((h) => h.replace(/^[^:]+:\/\//, '').replace(/\/.*$/, '')))];
+  if (specific.length) lines.push({ t: `Read and change your data on ${specific.slice(0, 4).join(', ')}${specific.length > 4 ? ` and ${specific.length - 4} more` : ''}`, raw: '', risk: false });
+  for (const p of perms) lines.push({ t: PERM_TEXT[p] || p, raw: PERM_TEXT[p] ? p : '', risk: risky.includes(p) });
+  return lines;
+}
+function summaryItems(s) { return [...new Set([...(s.permissions || []), ...(s.host_permissions || []), ...(s.content_script_matches || [])])]; }
+function statusText(e) {
+  if (e.status === 'needs_approval') return ['Waiting for your approval', true];
+  if (e.status === 'update_needs_approval') return [`Update ${e.pending.version} wants more access`, true];
+  if (e.applies_on_restart) return [e.enabled ? 'Turns on after restart' : 'Turns off after restart', true];
+  return [e.enabled ? 'On' : 'Off', false];
+}
+async function openExtensions() { freeze(); S.overlay = 'ext'; ext.error = ''; render(); await loadExt(); setTimeout(() => $('#ext-input').focus(), 20); }
+async function loadExt() {
+  try { ext.data = await (await fetch('/api/browser/extensions')).json(); } catch (e) { ext.error = String(e); }
+  drawExt();
+}
+async function extAct(id, action) {
+  const r = await post(`/api/browser/extensions/${encodeURIComponent(id)}/${action}`, {});
+  if (r.error) toast(r.error);
+  ext.review = null; await loadExt();
+}
+async function extInstall() {
+  const inp = $('#ext-input'), source = inp.value.trim(); if (!source || ext.busy) return;
+  ext.busy = true; ext.error = ''; drawExt();
+  const r = await post('/api/browser/extensions/install', { source });
+  ext.busy = false;
+  if (r.error) ext.error = r.error; else { inp.value = ''; ext.review = r.id; }
+  await loadExt();
+}
+function drawExt() {
+  const d = ext.data || { installed: [], extensions: [] };
+  $('#ext-restart').style.display = d.restart_required ? '' : 'none';
+  $('#ext-add').textContent = ext.busy ? 'Adding…' : 'Add';
+  const review = d.installed.find((e) => e.id === ext.review && (e.status === 'needs_approval' || e.status === 'update_needs_approval'));
+  let html = ext.error ? `<div class="err">${esc(ext.error)}</div>` : '';
+  if (review) {
+    const update = review.status === 'update_needs_approval';
+    const summary = update ? review.pending.summary : review.summary;
+    const items = update ? review.pending.added : summaryItems(summary);
+    const lines = permLines(items, summary.high_risk || []);
+    html += `<div class="perm"><b>${update ? `“${esc(review.name)}” ${esc(review.pending.version)} wants more access` : `Add “${esc(review.name)}”?`}</b>
+      <div class="meta-line">${esc(review.web_store ? 'Chrome Web Store' : 'Self-hosted package')} · version ${esc(update ? review.pending.version : review.version)} · ${esc(review.id)}</div>
+      ${lines.length ? `<div style="margin-top:8px">${update ? 'New access it requests:' : 'It can:'}</div><ul>${lines.map((l) => `<li class="${l.risk ? 'risk' : ''}">${esc(l.t)}${l.raw ? `<code>${esc(l.raw)}</code>` : ''}</li>`).join('')}</ul>` : '<div style="margin-top:8px">It requests no special permissions.</div>'}
+      <div class="btns"><button class="yes" data-act="approve" data-id="${esc(review.id)}">${update ? 'Approve Update' : 'Approve and Turn On'}</button><button data-act="reject" data-id="${esc(review.id)}">${update ? 'Keep Current Version' : 'Cancel'}</button></div></div>`;
+  }
+  for (const e of d.installed) {
+    const [status, warn] = statusText(e);
+    const needs = e.status === 'needs_approval' || e.status === 'update_needs_approval';
+    const lead = e.icon ? `<img src="/api/browser/extensions/${esc(e.id)}/icon" alt="">` : `<span class="ph">${icon('puzzle')}</span>`;
+    html += `<div class="er" data-id="${esc(e.id)}">${lead}<div class="m"><div>${esc(e.name || e.id)}</div><div class="s ${warn ? 'warn' : ''}">${esc(e.version)} · ${esc(status)}</div></div>
+      ${needs ? `<button class="gbtn" data-act="review" data-id="${esc(e.id)}">Review</button>` : ''}
+      ${e.popup ? `<button class="gbtn" data-open="${esc(e.popup)}">Popup</button>` : ''}
+      ${e.options ? `<button class="gbtn" data-open="${esc(e.options)}">Options</button>` : ''}
+      ${e.status === 'needs_approval' ? '' : `<button class="sw ${e.enabled ? 'on' : ''}" data-act="${e.enabled ? 'disable' : 'enable'}" data-id="${esc(e.id)}" title="${e.enabled ? 'Turn Off' : 'Turn On'}"></button>`}
+      <button class="ib" data-act="remove" data-id="${esc(e.id)}" title="Remove">${icon('x')}</button></div>`;
+  }
+  for (const e of d.extensions || []) {
+    html += `<div class="er"><span class="ph">${icon('puzzle')}</span><div class="m"><div>${esc(e.name || e.path)}</div><div class="s">${esc(e.version || '')} · Loaded from the command line</div></div></div>`;
+  }
+  if (!d.installed.length && !(d.extensions || []).length && !ext.error) html += '<div class="empty">No extensions yet. Paste a Chrome Web Store link above to add one.</div>';
+  $('#ext-body').innerHTML = html;
+  $$('#ext-body [data-act]').forEach((b) => b.onclick = () => {
+    if (b.dataset.act === 'review') { ext.review = b.dataset.id; drawExt(); return; }
+    if (b.dataset.act === 'remove' && !b.dataset.sure) { b.dataset.sure = '1'; b.className = 'gbtn'; b.textContent = 'Remove'; return; }
+    extAct(b.dataset.id, b.dataset.act);
+  });
+  $$('#ext-body [data-open]').forEach((b) => b.onclick = () => { S.overlay = null; render(); ipc({ cmd: 'glance', url: b.dataset.open }); });
+}
+$('#ext-btn').onclick = () => openExtensions();
+$('#ext-close').onclick = closeOverlay;
+$('#ext-add').onclick = extInstall;
+$('#ext-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); extInstall(); } });
+$('#ext-restart').onclick = async () => { const r = await post('/api/browser/extensions/restart', {}); if (r.error) toast(r.error); };
+$('#ext-updates').onclick = async () => {
+  $('#ext-updates').textContent = 'Checking…';
+  const r = await post('/api/browser/extensions/updates', {});
+  $('#ext-updates').textContent = 'Check for Updates';
+  if (r.error) { toast(r.error); return; }
+  const waiting = r.results.find((x) => x.status === 'needs_approval');
+  const failed = r.results.filter((x) => x.status === 'error');
+  toast(failed.length ? `Update check failed for ${failed.length} extension${failed.length > 1 ? 's' : ''}` : r.results.some((x) => x.status !== 'up_to_date') ? 'Updates downloaded' : 'Extensions are up to date');
+  if (waiting) ext.review = waiting.id;
+  await loadExt();
+};
 
 function layoutGlance() {
   const g = $('#glance'), m = $('#pane-main').getBoundingClientRect();

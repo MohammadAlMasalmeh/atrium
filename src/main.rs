@@ -6,6 +6,8 @@
 
 mod agent;
 mod app;
+mod crx;
+mod extension_store;
 mod extensions;
 mod mcp;
 mod migration;
@@ -75,6 +77,10 @@ struct RunArgs {
 }
 
 static CHROME_EXTENSIONS: std::sync::OnceLock<Vec<PathBuf>> = std::sync::OnceLock::new();
+/// Approved, enabled installed extensions; Chromium loads these and `CHROME_EXTENSIONS` at start.
+static INSTALLED_EXTENSIONS: std::sync::OnceLock<Vec<PathBuf>> = std::sync::OnceLock::new();
+/// The environment and working directory before Chromium started, for a clean relaunch.
+static LAUNCH: std::sync::OnceLock<(Vec<(std::ffi::OsString, std::ffi::OsString)>, Option<PathBuf>)> = std::sync::OnceLock::new();
 static DATA_ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 /// Per-launch secret for the local API, also written to `<data dir>/api-token` (mode 0600).
 static API_TOKEN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
@@ -109,6 +115,7 @@ fn mcp_command(dir: &std::path::Path, api: &str) -> Vec<String> {
 }
 
 fn main() -> Result<()> {
+    let _ = LAUNCH.set((std::env::vars_os().collect(), std::env::current_dir().ok()));
     let cli = Cli::parse();
     if let Some(root) = cli.data_dir { let _ = DATA_ROOT.set(root); }
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
@@ -141,6 +148,7 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
     }
     extensions::record_review(&dir, &extensions);
     let _ = CHROME_EXTENSIONS.set(extensions);
+    let _ = INSTALLED_EXTENSIONS.set(extension_store::init(&dir));
     let ui = format!("http://127.0.0.1:{}", args.port);
 
     // The UI server must be listening before the window loads the shell.
@@ -202,6 +210,31 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
         }
         let _ = std::fs::remove_file(token_dir.join(TOKEN_FILE));
     })
+}
+
+/// Starts this executable again with the same arguments and environment once this process
+/// has exited and released its port and Chromium profile. It is spawned before quitting
+/// because Chromium can end a stalled shutdown without returning to `on_exit`.
+fn relaunch() -> Result<()> {
+    let exe = std::env::current_exe()?;
+    let (env, cwd) = LAUNCH.get().context("launch environment was not recorded")?;
+    let mut command = std::process::Command::new("/bin/sh");
+    command
+        .arg("-c")
+        // A parent that has not reaped this process yet leaves a zombie, which has already exited.
+        .arg(r#"while ps -o stat= -p "$0" | grep -qv '^Z'; do sleep 0.1; done; exec "$@""#)
+        .arg(std::process::id().to_string())
+        .arg(exe)
+        .args(std::env::args_os().skip(1))
+        .env_clear()
+        .envs(env.iter().cloned())
+        .stdin(std::process::Stdio::null());
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    use std::os::unix::process::CommandExt;
+    command.process_group(0).spawn()?;
+    Ok(())
 }
 
 /// Terminal client: subscribe to the event relay, send the prompt, print the reply.
