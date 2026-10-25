@@ -682,7 +682,7 @@ impl Manager {
                 (
                     Rect {
                         x: width + 64,
-                        ..self.main_rect.clone()
+                        ..bounds
                     },
                     true,
                 )
