@@ -14,4 +14,5 @@ fi
 CEF_PATH="${CEF_PATH:-$PWD/target/cef}"
 export CEF_PATH
 cargo build --locked --bin atrium --bin atrium_helper "$@"
-cargo run --locked --bin atrium_bundle -- "$@"
+# Build the bundler with the same profile; otherwise it recompiles CEF and the app in debug.
+cargo run --locked "$@" --bin atrium_bundle -- "$@"
