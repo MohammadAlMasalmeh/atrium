@@ -1,0 +1,2380 @@
+{
+  "date": "2026-10-24",
+  "workload": "fixture-distinct",
+  "metric": "Sum over each browser process tree of macOS physical footprint (proc_pid_rusage v2 ri_phys_footprint) and RSS, MiB. RSS double-counts shared pages. Medians per phase within a run; median/min/max across runs.",
+  "method": {
+    "baseline": "Installed Aside started with --headless, a throwaway profile, --force-device-scale-factor=2 and 1024x808 targets; no windows, Prohibited activation policy.",
+    "candidate": "This repository's release bundle with ASIDE_BACKGROUND_WINDOW=1 and ASIDE_MOCK_KEYCHAIN=1, fresh data directory.",
+    "sequencing": "Browsers run one at a time; real sites run the baseline first and the CEF run closes sites the baseline rejected; fixtures alternate the order per repetition.",
+    "phases": {
+      "live": "6 samples every 2s from 6s after pages were ready",
+      "idle": "6 samples every 3s from 90s after pages were ready"
+    },
+    "cef_policy": "max 6 live content views (plus the shell), 30 s minimum idle, agent inspection protects 180 s",
+    "visibility_guard": "window_audit.swift (50 ms polling, SIGKILL on frontmost, visible window, or Regular policy after 1 s) and watchdog.sh",
+    "caveats": [
+      "Headless Aside renders its own browser UI (sidebar and toolbar) without any window; the CEF build includes its shell renderer. Neither is the same as a visible, interactive window.",
+      "Background CEF pages report visibilityState hidden; headless targets report visible.",
+      "The system was shared with other agents and builds; load is recorded per browser run."
+    ]
+  },
+  "runs": [
+    {
+      "run": 1,
+      "order": [
+        "cef",
+        "aside"
+      ],
+      "CEF build": {
+        "browser": "CEF build",
+        "active_page": {
+          "iframes": 0,
+          "nodes": 12,
+          "ready": "complete",
+          "resources": 1,
+          "textLength": 42,
+          "title": "Fixture /page/benchmark-9",
+          "url": "/page/benchmark-9",
+          "viewport": [
+            1024,
+            776,
+            2
+          ],
+          "visibility": "visible"
+        },
+        "live": {
+          "samples": 6,
+          "complete_footprint_samples": 6,
+          "footprint_mib": 728.5,
+          "rss_mib": 1644.4,
+          "process_count": 16.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 166.9,
+              "footprint_mib": 71.8
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 106.0,
+              "footprint_mib": 103.8
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 68.5,
+              "footprint_mib": 28.3
+            },
+            "renderer": {
+              "count": 12.0,
+              "rss_mib": 1250.4,
+              "footprint_mib": 503.9
+            },
+            "utility": {
+              "count": 1.0,
+              "rss_mib": 52.5,
+              "footprint_mib": 20.5
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 819.4,
+              "rss_mib": 1644.5,
+              "process_count": 16
+            },
+            {
+              "footprint_mib": 726.6,
+              "rss_mib": 1644.8,
+              "process_count": 16
+            },
+            {
+              "footprint_mib": 726.1,
+              "rss_mib": 1644.3,
+              "process_count": 16
+            },
+            {
+              "footprint_mib": 835.6,
+              "rss_mib": 1648.7,
+              "process_count": 16
+            },
+            {
+              "footprint_mib": 730.3,
+              "rss_mib": 1562.1,
+              "process_count": 16
+            },
+            {
+              "footprint_mib": 726.3,
+              "rss_mib": 1562.1,
+              "process_count": 16
+            }
+          ],
+          "cef_live_views": [
+            11,
+            11,
+            11,
+            11,
+            11,
+            11
+          ]
+        },
+        "idle": {
+          "samples": 6,
+          "complete_footprint_samples": 6,
+          "footprint_mib": 544.0,
+          "rss_mib": 1065.2,
+          "process_count": 12.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 157.1,
+              "footprint_mib": 66.8
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 83.2,
+              "footprint_mib": 95.2
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 67.0,
+              "footprint_mib": 27.3
+            },
+            "renderer": {
+              "count": 8.0,
+              "rss_mib": 707.2,
+              "footprint_mib": 334.5
+            },
+            "utility": {
+              "count": 1.0,
+              "rss_mib": 50.8,
+              "footprint_mib": 20.0
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 544.0,
+              "rss_mib": 1063.2,
+              "process_count": 12
+            },
+            {
+              "footprint_mib": 544.0,
+              "rss_mib": 1063.3,
+              "process_count": 12
+            },
+            {
+              "footprint_mib": 548.3,
+              "rss_mib": 1065.2,
+              "process_count": 12
+            },
+            {
+              "footprint_mib": 543.9,
+              "rss_mib": 1065.2,
+              "process_count": 12
+            },
+            {
+              "footprint_mib": 543.9,
+              "rss_mib": 1065.2,
+              "process_count": 12
+            },
+            {
+              "footprint_mib": 543.9,
+              "rss_mib": 1065.4,
+              "process_count": 12
+            }
+          ],
+          "cef_live_views": [
+            7,
+            7,
+            7,
+            7,
+            7,
+            7
+          ]
+        },
+        "accepted": [
+          {
+            "name": "benchmark-0",
+            "reason": null
+          },
+          {
+            "name": "benchmark-1",
+            "reason": null
+          },
+          {
+            "name": "benchmark-2",
+            "reason": null
+          },
+          {
+            "name": "benchmark-3",
+            "reason": null
+          },
+          {
+            "name": "benchmark-4",
+            "reason": null
+          },
+          {
+            "name": "benchmark-5",
+            "reason": null
+          },
+          {
+            "name": "benchmark-6",
+            "reason": null
+          },
+          {
+            "name": "benchmark-7",
+            "reason": null
+          },
+          {
+            "name": "benchmark-8",
+            "reason": null
+          },
+          {
+            "name": "benchmark-9",
+            "reason": null
+          }
+        ],
+        "excluded": [],
+        "guard": {
+          "ok": true,
+          "regular_policy_seconds": 0.133,
+          "test_process_frontmost_before": false,
+          "test_process_frontmost_after": false,
+          "audit_polls": 1666,
+          "audit_interval_ms": 50,
+          "activation_policies_seen": [
+            "not-registered",
+            "prohibited",
+            "regular"
+          ],
+          "policy_timeline": [
+            {
+              "policy": "not-registered",
+              "t": 0.08482205867767334
+            },
+            {
+              "policy": "regular",
+              "t": 0.34713006019592285
+            },
+            {
+              "policy": "prohibited",
+              "t": 0.4799020290374756
+            },
+            {
+              "policy": "not-registered",
+              "t": 241.4809169769287
+            }
+          ],
+          "violations": [],
+          "watchdog": "instance 69304 exited; never frontmost",
+          "helpers_outliving_browser": 1
+        },
+        "log_lines": {
+          "total": 130,
+          "error": 3,
+          "fatal": 0,
+          "panic": 0
+        },
+        "system_before": {
+          "load_1m": 118.3,
+          "load_5m": 192.7,
+          "memory_free_percent": 51,
+          "waited_seconds": 120,
+          "quiet": false
+        },
+        "system_after": {
+          "load_1m": 98.3,
+          "load_5m": 157.7,
+          "memory_free_percent": 66
+        }
+      },
+      "Aside (headless)": {
+        "browser": "Aside (headless)",
+        "version": "Chrome/154.0.8037.100",
+        "active_page": {
+          "url": "/page/benchmark-9",
+          "title": "Fixture /page/benchmark-9",
+          "ready": "complete",
+          "visibility": "visible",
+          "viewport": [
+            1024,
+            808,
+            2
+          ],
+          "textLength": 42,
+          "nodes": 12,
+          "resources": 1,
+          "iframes": 0
+        },
+        "live": {
+          "samples": 6,
+          "complete_footprint_samples": 6,
+          "footprint_mib": 1035.8,
+          "rss_mib": 2777.4,
+          "process_count": 20.0,
+          "by_type": {
+            "aside_daemon": {
+              "count": 1.0,
+              "rss_mib": 105.8,
+              "footprint_mib": 68.5
+            },
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 246.0,
+              "footprint_mib": 90.4
+            },
+            "extension_renderer": {
+              "count": 2.0,
+              "rss_mib": 340.0,
+              "footprint_mib": 128.0
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 137.4,
+              "footprint_mib": 118.6
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 96.4,
+              "footprint_mib": 34.3
+            },
+            "renderer": {
+              "count": 13.0,
+              "rss_mib": 1781.4,
+              "footprint_mib": 574.2
+            },
+            "utility": {
+              "count": 1.0,
+              "rss_mib": 70.8,
+              "footprint_mib": 21.5
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 967.1,
+              "rss_mib": 2672.8,
+              "process_count": 20
+            },
+            {
+              "footprint_mib": 1059.7,
+              "rss_mib": 2801.3,
+              "process_count": 20
+            },
+            {
+              "footprint_mib": 1131.1,
+              "rss_mib": 2886.5,
+              "process_count": 20
+            },
+            {
+              "footprint_mib": 1163.9,
+              "rss_mib": 2932.1,
+              "process_count": 20
+            },
+            {
+              "footprint_mib": 967.1,
+              "rss_mib": 2670.3,
+              "process_count": 19
+            },
+            {
+              "footprint_mib": 1012.0,
+              "rss_mib": 2753.5,
+              "process_count": 20
+            }
+          ]
+        },
+        "idle": {
+          "samples": 6,
+          "complete_footprint_samples": 6,
+          "footprint_mib": 968.6,
+          "rss_mib": 2180.8,
+          "process_count": 19.0,
+          "by_type": {
+            "aside_daemon": {
+              "count": 0.0,
+              "rss_mib": 0.0,
+              "footprint_mib": 0.0
+            },
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 198.8,
+              "footprint_mib": 89.4
+            },
+            "extension_renderer": {
+              "count": 2.0,
+              "rss_mib": 249.8,
+              "footprint_mib": 128.4
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 98.8,
+              "footprint_mib": 118.8
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 90.7,
+              "footprint_mib": 34.4
+            },
+            "renderer": {
+              "count": 13.0,
+              "rss_mib": 1462.5,
+              "footprint_mib": 576.0
+            },
+            "utility": {
+              "count": 1.0,
+              "rss_mib": 65.0,
+              "footprint_mib": 21.5
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 968.4,
+              "rss_mib": 2146.6,
+              "process_count": 19
+            },
+            {
+              "footprint_mib": 1159.2,
+              "rss_mib": 2400.6,
+              "process_count": 20
+            },
+            {
+              "footprint_mib": 968.6,
+              "rss_mib": 2164.1,
+              "process_count": 19
+            },
+            {
+              "footprint_mib": 968.6,
+              "rss_mib": 2165.8,
+              "process_count": 19
+            },
+            {
+              "footprint_mib": 1009.7,
+              "rss_mib": 2195.8,
+              "process_count": 20
+            },
+            {
+              "footprint_mib": 967.8,
+              "rss_mib": 2207.0,
+              "process_count": 19
+            }
+          ]
+        },
+        "accepted": [
+          {
+            "name": "benchmark-0",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-0",
+              "title": "Fixture /page/benchmark-0",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-1",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-1",
+              "title": "Fixture /page/benchmark-1",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-2",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-2",
+              "title": "Fixture /page/benchmark-2",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-3",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-3",
+              "title": "Fixture /page/benchmark-3",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-4",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-4",
+              "title": "Fixture /page/benchmark-4",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-5",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-5",
+              "title": "Fixture /page/benchmark-5",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-6",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-6",
+              "title": "Fixture /page/benchmark-6",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-7",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-7",
+              "title": "Fixture /page/benchmark-7",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-8",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-8",
+              "title": "Fixture /page/benchmark-8",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-9",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-9",
+              "title": "Fixture /page/benchmark-9",
+              "ready": "complete",
+              "visibility": "visible",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          }
+        ],
+        "excluded": [],
+        "pages_at_end": 10,
+        "target_replacements_followed": 0,
+        "guard": {
+          "ok": true,
+          "regular_policy_seconds": 0.066,
+          "test_process_frontmost_before": false,
+          "test_process_frontmost_after": false,
+          "audit_polls": 2849,
+          "audit_interval_ms": 50,
+          "activation_policies_seen": [
+            "not-registered",
+            "prohibited",
+            "regular"
+          ],
+          "policy_timeline": [
+            {
+              "policy": "not-registered",
+              "t": 0.05642092227935791
+            },
+            {
+              "policy": "regular",
+              "t": 0.24682092666625977
+            },
+            {
+              "policy": "prohibited",
+              "t": 0.3132249116897583
+            },
+            {
+              "policy": "not-registered",
+              "t": 196.25678300857544
+            },
+            {
+              "policy": "prohibited",
+              "t": 196.33469998836517
+            },
+            {
+              "policy": "not-registered",
+              "t": 200.88278198242188
+            }
+          ],
+          "violations": [],
+          "watchdog": "instance 77223 exited; never frontmost",
+          "helpers_outliving_browser": 8
+        },
+        "system_before": {
+          "load_1m": 243.8,
+          "load_5m": 195.3,
+          "memory_free_percent": 64,
+          "waited_seconds": 129,
+          "quiet": false
+        },
+        "system_after": {
+          "load_1m": 170.9,
+          "load_5m": 202.8,
+          "memory_free_percent": 54
+        }
+      },
+      "comparable": true
+    },
+    {
+      "run": 2,
+      "order": [
+        "aside",
+        "cef"
+      ],
+      "Aside (headless)": {
+        "browser": "Aside (headless)",
+        "version": "Chrome/154.0.8037.100",
+        "active_page": {
+          "url": "/page/benchmark-9",
+          "title": "Fixture /page/benchmark-9",
+          "ready": "complete",
+          "visibility": "visible",
+          "viewport": [
+            1024,
+            808,
+            2
+          ],
+          "textLength": 42,
+          "nodes": 12,
+          "resources": 1,
+          "iframes": 0
+        },
+        "live": {
+          "samples": 6,
+          "complete_footprint_samples": 6,
+          "footprint_mib": 1075.5,
+          "rss_mib": 2855.4,
+          "process_count": 21.0,
+          "by_type": {
+            "aside_daemon": {
+              "count": 0.0,
+              "rss_mib": 0.0,
+              "footprint_mib": 0.0
+            },
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 250.4,
+              "footprint_mib": 94.7
+            },
+            "extension_renderer": {
+              "count": 2.0,
+              "rss_mib": 365.1,
+              "footprint_mib": 158.7
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 134.7,
+              "footprint_mib": 135.4
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 102.2,
+              "footprint_mib": 31.3
+            },
+            "other": {
+              "count": 2.0,
+              "rss_mib": 27.2,
+              "footprint_mib": 6.7
+            },
+            "renderer": {
+              "count": 13.0,
+              "rss_mib": 1930.5,
+              "footprint_mib": 601.5
+            },
+            "utility": {
+              "count": 1.0,
+              "rss_mib": 69.6,
+              "footprint_mib": 21.5
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 1050.9,
+              "rss_mib": 2854.1,
+              "process_count": 19
+            },
+            {
+              "footprint_mib": 1091.6,
+              "rss_mib": 2856.8,
+              "process_count": 19
+            },
+            {
+              "footprint_mib": 1196.3,
+              "rss_mib": 3094.2,
+              "process_count": 22
+            },
+            {
+              "footprint_mib": 1051.1,
+              "rss_mib": 2946.2,
+              "process_count": 22
+            },
+            {
+              "footprint_mib": 1131.4,
+              "rss_mib": 2740.7,
+              "process_count": 21
+            },
+            {
+              "footprint_mib": 1059.4,
+              "rss_mib": 2742.9,
+              "process_count": 21
+            }
+          ]
+        },
+        "idle": {
+          "samples": 6,
+          "complete_footprint_samples": 6,
+          "footprint_mib": 1370.3,
+          "rss_mib": 2851.6,
+          "process_count": 21.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 219.7,
+              "footprint_mib": 90.8
+            },
+            "extension_renderer": {
+              "count": 2.0,
+              "rss_mib": 322.1,
+              "footprint_mib": 131.8
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 113.3,
+              "footprint_mib": 120.8
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 97.6,
+              "footprint_mib": 29.2
+            },
+            "other": {
+              "count": 2.0,
+              "rss_mib": 389.5,
+              "footprint_mib": 386.6
+            },
+            "renderer": {
+              "count": 13.0,
+              "rss_mib": 1638.5,
+              "footprint_mib": 589.7
+            },
+            "utility": {
+              "count": 1.0,
+              "rss_mib": 65.8,
+              "footprint_mib": 21.4
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 1507.7,
+              "rss_mib": 2936.3,
+              "process_count": 21
+            },
+            {
+              "footprint_mib": 1507.7,
+              "rss_mib": 2936.5,
+              "process_count": 21
+            },
+            {
+              "footprint_mib": 1370.2,
+              "rss_mib": 2844.5,
+              "process_count": 21
+            },
+            {
+              "footprint_mib": 1370.5,
+              "rss_mib": 2848.9,
+              "process_count": 21
+            },
+            {
+              "footprint_mib": 1368.7,
+              "rss_mib": 2851.1,
+              "process_count": 21
+            },
+            {
+              "footprint_mib": 1368.7,
+              "rss_mib": 2852.1,
+              "process_count": 21
+            }
+          ]
+        },
+        "accepted": [
+          {
+            "name": "benchmark-0",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-0",
+              "title": "Fixture /page/benchmark-0",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-1",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-1",
+              "title": "Fixture /page/benchmark-1",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-2",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-2",
+              "title": "Fixture /page/benchmark-2",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-3",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-3",
+              "title": "Fixture /page/benchmark-3",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-4",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-4",
+              "title": "Fixture /page/benchmark-4",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-5",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-5",
+              "title": "Fixture /page/benchmark-5",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-6",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-6",
+              "title": "Fixture /page/benchmark-6",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-7",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-7",
+              "title": "Fixture /page/benchmark-7",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-8",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-8",
+              "title": "Fixture /page/benchmark-8",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-9",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-9",
+              "title": "Fixture /page/benchmark-9",
+              "ready": "complete",
+              "visibility": "visible",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          }
+        ],
+        "excluded": [],
+        "pages_at_end": 10,
+        "target_replacements_followed": 0,
+        "guard": {
+          "ok": true,
+          "regular_policy_seconds": 0.152,
+          "test_process_frontmost_before": false,
+          "test_process_frontmost_after": false,
+          "audit_polls": 2037,
+          "audit_interval_ms": 50,
+          "activation_policies_seen": [
+            "not-registered",
+            "prohibited",
+            "regular"
+          ],
+          "policy_timeline": [
+            {
+              "policy": "regular",
+              "t": 0.06621396541595459
+            },
+            {
+              "policy": "prohibited",
+              "t": 0.21806597709655762
+            },
+            {
+              "policy": "not-registered",
+              "t": 129.46850895881653
+            }
+          ],
+          "violations": [],
+          "watchdog": "instance 89006 exited; never frontmost",
+          "helpers_outliving_browser": 1
+        },
+        "system_before": {
+          "load_1m": 57.4,
+          "load_5m": 152.9,
+          "memory_free_percent": 63,
+          "waited_seconds": 105,
+          "quiet": true
+        },
+        "system_after": {
+          "load_1m": 34.3,
+          "load_5m": 113.1,
+          "memory_free_percent": 62
+        }
+      },
+      "CEF build": {
+        "browser": "CEF build",
+        "active_page": {
+          "iframes": 0,
+          "nodes": 12,
+          "ready": "complete",
+          "resources": 1,
+          "textLength": 42,
+          "title": "Fixture /page/benchmark-9",
+          "url": "/page/benchmark-9",
+          "viewport": [
+            1024,
+            808,
+            2
+          ],
+          "visibility": "visible"
+        },
+        "live": {
+          "samples": 6,
+          "complete_footprint_samples": 6,
+          "footprint_mib": 711.8,
+          "rss_mib": 1553.8,
+          "process_count": 16.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 162.4,
+              "footprint_mib": 70.8
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 93.0,
+              "footprint_mib": 83.4
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 67.4,
+              "footprint_mib": 29.0
+            },
+            "renderer": {
+              "count": 12.0,
+              "rss_mib": 1180.2,
+              "footprint_mib": 508.1
+            },
+            "utility": {
+              "count": 1.0,
+              "rss_mib": 50.8,
+              "footprint_mib": 20.5
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 817.7,
+              "rss_mib": 1553.8,
+              "process_count": 16
+            },
+            {
+              "footprint_mib": 811.2,
+              "rss_mib": 1553.8,
+              "process_count": 16
+            },
+            {
+              "footprint_mib": 720.3,
+              "rss_mib": 1553.9,
+              "process_count": 16
+            },
+            {
+              "footprint_mib": 703.2,
+              "rss_mib": 1558.8,
+              "process_count": 16
+            },
+            {
+              "footprint_mib": 703.2,
+              "rss_mib": 1506.4,
+              "process_count": 16
+            },
+            {
+              "footprint_mib": 703.2,
+              "rss_mib": 1497.5,
+              "process_count": 16
+            }
+          ],
+          "cef_live_views": [
+            11,
+            11,
+            11,
+            11,
+            11,
+            11
+          ]
+        },
+        "idle": {
+          "samples": 6,
+          "complete_footprint_samples": 6,
+          "footprint_mib": 521.0,
+          "rss_mib": 1132.7,
+          "process_count": 12.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 162.2,
+              "footprint_mib": 64.7
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 84.7,
+              "footprint_mib": 80.4
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 67.9,
+              "footprint_mib": 28.0
+            },
+            "renderer": {
+              "count": 8.0,
+              "rss_mib": 767.4,
+              "footprint_mib": 327.6
+            },
+            "utility": {
+              "count": 1.0,
+              "rss_mib": 50.5,
+              "footprint_mib": 20.0
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 520.8,
+              "rss_mib": 1136.0,
+              "process_count": 12
+            },
+            {
+              "footprint_mib": 520.8,
+              "rss_mib": 1136.0,
+              "process_count": 12
+            },
+            {
+              "footprint_mib": 520.8,
+              "rss_mib": 1136.2,
+              "process_count": 12
+            },
+            {
+              "footprint_mib": 525.1,
+              "rss_mib": 1129.4,
+              "process_count": 12
+            },
+            {
+              "footprint_mib": 521.1,
+              "rss_mib": 1068.9,
+              "process_count": 12
+            },
+            {
+              "footprint_mib": 521.1,
+              "rss_mib": 1064.2,
+              "process_count": 12
+            }
+          ],
+          "cef_live_views": [
+            7,
+            7,
+            7,
+            7,
+            7,
+            7
+          ]
+        },
+        "accepted": [
+          {
+            "name": "benchmark-0",
+            "reason": null
+          },
+          {
+            "name": "benchmark-1",
+            "reason": null
+          },
+          {
+            "name": "benchmark-2",
+            "reason": null
+          },
+          {
+            "name": "benchmark-3",
+            "reason": null
+          },
+          {
+            "name": "benchmark-4",
+            "reason": null
+          },
+          {
+            "name": "benchmark-5",
+            "reason": null
+          },
+          {
+            "name": "benchmark-6",
+            "reason": null
+          },
+          {
+            "name": "benchmark-7",
+            "reason": null
+          },
+          {
+            "name": "benchmark-8",
+            "reason": null
+          },
+          {
+            "name": "benchmark-9",
+            "reason": null
+          }
+        ],
+        "excluded": [],
+        "guard": {
+          "ok": true,
+          "regular_policy_seconds": 0,
+          "test_process_frontmost_before": false,
+          "test_process_frontmost_after": false,
+          "audit_polls": 1944,
+          "audit_interval_ms": 50,
+          "activation_policies_seen": [
+            "not-registered",
+            "prohibited"
+          ],
+          "policy_timeline": [
+            {
+              "policy": "not-registered",
+              "t": 0.05499398708343506
+            },
+            {
+              "policy": "prohibited",
+              "t": 0.4062190055847168
+            },
+            {
+              "policy": "not-registered",
+              "t": 119.371945977211
+            }
+          ],
+          "violations": [],
+          "watchdog": "instance 95358 exited; never frontmost",
+          "helpers_outliving_browser": 0
+        },
+        "log_lines": {
+          "total": 121,
+          "error": 1,
+          "fatal": 0,
+          "panic": 0
+        },
+        "system_before": {
+          "load_1m": 34.3,
+          "load_5m": 113.1,
+          "memory_free_percent": 62,
+          "waited_seconds": 0,
+          "quiet": true
+        },
+        "system_after": {
+          "load_1m": 55.7,
+          "load_5m": 96.7,
+          "memory_free_percent": 58
+        }
+      },
+      "comparable": true
+    },
+    {
+      "run": 3,
+      "order": [
+        "cef",
+        "aside"
+      ],
+      "CEF build": {
+        "browser": "CEF build",
+        "active_page": {
+          "iframes": 0,
+          "nodes": 12,
+          "ready": "complete",
+          "resources": 1,
+          "textLength": 42,
+          "title": "Fixture /page/benchmark-9",
+          "url": "/page/benchmark-9",
+          "viewport": [
+            1024,
+            808,
+            2
+          ],
+          "visibility": "visible"
+        },
+        "live": {
+          "samples": 6,
+          "complete_footprint_samples": 6,
+          "footprint_mib": 811.6,
+          "rss_mib": 1737.3,
+          "process_count": 16.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 165.4,
+              "footprint_mib": 71.3
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 95.4,
+              "footprint_mib": 179.9
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 67.2,
+              "footprint_mib": 28.2
+            },
+            "renderer": {
+              "count": 12.0,
+              "rss_mib": 1357.3,
+              "footprint_mib": 507.1
+            },
+            "utility": {
+              "count": 1.0,
+              "rss_mib": 51.8,
+              "footprint_mib": 20.3
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 871.8,
+              "rss_mib": 1752.3,
+              "process_count": 16
+            },
+            {
+              "footprint_mib": 863.2,
+              "rss_mib": 1753.5,
+              "process_count": 16
+            },
+            {
+              "footprint_mib": 759.9,
+              "rss_mib": 1754.5,
+              "process_count": 16
+            },
+            {
+              "footprint_mib": 759.9,
+              "rss_mib": 1722.4,
+              "process_count": 16
+            },
+            {
+              "footprint_mib": 760.0,
+              "rss_mib": 1527.2,
+              "process_count": 16
+            },
+            {
+              "footprint_mib": 865.5,
+              "rss_mib": 1524.2,
+              "process_count": 16
+            }
+          ],
+          "cef_live_views": [
+            11,
+            11,
+            11,
+            11,
+            11,
+            11
+          ]
+        },
+        "idle": {
+          "samples": 6,
+          "complete_footprint_samples": 6,
+          "footprint_mib": 559.6,
+          "rss_mib": 989.1,
+          "process_count": 12.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 131.4,
+              "footprint_mib": 66.4
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 73.9,
+              "footprint_mib": 112.5
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 63.5,
+              "footprint_mib": 27.3
+            },
+            "renderer": {
+              "count": 8.0,
+              "rss_mib": 669.6,
+              "footprint_mib": 333.5
+            },
+            "utility": {
+              "count": 1.0,
+              "rss_mib": 49.2,
+              "footprint_mib": 20.0
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 559.6,
+              "rss_mib": 991.9,
+              "process_count": 12
+            },
+            {
+              "footprint_mib": 559.6,
+              "rss_mib": 986.3,
+              "process_count": 12
+            },
+            {
+              "footprint_mib": 669.4,
+              "rss_mib": 988.4,
+              "process_count": 12
+            },
+            {
+              "footprint_mib": 563.6,
+              "rss_mib": 995.5,
+              "process_count": 12
+            },
+            {
+              "footprint_mib": 559.5,
+              "rss_mib": 989.8,
+              "process_count": 12
+            },
+            {
+              "footprint_mib": 559.5,
+              "rss_mib": 959.6,
+              "process_count": 12
+            }
+          ],
+          "cef_live_views": [
+            7,
+            7,
+            7,
+            7,
+            7,
+            7
+          ]
+        },
+        "accepted": [
+          {
+            "name": "benchmark-0",
+            "reason": null
+          },
+          {
+            "name": "benchmark-1",
+            "reason": null
+          },
+          {
+            "name": "benchmark-2",
+            "reason": null
+          },
+          {
+            "name": "benchmark-3",
+            "reason": null
+          },
+          {
+            "name": "benchmark-4",
+            "reason": null
+          },
+          {
+            "name": "benchmark-5",
+            "reason": null
+          },
+          {
+            "name": "benchmark-6",
+            "reason": null
+          },
+          {
+            "name": "benchmark-7",
+            "reason": null
+          },
+          {
+            "name": "benchmark-8",
+            "reason": null
+          },
+          {
+            "name": "benchmark-9",
+            "reason": null
+          }
+        ],
+        "excluded": [],
+        "guard": {
+          "ok": true,
+          "regular_policy_seconds": 0.062,
+          "test_process_frontmost_before": false,
+          "test_process_frontmost_after": false,
+          "audit_polls": 1849,
+          "audit_interval_ms": 50,
+          "activation_policies_seen": [
+            "not-registered",
+            "prohibited",
+            "regular"
+          ],
+          "policy_timeline": [
+            {
+              "policy": "not-registered",
+              "t": 0.05761003494262695
+            },
+            {
+              "policy": "regular",
+              "t": 0.5304960012435913
+            },
+            {
+              "policy": "prohibited",
+              "t": 0.5920850038528442
+            },
+            {
+              "policy": "not-registered",
+              "t": 126.86079800128937
+            }
+          ],
+          "violations": [],
+          "watchdog": "instance 3784 exited; never frontmost",
+          "helpers_outliving_browser": 0
+        },
+        "log_lines": {
+          "total": 130,
+          "error": 3,
+          "fatal": 0,
+          "panic": 0
+        },
+        "system_before": {
+          "load_1m": 55.7,
+          "load_5m": 96.7,
+          "memory_free_percent": 58,
+          "waited_seconds": 0,
+          "quiet": true
+        },
+        "system_after": {
+          "load_1m": 59.5,
+          "load_5m": 79.9,
+          "memory_free_percent": 41
+        }
+      },
+      "Aside (headless)": {
+        "browser": "Aside (headless)",
+        "version": "Chrome/154.0.8037.100",
+        "active_page": {
+          "url": "/page/benchmark-9",
+          "title": "Fixture /page/benchmark-9",
+          "ready": "complete",
+          "visibility": "visible",
+          "viewport": [
+            1024,
+            808,
+            2
+          ],
+          "textLength": 42,
+          "nodes": 12,
+          "resources": 1,
+          "iframes": 0
+        },
+        "live": {
+          "samples": 6,
+          "complete_footprint_samples": 6,
+          "footprint_mib": 988.0,
+          "rss_mib": 1997.9,
+          "process_count": 19.0,
+          "by_type": {
+            "aside_daemon": {
+              "count": 0.0,
+              "rss_mib": 0.0,
+              "footprint_mib": 0.0
+            },
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 147.9,
+              "footprint_mib": 88.1
+            },
+            "extension_renderer": {
+              "count": 2.0,
+              "rss_mib": 238.4,
+              "footprint_mib": 139.4
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 68.2,
+              "footprint_mib": 119.7
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 59.0,
+              "footprint_mib": 32.0
+            },
+            "renderer": {
+              "count": 13.0,
+              "rss_mib": 1443.8,
+              "footprint_mib": 586.6
+            },
+            "utility": {
+              "count": 1.0,
+              "rss_mib": 36.6,
+              "footprint_mib": 21.6
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 1178.0,
+              "rss_mib": 2265.1,
+              "process_count": 20
+            },
+            {
+              "footprint_mib": 988.5,
+              "rss_mib": 1995.3,
+              "process_count": 19
+            },
+            {
+              "footprint_mib": 987.1,
+              "rss_mib": 2000.5,
+              "process_count": 19
+            },
+            {
+              "footprint_mib": 986.9,
+              "rss_mib": 1933.8,
+              "process_count": 19
+            },
+            {
+              "footprint_mib": 987.5,
+              "rss_mib": 1938.5,
+              "process_count": 19
+            },
+            {
+              "footprint_mib": 1166.1,
+              "rss_mib": 2230.4,
+              "process_count": 20
+            }
+          ]
+        },
+        "idle": {
+          "samples": 6,
+          "complete_footprint_samples": 6,
+          "footprint_mib": 1030.3,
+          "rss_mib": 1740.8,
+          "process_count": 20.0,
+          "by_type": {
+            "aside_daemon": {
+              "count": 0.5,
+              "rss_mib": 59.6,
+              "footprint_mib": 38.2
+            },
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 107.8,
+              "footprint_mib": 87.2
+            },
+            "extension_renderer": {
+              "count": 2.0,
+              "rss_mib": 198.2,
+              "footprint_mib": 139.5
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 55.7,
+              "footprint_mib": 119.7
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 54.5,
+              "footprint_mib": 32.1
+            },
+            "renderer": {
+              "count": 13.0,
+              "rss_mib": 1155.3,
+              "footprint_mib": 586.5
+            },
+            "utility": {
+              "count": 1.0,
+              "rss_mib": 33.1,
+              "footprint_mib": 21.5
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 1062.9,
+              "rss_mib": 1727.1,
+              "process_count": 20
+            },
+            {
+              "footprint_mib": 1145.9,
+              "rss_mib": 1819.4,
+              "process_count": 20
+            },
+            {
+              "footprint_mib": 986.5,
+              "rss_mib": 1588.4,
+              "process_count": 19
+            },
+            {
+              "footprint_mib": 986.6,
+              "rss_mib": 1600.9,
+              "process_count": 19
+            },
+            {
+              "footprint_mib": 1201.6,
+              "rss_mib": 1975.4,
+              "process_count": 21
+            },
+            {
+              "footprint_mib": 997.8,
+              "rss_mib": 1754.6,
+              "process_count": 20
+            }
+          ]
+        },
+        "accepted": [
+          {
+            "name": "benchmark-0",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-0",
+              "title": "Fixture /page/benchmark-0",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-1",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-1",
+              "title": "Fixture /page/benchmark-1",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-2",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-2",
+              "title": "Fixture /page/benchmark-2",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-3",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-3",
+              "title": "Fixture /page/benchmark-3",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-4",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-4",
+              "title": "Fixture /page/benchmark-4",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-5",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-5",
+              "title": "Fixture /page/benchmark-5",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-6",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-6",
+              "title": "Fixture /page/benchmark-6",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-7",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-7",
+              "title": "Fixture /page/benchmark-7",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-8",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-8",
+              "title": "Fixture /page/benchmark-8",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          },
+          {
+            "name": "benchmark-9",
+            "reason": null,
+            "page": {
+              "url": "/page/benchmark-9",
+              "title": "Fixture /page/benchmark-9",
+              "ready": "complete",
+              "visibility": "visible",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 42,
+              "nodes": 12,
+              "resources": 1,
+              "iframes": 0
+            }
+          }
+        ],
+        "excluded": [],
+        "pages_at_end": 10,
+        "target_replacements_followed": 0,
+        "guard": {
+          "ok": true,
+          "regular_policy_seconds": 0.219,
+          "test_process_frontmost_before": false,
+          "test_process_frontmost_after": false,
+          "audit_polls": 2651,
+          "audit_interval_ms": 50,
+          "activation_policies_seen": [
+            "not-registered",
+            "prohibited",
+            "regular"
+          ],
+          "policy_timeline": [
+            {
+              "policy": "regular",
+              "t": 0.08289897441864014
+            },
+            {
+              "policy": "prohibited",
+              "t": 0.3018059730529785
+            },
+            {
+              "policy": "not-registered",
+              "t": 187.75353693962097
+            }
+          ],
+          "violations": [],
+          "watchdog": "instance 12169 exited; never frontmost",
+          "helpers_outliving_browser": 7
+        },
+        "system_before": {
+          "load_1m": 59.5,
+          "load_5m": 79.9,
+          "memory_free_percent": 41,
+          "waited_seconds": 0,
+          "quiet": true
+        },
+        "system_after": {
+          "load_1m": 153.1,
+          "load_5m": 112.7,
+          "memory_free_percent": 44
+        }
+      },
+      "comparable": true
+    }
+  ],
+  "summary": {
+    "live": {
+      "Aside (headless)": {
+        "footprint_mib": {
+          "median": 1035.8,
+          "min": 988.0,
+          "max": 1075.5,
+          "runs": [
+            1035.8,
+            1075.5,
+            988.0
+          ]
+        },
+        "rss_mib": {
+          "median": 2777.4,
+          "min": 1997.9,
+          "max": 2855.4,
+          "runs": [
+            2777.4,
+            2855.4,
+            1997.9
+          ]
+        },
+        "process_count": {
+          "median": 20.0,
+          "min": 19.0,
+          "max": 21.0,
+          "runs": [
+            20.0,
+            21.0,
+            19.0
+          ]
+        },
+        "by_type_median_of_runs": {
+          "aside_daemon": {
+            "count": 0,
+            "rss_mib": 0,
+            "footprint_mib": 0
+          },
+          "browser": {
+            "count": 1.0,
+            "rss_mib": 246.0,
+            "footprint_mib": 90.4
+          },
+          "extension_renderer": {
+            "count": 2.0,
+            "rss_mib": 340.0,
+            "footprint_mib": 139.4
+          },
+          "gpu": {
+            "count": 1.0,
+            "rss_mib": 134.7,
+            "footprint_mib": 119.7
+          },
+          "network": {
+            "count": 1.0,
+            "rss_mib": 96.4,
+            "footprint_mib": 32.0
+          },
+          "other": {
+            "count": 0,
+            "rss_mib": 0,
+            "footprint_mib": 0
+          },
+          "renderer": {
+            "count": 13.0,
+            "rss_mib": 1781.4,
+            "footprint_mib": 586.6
+          },
+          "utility": {
+            "count": 1.0,
+            "rss_mib": 69.6,
+            "footprint_mib": 21.5
+          }
+        }
+      },
+      "CEF build": {
+        "footprint_mib": {
+          "median": 728.5,
+          "min": 711.8,
+          "max": 811.6,
+          "runs": [
+            728.5,
+            711.8,
+            811.6
+          ]
+        },
+        "rss_mib": {
+          "median": 1644.4,
+          "min": 1553.8,
+          "max": 1737.3,
+          "runs": [
+            1644.4,
+            1553.8,
+            1737.3
+          ]
+        },
+        "process_count": {
+          "median": 16.0,
+          "min": 16.0,
+          "max": 16.0,
+          "runs": [
+            16.0,
+            16.0,
+            16.0
+          ]
+        },
+        "by_type_median_of_runs": {
+          "browser": {
+            "count": 1.0,
+            "rss_mib": 165.4,
+            "footprint_mib": 71.3
+          },
+          "gpu": {
+            "count": 1.0,
+            "rss_mib": 95.4,
+            "footprint_mib": 103.8
+          },
+          "network": {
+            "count": 1.0,
+            "rss_mib": 67.4,
+            "footprint_mib": 28.3
+          },
+          "renderer": {
+            "count": 12.0,
+            "rss_mib": 1250.4,
+            "footprint_mib": 507.1
+          },
+          "utility": {
+            "count": 1.0,
+            "rss_mib": 51.8,
+            "footprint_mib": 20.5
+          }
+        }
+      },
+      "footprint_reduction_percent": {
+        "median": 29.7,
+        "min": 17.9,
+        "max": 33.8,
+        "runs": [
+          29.7,
+          33.8,
+          17.9
+        ]
+      },
+      "rss_reduction_percent": {
+        "median": 40.8,
+        "min": 13.0,
+        "max": 45.6,
+        "runs": [
+          40.8,
+          45.6,
+          13.0
+        ]
+      },
+      "comparable_runs": 3
+    },
+    "idle": {
+      "Aside (headless)": {
+        "footprint_mib": {
+          "median": 1030.3,
+          "min": 968.6,
+          "max": 1370.3,
+          "runs": [
+            968.6,
+            1370.3,
+            1030.3
+          ]
+        },
+        "rss_mib": {
+          "median": 2180.8,
+          "min": 1740.8,
+          "max": 2851.6,
+          "runs": [
+            2180.8,
+            2851.6,
+            1740.8
+          ]
+        },
+        "process_count": {
+          "median": 20.0,
+          "min": 19.0,
+          "max": 21.0,
+          "runs": [
+            19.0,
+            21.0,
+            20.0
+          ]
+        },
+        "by_type_median_of_runs": {
+          "aside_daemon": {
+            "count": 0,
+            "rss_mib": 0,
+            "footprint_mib": 0
+          },
+          "browser": {
+            "count": 1.0,
+            "rss_mib": 198.8,
+            "footprint_mib": 89.4
+          },
+          "extension_renderer": {
+            "count": 2.0,
+            "rss_mib": 249.8,
+            "footprint_mib": 131.8
+          },
+          "gpu": {
+            "count": 1.0,
+            "rss_mib": 98.8,
+            "footprint_mib": 119.7
+          },
+          "network": {
+            "count": 1.0,
+            "rss_mib": 90.7,
+            "footprint_mib": 32.1
+          },
+          "other": {
+            "count": 0,
+            "rss_mib": 0,
+            "footprint_mib": 0
+          },
+          "renderer": {
+            "count": 13.0,
+            "rss_mib": 1462.5,
+            "footprint_mib": 586.5
+          },
+          "utility": {
+            "count": 1.0,
+            "rss_mib": 65.0,
+            "footprint_mib": 21.5
+          }
+        }
+      },
+      "CEF build": {
+        "footprint_mib": {
+          "median": 544.0,
+          "min": 521.0,
+          "max": 559.6,
+          "runs": [
+            544.0,
+            521.0,
+            559.6
+          ]
+        },
+        "rss_mib": {
+          "median": 1065.2,
+          "min": 989.1,
+          "max": 1132.7,
+          "runs": [
+            1065.2,
+            1132.7,
+            989.1
+          ]
+        },
+        "process_count": {
+          "median": 12.0,
+          "min": 12.0,
+          "max": 12.0,
+          "runs": [
+            12.0,
+            12.0,
+            12.0
+          ]
+        },
+        "by_type_median_of_runs": {
+          "browser": {
+            "count": 1.0,
+            "rss_mib": 157.1,
+            "footprint_mib": 66.4
+          },
+          "gpu": {
+            "count": 1.0,
+            "rss_mib": 83.2,
+            "footprint_mib": 95.2
+          },
+          "network": {
+            "count": 1.0,
+            "rss_mib": 67.0,
+            "footprint_mib": 27.3
+          },
+          "renderer": {
+            "count": 8.0,
+            "rss_mib": 707.2,
+            "footprint_mib": 333.5
+          },
+          "utility": {
+            "count": 1.0,
+            "rss_mib": 50.5,
+            "footprint_mib": 20.0
+          }
+        }
+      },
+      "footprint_reduction_percent": {
+        "median": 45.7,
+        "min": 43.8,
+        "max": 62.0,
+        "runs": [
+          43.8,
+          62.0,
+          45.7
+        ]
+      },
+      "rss_reduction_percent": {
+        "median": 51.2,
+        "min": 43.2,
+        "max": 60.3,
+        "runs": [
+          51.2,
+          60.3,
+          43.2
+        ]
+      },
+      "comparable_runs": 3
+    }
+  }
+}
