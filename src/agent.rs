@@ -78,7 +78,7 @@ pub fn tool_specs() -> Value {
           "inputSchema": { "type": "object", "properties": { "url": { "type": "string" }, "max_chars": { "type": "integer" } }, "required": ["url"] } },
         { "name": "screenshot", "description": "Capture the agent's page as an image, for visual checks or as proof of a finished task.",
           "inputSchema": { "type": "object", "properties": {} } },
-        { "name": "evaluate", "description": "Run JavaScript in the agent's page and return the JSON result (expression, or statements ending in `return`). For extracting structured data in bulk.",
+        { "name": "evaluate", "description": "Run JavaScript in the agent's page and return the JSON result (expression, or statements ending in `return`). For extracting structured data in bulk. It shares the page's DOM but not its JavaScript globals.",
           "inputSchema": { "type": "object", "properties": { "code": { "type": "string" } }, "required": ["code"] } },
         { "name": "wait", "description": "Wait up to 15 seconds, only when a snapshot shows the page is still loading.",
           "inputSchema": { "type": "object", "properties": { "seconds": { "type": "number" } }, "required": ["seconds"] } }
@@ -102,6 +102,15 @@ for (const r of document.querySelectorAll('.result')) {
 }
 return out;
 "#;
+
+/// Page content can steer the agent, so it only opens websites: never local files,
+/// browser-internal pages, or script URLs.
+fn agent_url(raw: &str) -> Result<String> {
+    let url = crate::app::normalize_url(raw);
+    let web = reqwest::Url::parse(&url).is_ok_and(|u| matches!(u.scheme(), "http" | "https") && u.host_str().is_some());
+    anyhow::ensure!(web || url == "about:blank", "The assistant can only open http and https pages, not {}", url.chars().take(60).collect::<String>());
+    Ok(url)
+}
 
 pub struct Agent {
     pub browser: Handle,
@@ -139,9 +148,23 @@ impl Agent {
     }
 
     async fn eval_in(&self, tab: u64, js: &str) -> Result<Value> {
+        self.run_in(tab, js, false).await
+    }
+
+    /// Runs an action as a user gesture, so a link it clicks may open a tab.
+    async fn act_in(&self, tab: u64, js: &str) -> Result<Value> {
+        self.run_in(tab, js, true).await
+    }
+
+    async fn run_in(&self, tab: u64, js: &str, act: bool) -> Result<Value> {
         for attempt in 0..2 {
             let js = js.to_string();
-            match self.browser.op(|reply| Op::Eval { tab: Some(tab), js, reply }).await? {
+            let result = if act {
+                self.browser.op(|reply| Op::Act { tab: Some(tab), js, reply }).await?
+            } else {
+                self.browser.op(|reply| Op::Eval { tab: Some(tab), js, reply }).await?
+            };
+            match result {
                 Ok(v) => return Ok(v),
                 // CEF creates discarded views asynchronously. This response means
                 // the script has not run; wait for the new document before retrying.
@@ -164,7 +187,7 @@ impl Agent {
 
     /// Like `eval_in`, but a navigation triggered by the script counts as success.
     async fn eval_nav(&self, tab: u64, js: &str) -> Result<Option<Value>> {
-        match self.eval_in(tab, js).await {
+        match self.act_in(tab, js).await {
             Ok(v) => Ok(Some(v)),
             Err(e) if e.to_string().contains("__navigated__") || e.to_string().contains("navigated before") => Ok(None),
             Err(e) => Err(e),
@@ -259,7 +282,7 @@ impl Agent {
                 Ok(text(if lines.is_empty() { "No tabs open".into() } else { lines.join("\n") }))
             }
             "open_tab" => {
-                let url = req("url")?;
+                let url = agent_url(&req("url")?)?;
                 let id = self.browser.op(|reply| Op::NewTab { url: Some(url), background: true, scratch: false, reply }).await?;
                 self.set_current(Some(id));
                 self.wait_loaded(id).await;
@@ -302,8 +325,12 @@ impl Agent {
                         tab
                     }
                     ("back" | "forward" | "reload", None) => bail!("The agent has no page open yet."),
-                    (_, Some(tab)) => self.browser.op(|reply| Op::Navigate { tab: Some(tab), url, reply }).await?,
+                    (_, Some(tab)) => {
+                        let url = agent_url(&url)?;
+                        self.browser.op(|reply| Op::Navigate { tab: Some(tab), url, reply }).await?
+                    }
                     (_, None) => {
+                        let url = agent_url(&url)?;
                         let id = self.browser.op(|reply| Op::NewTab { url: Some(url), background: true, scratch: false, reply }).await?;
                         self.set_current(Some(id));
                         id
@@ -345,20 +372,22 @@ impl Agent {
                 for (i, step) in steps.iter().enumerate() {
                     let action = step["action"].as_str().unwrap_or("");
                     let r = match action {
-                        "navigate" => {
-                            let url = step["url"].as_str().unwrap_or("").to_string();
-                            let id = match tab {
-                                Some(t) => self.browser.op(|reply| Op::Navigate { tab: Some(t), url: url.clone(), reply }).await?,
-                                None => {
-                                    let id = self.browser.op(|reply| Op::NewTab { url: Some(url.clone()), background: true, scratch: false, reply }).await?;
-                                    self.set_current(Some(id));
-                                    id
-                                }
-                            };
-                            tab = Some(id);
-                            self.wait_loaded(id).await;
-                            Ok(format!("Loaded {url}."))
-                        }
+                        "navigate" => match agent_url(step["url"].as_str().unwrap_or("")) {
+                            Err(e) => Err(e),
+                            Ok(url) => {
+                                let id = match tab {
+                                    Some(t) => self.browser.op(|reply| Op::Navigate { tab: Some(t), url: url.clone(), reply }).await?,
+                                    None => {
+                                        let id = self.browser.op(|reply| Op::NewTab { url: Some(url.clone()), background: true, scratch: false, reply }).await?;
+                                        self.set_current(Some(id));
+                                        id
+                                    }
+                                };
+                                tab = Some(id);
+                                self.wait_loaded(id).await;
+                                Ok(format!("Loaded {url}."))
+                            }
+                        },
                         "wait" => {
                             let secs = step["seconds"].as_f64().unwrap_or(1.0).clamp(0.0, 15.0);
                             tokio::time::sleep(Duration::from_secs_f64(secs)).await;
@@ -446,7 +475,7 @@ impl Agent {
                 Ok(text(format!("Results for \"{query}\":\n\n{}", lines.join("\n"))))
             }
             "fetch" => {
-                let url = req("url")?;
+                let url = agent_url(&req("url")?)?;
                 let max = args.get("max_chars").and_then(Value::as_u64).unwrap_or(12_000);
                 let scratch = self.scratch(&url).await?;
                 let id = scratch.id;
@@ -475,7 +504,11 @@ impl Agent {
                 let body = if code.contains("return") { code } else { format!("return ({code})") };
                 let v = self.eval_in(tab, &body).await?;
                 let mut out = serde_json::to_string_pretty(&v)?;
-                out.truncate(20_000);
+                let mut end = out.len().min(20_000);
+                while !out.is_char_boundary(end) {
+                    end -= 1;
+                }
+                out.truncate(end);
                 Ok(text(out))
             }
             "wait" => {
@@ -519,7 +552,7 @@ impl Agent {
                 Ok(format!("Typed into {r}."))
             }
             "select_option" => {
-                let chosen = self.eval_in(tab, &format!("return __atrium.selectOption({}, {})", js(&req("ref")?), js(&req("value")?))).await?;
+                let chosen = self.act_in(tab, &format!("return __atrium.selectOption({}, {})", js(&req("ref")?), js(&req("value")?))).await?;
                 Ok(format!("Selected {chosen}."))
             }
             "press_key" => {
@@ -534,7 +567,7 @@ impl Agent {
                 let dir = s("direction").unwrap_or_else(|| "down".into());
                 let amount = args.get("amount").and_then(Value::as_f64).unwrap_or(800.0);
                 let r = s("ref").map(|r| js(&r)).unwrap_or_else(|| "null".into());
-                let pos = self.eval_in(tab, &format!("return __atrium.scrollBy({}, {amount}, {r})", js(&dir))).await?;
+                let pos = self.act_in(tab, &format!("return __atrium.scrollBy({}, {amount}, {r})", js(&dir))).await?;
                 Ok(format!("Scrolled {dir} (now at {}).", pos.as_str().unwrap_or("?")))
             }
             other => bail!("unknown action `{other}`"),
@@ -590,6 +623,20 @@ impl Drop for Scratch {
         let id = self.id; let browser = self.browser.clone();
         if let Ok(runtime) = tokio::runtime::Handle::try_current() {
             runtime.spawn(async move { let _ = browser.op(|reply| Op::Close { id, reply }).await; drop(permit); });
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn the_agent_only_opens_websites() {
+        assert_eq!(agent_url("example.com").unwrap(), "https://example.com");
+        assert!(agent_url("best pizza").unwrap().starts_with("https://www.google.com/search?q="));
+        assert!(agent_url("about:blank").is_ok());
+        for url in ["file:///etc/hosts", "chrome://settings", "devtools://devtools/bundled/inspector.html", "javascript://%0aalert(1)", "data:text/html,hi", "view-source:https://example.com"] {
+            assert!(agent_url(url).is_err(), "{url}");
         }
     }
 }

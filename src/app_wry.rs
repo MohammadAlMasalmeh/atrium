@@ -91,6 +91,8 @@ pub enum Op {
     Tabs(Reply<TabsState>),
     Shell { body: Value, reply: Reply<()> },
     Memory(Reply<Value>),
+    /// Chromium-only browser commands (find, zoom, printing, downloads).
+    Action { body: Value, reply: Reply<Result<Value, String>> },
     /// Background tabs open without taking focus (the agent's own pages).
     /// Scratch tabs are invisible to the user (background reads).
     NewTab { url: Option<String>, background: bool, scratch: bool, reply: Reply<u64> },
@@ -101,9 +103,14 @@ pub enum Op {
     /// `js` is a function body; its (awaited) return value comes back as JSON.
     /// Runs in `tab`, or the active tab.
     Eval { tab: Option<u64>, js: String, reply: Reply<Result<Value, String>> },
+    /// Like `Eval`, for an agent action that should count as user activation.
+    Act { tab: Option<u64>, js: String, reply: Reply<Result<Value, String>> },
     /// Setup checks sign-in without marking a tab as agent-controlled.
     InspectGoogle { tab: u64, reply: Reply<Result<Value, String>> },
     Screenshot { tab: Option<u64>, reply: Reply<Result<String, String>> },
+    Cdp { tab: Option<u64>, method: String, params: Value, reply: Reply<Result<Value, String>> },
+    Accessibility { assistive: Option<bool>, tree: bool, reply: Reply<Value> },
+    DevTools { tab: Option<u64>, method: String, params: Value, reply: Reply<Result<Value, String>> },
 }
 
 pub enum TabEv {
@@ -127,6 +134,11 @@ pub enum UserEvent {
 pub struct Handle(Arc<Mutex<EventLoopProxy<UserEvent>>>);
 
 impl Handle {
+    pub fn open_urls(&self, urls: Vec<String>) {
+        for url in urls {
+            let _ = self.send(UserEvent::Op(Op::NewTab { url: Some(url), background: false, scratch: false, reply: oneshot::channel().0 }));
+        }
+    }
     fn send(&self, ev: UserEvent) -> Result<()> {
         self.0
             .lock()
@@ -545,13 +557,16 @@ impl Browser {
     fn handle_op(&mut self, op: Op) {
         // Tell the shell which tab the agent is touching so it can show it.
         let touched = match &op {
-            Op::Tabs(_) | Op::InspectGoogle { .. } | Op::Shell { .. } | Op::Memory(_) => None,
-            Op::Eval { tab, .. } | Op::Navigate { tab, .. } | Op::History { tab, .. } | Op::Screenshot { tab, .. } => Some(tab.or(self.active)),
+            Op::Tabs(_) | Op::InspectGoogle { .. } | Op::Shell { .. } | Op::Memory(_) | Op::Cdp { .. } | Op::Accessibility { .. } | Op::Action { .. } | Op::DevTools { .. } => None,
+            Op::Eval { tab, .. } | Op::Act { tab, .. } | Op::Navigate { tab, .. } | Op::History { tab, .. } | Op::Screenshot { tab, .. } => Some(tab.or(self.active)),
             _ => Some(None),
         };
         match op {
             Op::Shell { body, reply } => { self.handle_shell(&body.to_string()); let _ = reply.send(()); }
             Op::Memory(reply) => { let _ = reply.send(json!({"engine":"WebKit","tabs":self.tabs.len()})); }
+            Op::Cdp { reply, .. } => { let _ = reply.send(Err("DevTools methods need the Chromium engine".into())); }
+            Op::Accessibility { reply, .. } => { let _ = reply.send(json!({"error":"Accessibility state needs the Chromium engine"})); }
+            Op::Action { body: _, reply } => { let _ = reply.send(Err("This command needs the Chromium engine".into())); }
             Op::Tabs(r) => {
                 let _ = r.send(self.state());
             }
@@ -574,7 +589,7 @@ impl Browser {
                 let r = self.history_in(tab.or(self.active), action);
                 let _ = reply.send(r);
             }
-            Op::Eval { tab, js, reply } => self.eval(tab, js, reply),
+            Op::Eval { tab, js, reply } | Op::Act { tab, js, reply } => self.eval(tab, js, reply),
             Op::InspectGoogle { tab, reply } => self.eval(Some(tab),
                 "return location.hostname === 'mail.google.com' && location.pathname.startsWith('/mail/u/') && !!document.querySelector('[gh=cm], [role=navigation], a[href*=\"#inbox\"]')".into(), reply),
             Op::Screenshot { tab, reply } => match tab.or(self.active).and_then(|id| self.view_of(id)) {
@@ -590,6 +605,7 @@ impl Browser {
                     let _ = reply.send(Err("Nothing to capture: that tab has no page".into()));
                 }
             },
+            Op::DevTools { reply, .. } => { let _ = reply.send(Err("DevTools methods require the Chromium engine".into())); }
         }
         if let Some(Some(id)) = touched {
             let scratch = self.tabs.iter().any(|t| t.id == id && t.scratch);
@@ -949,6 +965,11 @@ fn build_menu() -> Menu {
     .unwrap();
     menu.append_items(&[&app, &file, &edit, &view, &window]).unwrap();
     menu
+}
+
+/// Extension installs ask the Chrome Web Store for packages compatible with this version.
+pub fn chromium_version() -> String {
+    "156.0.8078.48".into()
 }
 
 /// Creates the event loop and hands a [`Handle`] to `start` (which should spin

@@ -1,39 +1,27 @@
 #!/usr/bin/env python3
 """Exercise a running isolated Chromium build against fixture_server.py."""
 import argparse
-import json
 import time
+import urllib.error
 import urllib.request
+import atrium_api
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--api', default='http://127.0.0.1:7782')
+atrium_api.add_arguments(parser, api='http://127.0.0.1:7782')
 parser.add_argument('--fixture', default='http://127.0.0.1:7789')
 parser.add_argument('--expect-extension', action='store_true')
 args = parser.parse_args()
+client = atrium_api.Client.from_args(args)
+request, tool = client.api, client.tool
 
 
-def request(path, data=None):
-    body = None if data is None else json.dumps(data).encode()
-    req = urllib.request.Request(args.api + path, data=body, headers={'Content-Type': 'application/json'})
-    with urllib.request.urlopen(req, timeout=35) as response:
-        result = json.load(response)
-    assert 'error' not in result, result
-    return result
-
-
-def tool(name, arguments):
-    result = request('/api/tool', {'name': name, 'args': arguments})
-    assert not result.get('isError'), result
-    return result['content']
-
-
-for attempt in range(50):
+for attempt in range(100):
     try:
         memory = request('/api/browser/memory')
-        break
+        if memory.get('shell_ready'): break
     except urllib.error.URLError:
-        if attempt == 49: raise
-        time.sleep(.2)
+        if attempt == 99: raise
+    time.sleep(.2)
 assert memory['engine'] == 'Chromium / CEF', memory
 assert memory.get('shell_ready'), memory
 print('engine:', memory['engine'], flush=True)
@@ -49,13 +37,21 @@ print('page evaluation, input isolation, extension:', text, flush=True)
 screenshot = tool('screenshot', {})
 assert any(c.get('type') == 'image' and c.get('data') for c in screenshot), screenshot
 print('screenshot: passed', flush=True)
-# An untrusted website cannot invoke privileged browser commands.
+# An untrusted website cannot invoke privileged browser commands, even with the token.
 req = urllib.request.Request(args.api + '/api/browser/command', data=b'{"cmd":"newTab"}',
-                             headers={'Content-Type': 'application/json', 'Origin': 'https://untrusted.example'})
+                             headers=client.headers({'Origin': 'https://untrusted.example'}))
 try:
     urllib.request.urlopen(req, timeout=5)
     raise AssertionError('Cross-origin browser command was accepted')
 except urllib.error.HTTPError as error:
     assert error.code == 403, error
 print('origin isolation: passed', flush=True)
+# A local client without the token is refused.
+req = urllib.request.Request(args.api + '/api/browser/tabs')
+try:
+    urllib.request.urlopen(req, timeout=5)
+    raise AssertionError('Request without the API token was accepted')
+except urllib.error.HTTPError as error:
+    assert error.code == 401, error
+print('token required: passed', flush=True)
 print('tabs:', len(request('/api/browser/tabs')['tabs']), flush=True)

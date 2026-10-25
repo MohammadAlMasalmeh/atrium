@@ -13,7 +13,21 @@ use tokio::{
 
 use crate::agent::tool_specs;
 
+/// The bridge sends the browser's API token, so it only talks to a browser on this machine.
+fn loopback_api(raw: &str) -> Result<String> {
+    let url = reqwest::Url::parse(raw)?;
+    anyhow::ensure!(
+        url.scheme() == "http"
+            && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"))
+            && url.username().is_empty()
+            && url.password().is_none(),
+        "--api must be the browser's loopback address, for example http://127.0.0.1:7777"
+    );
+    Ok(raw.trim_end_matches('/').to_string())
+}
+
 pub async fn serve(api: String) -> Result<()> {
+    let api = loopback_api(&api)?;
     let http = reqwest::Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(180))
@@ -63,4 +77,17 @@ pub async fn serve(api: String) -> Result<()> {
 
 fn error_result(msg: &str) -> Value {
     json!({ "content": [{ "type": "text", "text": msg }], "isError": true })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn the_token_is_only_sent_to_a_loopback_browser() {
+        assert_eq!(loopback_api("http://127.0.0.1:7777/").unwrap(), "http://127.0.0.1:7777");
+        assert!(loopback_api("http://localhost:7777").is_ok());
+        for api in ["https://127.0.0.1:7777", "http://example.com:7777", "http://127.0.0.1.evil.test", "http://u:p@127.0.0.1:7777", "file:///tmp"] {
+            assert!(loopback_api(api).is_err(), "{api}");
+        }
+    }
 }

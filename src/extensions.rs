@@ -30,6 +30,21 @@ fn broad_host(p: &str) -> bool {
     p == "<all_urls>" || p.starts_with("*://*/") || p.ends_with("://*/*") || p == "http://*/*" || p == "https://*/*"
 }
 
+/// Resolves a `__MSG_name__` manifest string from the default locale.
+fn localized(path: &Path, manifest: &Value, value: &str) -> String {
+    let Some(key) = value.strip_prefix("__MSG_").and_then(|v| v.strip_suffix("__")) else { return value.to_string() };
+    let locale = manifest["default_locale"].as_str().unwrap_or("en");
+    std::fs::read(path.join("_locales").join(locale).join("messages.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+        .and_then(|messages| {
+            let messages = messages.as_object()?;
+            let (_, entry) = messages.iter().find(|(k, _)| k.eq_ignore_ascii_case(key))?;
+            entry["message"].as_str().map(str::to_string)
+        })
+        .unwrap_or_else(|| value.to_string())
+}
+
 pub fn summarize(path: &Path, manifest: &Value) -> Value {
     let declared = strings(&manifest["permissions"]);
     let (mut hosts, permissions): (Vec<_>, Vec<_>) = declared.into_iter().partition(|p| is_host_pattern(p));
@@ -56,7 +71,7 @@ pub fn summarize(path: &Path, manifest: &Value) -> Value {
     high_risk.dedup();
     json!({
         "path": path.to_string_lossy(),
-        "name": manifest["name"].as_str().unwrap_or(""),
+        "name": localized(path, manifest, manifest["name"].as_str().unwrap_or("")),
         "version": manifest["version"].as_str().unwrap_or(""),
         "manifest_version": manifest["manifest_version"],
         "permissions": permissions,
@@ -70,7 +85,7 @@ pub fn summarize(path: &Path, manifest: &Value) -> Value {
     })
 }
 
-fn fingerprint(summary: &Value) -> Value {
+pub fn fingerprint(summary: &Value) -> Value {
     json!({
         "permissions": summary["permissions"],
         "host_permissions": summary["host_permissions"],
@@ -123,7 +138,7 @@ pub fn record_review(dir: &Path, paths: &[PathBuf]) {
     let _ = REVIEW.set(json!({
         "extensions": extensions,
         "enforced": false,
-        "note": "Unpacked extensions receive every permission their manifest declares. Atrium records them for review; it does not prompt for or restrict them.",
+        "note": format!("Directories passed with `run --extension` are developer loads and receive every permission their manifest declares; {} records them for review. Installed extensions load only after their permissions are approved.", crate::brand::PRODUCT_NAME),
     }));
 }
 

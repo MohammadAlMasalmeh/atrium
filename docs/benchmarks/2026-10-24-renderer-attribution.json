@@ -1,0 +1,478 @@
+[
+  {
+    "phase": "baseline (shell and startup tab)",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 6,
+    "renderers": 2,
+    "kinds": {
+      "browser": 1,
+      "renderer": 2,
+      "StorageService": 1,
+      "NetworkService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 183.7,
+    "footprint_mib": 246.79
+  },
+  {
+    "phase": "6 tabs on 6 sites",
+    "tabs": 7,
+    "live_views": 7,
+    "processes": 12,
+    "renderers": 8,
+    "kinds": {
+      "renderer": 8,
+      "NetworkService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 729.3,
+    "footprint_mib": 655.83
+  },
+  {
+    "phase": "closed them",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 6,
+    "renderers": 2,
+    "kinds": {
+      "browser": 1,
+      "StorageService": 1,
+      "renderer": 2,
+      "NetworkService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 159.2,
+    "footprint_mib": 245.6
+  },
+  {
+    "phase": "closed them, 20 s later",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 6,
+    "renderers": 2,
+    "kinds": {
+      "browser": 1,
+      "StorageService": 1,
+      "renderer": 2,
+      "NetworkService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 115.4,
+    "footprint_mib": 357.48
+  },
+  {
+    "phase": "10 tabs on 10 sites",
+    "tabs": 11,
+    "live_views": 11,
+    "processes": 16,
+    "renderers": 12,
+    "kinds": {
+      "renderer": 12,
+      "StorageService": 1,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1
+    },
+    "renderer_rss_mib": 1037.4,
+    "footprint_mib": 871.72
+  },
+  {
+    "phase": "after eviction to the six-view budget",
+    "tabs": 11,
+    "live_views": 7,
+    "processes": 12,
+    "renderers": 8,
+    "kinds": {
+      "NetworkService": 1,
+      "renderer": 8,
+      "browser": 1,
+      "StorageService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 510.1,
+    "footprint_mib": 545.58
+  },
+  {
+    "phase": "closed them",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 6,
+    "renderers": 2,
+    "kinds": {
+      "browser": 1,
+      "renderer": 2,
+      "StorageService": 1,
+      "NetworkService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 105.2,
+    "footprint_mib": 263.44
+  },
+  {
+    "phase": "4 tabs on one site",
+    "tabs": 5,
+    "live_views": 5,
+    "processes": 10,
+    "renderers": 6,
+    "kinds": {
+      "renderer": 6,
+      "NetworkService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 524.7,
+    "footprint_mib": 647.01
+  },
+  {
+    "phase": "1 tab with 3 cross-site iframes",
+    "tabs": 2,
+    "live_views": 2,
+    "processes": 10,
+    "renderers": 6,
+    "kinds": {
+      "renderer": 6,
+      "NetworkService": 1,
+      "gpu-process": 1,
+      "browser": 1,
+      "StorageService": 1
+    },
+    "renderer_rss_mib": 516.8,
+    "footprint_mib": 523.09
+  },
+  {
+    "phase": "3 tabs on 3 sites, each with the same 3 iframe sites",
+    "tabs": 4,
+    "live_views": 4,
+    "processes": 12,
+    "renderers": 8,
+    "kinds": {
+      "renderer": 8,
+      "NetworkService": 1,
+      "gpu-process": 1,
+      "browser": 1,
+      "StorageService": 1
+    },
+    "renderer_rss_mib": 699.5,
+    "footprint_mib": 848.89
+  },
+  {
+    "phase": "closed one of them",
+    "tabs": 3,
+    "live_views": 3,
+    "processes": 11,
+    "renderers": 7,
+    "kinds": {
+      "NetworkService": 1,
+      "gpu-process": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "renderer": 7
+    },
+    "renderer_rss_mib": 604.5,
+    "footprint_mib": 625.31
+  },
+  {
+    "phase": "closed the rest",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 6,
+    "renderers": 2,
+    "kinds": {
+      "browser": 1,
+      "StorageService": 1,
+      "renderer": 2,
+      "NetworkService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 119.5,
+    "footprint_mib": 270.79
+  },
+  {
+    "phase": "1 tab navigated across 6 sites",
+    "tabs": 2,
+    "live_views": 2,
+    "processes": 7,
+    "renderers": 3,
+    "kinds": {
+      "browser": 1,
+      "StorageService": 1,
+      "renderer": 3,
+      "NetworkService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 300.9,
+    "footprint_mib": 481.85
+  },
+  {
+    "phase": "same, 30 s later",
+    "tabs": 2,
+    "live_views": 2,
+    "processes": 7,
+    "renderers": 3,
+    "kinds": {
+      "browser": 1,
+      "StorageService": 1,
+      "renderer": 3,
+      "NetworkService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 210.3,
+    "footprint_mib": 335.21
+  },
+  {
+    "phase": "opened Google Search",
+    "tabs": 3,
+    "live_views": 3,
+    "processes": 11,
+    "renderers": 5,
+    "kinds": {
+      "NetworkService": 1,
+      "AudioService": 1,
+      "renderer": 5,
+      "VideoCaptureService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 432.2,
+    "footprint_mib": 683.4
+  },
+  {
+    "phase": "opened YouTube",
+    "tabs": 4,
+    "live_views": 4,
+    "processes": 12,
+    "renderers": 6,
+    "kinds": {
+      "NetworkService": 1,
+      "AudioService": 1,
+      "renderer": 6,
+      "VideoCaptureService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 744.0,
+    "footprint_mib": 1034.23
+  },
+  {
+    "phase": "opened Gmail (signed out)",
+    "tabs": 5,
+    "live_views": 5,
+    "processes": 14,
+    "renderers": 8,
+    "kinds": {
+      "renderer": 8,
+      "NetworkService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 749.6,
+    "footprint_mib": 1305.36
+  },
+  {
+    "phase": "opened GitHub",
+    "tabs": 6,
+    "live_views": 6,
+    "processes": 15,
+    "renderers": 9,
+    "kinds": {
+      "renderer": 9,
+      "NetworkService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 970.2,
+    "footprint_mib": 1397.27
+  },
+  {
+    "phase": "opened Wikipedia",
+    "tabs": 7,
+    "live_views": 7,
+    "processes": 16,
+    "renderers": 10,
+    "kinds": {
+      "renderer": 10,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "StorageService": 1,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1
+    },
+    "renderer_rss_mib": 1117.0,
+    "footprint_mib": 1462.8
+  },
+  {
+    "phase": "opened BBC News",
+    "tabs": 8,
+    "live_views": 7,
+    "processes": 18,
+    "renderers": 12,
+    "kinds": {
+      "renderer": 12,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "StorageService": 1,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1
+    },
+    "renderer_rss_mib": 1568.5,
+    "footprint_mib": 1499.96
+  },
+  {
+    "phase": "opened MDN",
+    "tabs": 9,
+    "live_views": 7,
+    "processes": 17,
+    "renderers": 11,
+    "kinds": {
+      "renderer": 11,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "StorageService": 1,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1
+    },
+    "renderer_rss_mib": 1398.8,
+    "footprint_mib": 1463.09
+  },
+  {
+    "phase": "opened Stack Overflow",
+    "tabs": 10,
+    "live_views": 7,
+    "processes": 19,
+    "renderers": 13,
+    "kinds": {
+      "renderer": 13,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "StorageService": 1,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1
+    },
+    "renderer_rss_mib": 1745.0,
+    "footprint_mib": 1768.07
+  },
+  {
+    "phase": "opened Reddit",
+    "tabs": 11,
+    "live_views": 7,
+    "processes": 28,
+    "renderers": 22,
+    "kinds": {
+      "renderer": 22,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "StorageService": 1,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1
+    },
+    "renderer_rss_mib": 2189.2,
+    "footprint_mib": 1944.8
+  },
+  {
+    "phase": "opened Hacker News",
+    "tabs": 12,
+    "live_views": 7,
+    "processes": 28,
+    "renderers": 22,
+    "kinds": {
+      "renderer": 22,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "StorageService": 1,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1
+    },
+    "renderer_rss_mib": 2044.2,
+    "footprint_mib": 1845.66
+  },
+  {
+    "phase": "closed the two oldest real-site tabs",
+    "tabs": 10,
+    "live_views": 7,
+    "processes": 28,
+    "renderers": 22,
+    "kinds": {
+      "renderer": 22,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "StorageService": 1,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1
+    },
+    "renderer_rss_mib": 1974.2,
+    "footprint_mib": 1951.76
+  },
+  {
+    "phase": "same, 30 s later",
+    "tabs": 10,
+    "live_views": 7,
+    "processes": 28,
+    "renderers": 22,
+    "kinds": {
+      "renderer": 22,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "StorageService": 1,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1
+    },
+    "renderer_rss_mib": 2028.7,
+    "footprint_mib": 1827.51
+  },
+  {
+    "phase": "closed all real-site tabs",
+    "tabs": 2,
+    "live_views": 1,
+    "processes": 9,
+    "renderers": 3,
+    "kinds": {
+      "renderer": 3,
+      "AudioService": 1,
+      "NetworkService": 1,
+      "VideoCaptureService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 251.0,
+    "footprint_mib": 429.62
+  },
+  {
+    "phase": "same, 45 s later",
+    "tabs": 2,
+    "live_views": 1,
+    "processes": 9,
+    "renderers": 3,
+    "kinds": {
+      "renderer": 3,
+      "AudioService": 1,
+      "NetworkService": 1,
+      "VideoCaptureService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "gpu-process": 1
+    },
+    "renderer_rss_mib": 223.8,
+    "footprint_mib": 427.78
+  }
+]

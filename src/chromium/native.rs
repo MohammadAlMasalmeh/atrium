@@ -81,7 +81,13 @@ impl HasWindowHandle for Parent {
     }
 }
 
+/// The shell document's URL, set once when the window is created.
+static SHELL_URL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
 pub(super) fn create(bridge: Bridge, shell_url: &str) {
+    if let Some(base) = shell_url.split("/session").next() {
+        let _ = SHELL_URL.set(format!("{base}/shell"));
+    }
     let mtm = MainThreadMarker::new().expect("CEF's UI thread is the main thread on macOS");
     if background() {
         test_appearance(mtm);
@@ -142,7 +148,10 @@ pub(super) fn create(bridge: Bridge, shell_url: &str) {
             position: wry::dpi::LogicalPosition::new(0.0, 0.0).into(),
             size: wry::dpi::LogicalSize::new(frame.size.width, frame.size.height).into(),
         })
-        .with_ipc_handler(move |req| shell_message(&ipc, req.into_body()))
+        .with_ipc_handler(move |req| {
+            let from = req.uri().to_string();
+            shell_message(&ipc, &from, req.into_body())
+        })
         .build_as_child(&parent)
         .expect("shell webview");
     shell.webview().setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
@@ -290,8 +299,20 @@ fn store_id() -> [u8; 16] {
 
 /// Window moves must start while AppKit is still handling the mouse-down,
 /// so they don't wait for the browser's task queue.
-fn shell_message(bridge: &Bridge, body: String) {
-    let Ok(m) = serde_json::from_str::<serde_json::Value>(&body) else { return };
+fn shell_message(bridge: &Bridge, from: &str, body: String) {
+    use std::sync::atomic::Ordering;
+    // Only the shell document may command the browser: no other page that WebKit loads,
+    // nothing oversized, and only JSON objects.
+    let trusted = SHELL_URL.get().is_some_and(|shell| super::shell_ipc::is_shell_url(from, shell));
+    let m = match serde_json::from_str::<serde_json::Value>(&body) {
+        Ok(m) if trusted && body.len() <= super::shell_ipc::MAX_MESSAGE_BYTES && m.is_object() => m,
+        _ => {
+            super::REJECTED_MESSAGES.fetch_add(1, Ordering::Relaxed);
+            eprintln!("ignored a shell command from an untrusted page or with an invalid body");
+            return;
+        }
+    };
+    super::SHELL_MESSAGES.fetch_add(1, Ordering::Relaxed);
     match m["cmd"].as_str() {
         Some("drag") => {
             with(|n| {
@@ -392,6 +413,31 @@ pub(super) fn focus_shell() {
     with(|n| {
         let _ = n.shell.focus();
     });
+}
+
+/// Whether the window's first responder is inside the given Chromium view.
+pub(super) fn has_focus(handle: *mut c_void) -> bool {
+    let Some(target) = view(handle) else { return false };
+    with(|n| responder_within(&n.window, target)).unwrap_or(false)
+}
+
+/// Whether the window's first responder is inside the shell's WKWebView.
+pub(super) fn shell_focused() -> bool {
+    with(|n| responder_within(&n.window, &n.shell.webview())).unwrap_or(false)
+}
+
+fn responder_within(window: &NSWindow, target: &NSView) -> bool {
+    let mut current = window.firstResponder().and_then(|r| {
+        let r: &AnyObject = &r;
+        r.downcast_ref::<NSView>().map(|v| v.retain())
+    });
+    while let Some(c) = current {
+        if std::ptr::eq(&*c, target) {
+            return true;
+        }
+        current = unsafe { c.superview() };
+    }
+    false
 }
 
 pub(super) fn shell_devtools() {

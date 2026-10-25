@@ -2,7 +2,7 @@
 name = "atrium"
 version = "0.1.0"
 edition = "2021"
-description = "Atrium: a Rust AI browser modeled on Aside, powered by the opencode server API"
+description = "An experimental macOS developer browser in Rust, embedding Chromium through CEF"
 
 [features]
 default = ["chromium"]
@@ -23,6 +23,10 @@ name = "atrium_bundle"
 path = "src/bin/atrium_bundle.rs"
 required-features = ["chromium"]
 
+[[bin]]
+name = "atrium_sign_update"
+path = "src/bin/atrium_sign_update.rs"
+
 [package.metadata.cef.bundle]
 helper_name = "atrium_helper"
 
@@ -34,7 +38,9 @@ base64 = "0.22"
 block2 = { version = "0.6", optional = true }
 clap = { version = "4", features = ["derive"] }
 dirs = "5"
+flate2 = "1"
 futures-util = "0.3"
+libc = "0.2"
 muda = "0.21"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSImage", "NSImageRep", "NSBitmapImageRep", "NSView", "NSResponder", "NSGraphics", "NSApplication", "NSEvent", "NSMenu", "NSMenuItem"] }
@@ -42,7 +48,10 @@ objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
 objc2-foundation = { version = "0.3", features = ["NSData", "NSString", "NSError", "NSGeometry", "NSDictionary"] }
 objc2-quartz-core = { optional = true, version = "0.3", features = ["CALayer"] }
 objc2-web-kit = { optional = true, version = "0.3", features = ["WKWebView", "WKSnapshotConfiguration", "objc2-app-kit", "block2"] }
+ring = "0.17"
+plist = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+semver = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tao = { version = "0.37", optional = true }

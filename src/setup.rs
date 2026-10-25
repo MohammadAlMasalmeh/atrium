@@ -16,6 +16,9 @@ pub fn routes(_app: Arc<App>) -> Router<Arc<App>> {
     Router::new()
         .route("/api/setup/profiles", get(profiles))
         .route("/api/setup/import", post(import))
+        .route("/api/setup/import/cookies", post(import_cookies))
+        .route("/api/setup/import/report", get(import_report))
+        .route("/api/setup/imported", get(imported))
         .route("/api/setup/opencode/connect", post(connect))
         .route("/api/setup/opencode/start", post(start))
         .route("/api/setup/opencode", get(opencode_status))
@@ -29,7 +32,7 @@ pub(crate) async fn shell_only(State(app): State<Arc<App>>, req: Request, next: 
     if host != app.ui_origin.strip_prefix("http://") || origin.is_some_and(|o| o != app.ui_origin) {
         return (
             StatusCode::FORBIDDEN,
-            "Setup is only available inside Atrium.",
+            format!("Setup is only available inside {}.", crate::brand::PRODUCT_NAME),
         )
             .into_response();
     }
@@ -46,8 +49,9 @@ pub(crate) async fn require_token(req: Request, next: Next) -> Response {
         .flat_map(|h| h.split(';'))
         .find_map(|c| c.trim().strip_prefix(TOKEN_COOKIE)?.strip_prefix('='));
     let provided = req.headers().get(crate::TOKEN_HEADER).map(|h| h.as_bytes()).or(cookie.map(str::as_bytes));
-    if !matches!(req.uri().path(), "/shell" | "/session" | "/onboarding.js" | "/onboarding.css") && !token_matches(crate::API_TOKEN.get().map(String::as_bytes), provided) {
-        return (StatusCode::UNAUTHORIZED, "A valid Atrium API token is required.").into_response();
+    let public = matches!(req.uri().path(), "/session" | "/onboarding.js" | "/onboarding.css") || crate::about::is_public(req.uri().path());
+    if !public && !token_matches(crate::API_TOKEN.get().map(String::as_bytes), provided) {
+        return (StatusCode::UNAUTHORIZED, format!("A valid {} API token is required.", crate::brand::PRODUCT_NAME)).into_response();
     }
     next.run(req).await
 }
@@ -89,8 +93,33 @@ async fn profiles() -> Json<Value> {
     )
 }
 
-async fn import(Json(req): Json<migration::ImportRequest>) -> Json<Value> {
-    response(migration::import(req).await)
+fn data_dir(app: &App) -> &std::path::Path {
+    app.workspace.parent().unwrap_or(&app.workspace)
+}
+
+async fn import(State(app): State<Arc<App>>, Json(req): Json<migration::ImportRequest>) -> Json<Value> {
+    response(migration::import(req, data_dir(&app), &app.agent.browser).await)
+}
+
+async fn import_cookies(State(app): State<Arc<App>>, Json(req): Json<migration::CookieRequest>) -> Json<Value> {
+    response(migration::import_cookies(req, data_dir(&app), &app.agent.browser).await)
+}
+
+async fn import_report(State(app): State<Arc<App>>) -> Json<Value> {
+    Json(migration::report(data_dir(&app)))
+}
+
+#[derive(Deserialize)]
+struct LibraryQuery {
+    #[serde(default = "default_history_limit")]
+    history: usize,
+}
+fn default_history_limit() -> usize {
+    400
+}
+
+async fn imported(State(app): State<Arc<App>>, axum::extract::Query(q): axum::extract::Query<LibraryQuery>) -> Json<Value> {
+    Json(migration::library(data_dir(&app), q.history.min(20_000)))
 }
 
 #[derive(Deserialize)]
@@ -174,7 +203,7 @@ async fn start(State(app): State<Arc<App>>) -> Json<Value> {
     response(
         async {
             let _lock = app.setup_lock.lock().await;
-            let local = OpenCode::new(format!("http://127.0.0.1:{}", app.opencode_port));
+            let local = OpenCode::local(app.opencode_port);
             if !local.healthy().await {
                 // Release an exited child before trying again; never kill a user's server.
                 {

@@ -4,15 +4,26 @@
 //! assistant is an `opencode serve` session that drives the
 //! tabs through the browser tools exposed by `atrium mcp`.
 
+mod about;
 mod agent;
 mod app;
+mod brand;
+mod crx;
+mod extension_store;
+mod crash_reports;
 mod extensions;
+mod favicons;
+mod instance;
 mod mcp;
 mod migration;
 mod memory;
 mod opencode;
+mod permissions;
+mod passwords;
 mod server;
 mod setup;
+mod update_sig;
+mod updater;
 
 use std::{collections::HashMap, io::Write, path::PathBuf, sync::Arc};
 
@@ -72,9 +83,16 @@ struct RunArgs {
     /// Load an unpacked Chromium extension from a local directory.
     #[arg(long = "extension")]
     extensions: Vec<PathBuf>,
+    /// URLs or files to open. If Atrium is already running for this data
+    /// directory, they open as new tabs there instead.
+    urls: Vec<String>,
 }
 
 static CHROME_EXTENSIONS: std::sync::OnceLock<Vec<PathBuf>> = std::sync::OnceLock::new();
+/// Approved, enabled installed extensions; Chromium loads these and `CHROME_EXTENSIONS` at start.
+static INSTALLED_EXTENSIONS: std::sync::OnceLock<Vec<PathBuf>> = std::sync::OnceLock::new();
+/// The environment and working directory before Chromium started, for a clean relaunch.
+static LAUNCH: std::sync::OnceLock<(Vec<(std::ffi::OsString, std::ffi::OsString)>, Option<PathBuf>)> = std::sync::OnceLock::new();
 static DATA_ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 /// Per-launch secret for the local API, also written to `<data dir>/api-token` (mode 0600).
 static API_TOKEN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
@@ -102,6 +120,23 @@ fn read_api_token() -> Option<String> {
     })
 }
 
+/// Scripting the shell is for debug builds and test instances started with
+/// `ATRIUM_TEST_SHELL_EVAL=1` and `ATRIUM_MOCK_KEYCHAIN=1`; it still requires the API token.
+fn shell_eval_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| cfg!(debug_assertions) || (std::env::var_os("ATRIUM_TEST_SHELL_EVAL").is_some_and(|v| v == "1") && migration::mock_keychain()))
+}
+
+/// Session URLs, the server address, and the Chromium profile stay private to this user.
+fn restrict_data_dir(dir: &std::path::Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    if dirs::home_dir().and_then(|h| h.canonicalize().ok()).as_deref() == Some(dir) {
+        return Ok(());
+    }
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    Ok(())
+}
+
 /// The MCP bridge reads the token from the data directory so it never appears in process arguments.
 fn mcp_command(dir: &std::path::Path, api: &str) -> Vec<String> {
     let exe = std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| "atrium".into());
@@ -109,6 +144,7 @@ fn mcp_command(dir: &std::path::Path, api: &str) -> Vec<String> {
 }
 
 fn main() -> Result<()> {
+    let _ = LAUNCH.set((std::env::vars_os().collect(), std::env::current_dir().ok()));
     let cli = Cli::parse();
     if let Some(root) = cli.data_dir { let _ = DATA_ROOT.set(root); }
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
@@ -124,13 +160,19 @@ fn main() -> Result<()> {
 }
 
 fn data_dir() -> Result<PathBuf> {
-    let dir = match DATA_ROOT.get() { Some(root) => root.clone(), None => dirs::home_dir().context("no home directory")?.join(".atrium-rs") };
+    let dir = match DATA_ROOT.get() { Some(root) => root.clone(), None => dirs::home_dir().context("no home directory")?.join(brand::DATA_DIR) };
     std::fs::create_dir_all(dir.join("workspace"))?;
     Ok(dir.canonicalize()?)
 }
 
 fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
     let dir = data_dir()?;
+    restrict_data_dir(&dir).context("could not restrict access to the data directory")?;
+    updater::on_launch(&dir);
+    let urls = instance::urls(&args.urls);
+    let Some(instance_lock) = instance::claim(&dir)? else {
+        return rt.block_on(instance::forward(&dir, &urls));
+    };
     let mut extensions = Vec::new();
     for extension in &args.extensions {
         let path = extension.canonicalize().context("Extension directory does not exist")?;
@@ -140,14 +182,17 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
         extensions.push(path);
     }
     extensions::record_review(&dir, &extensions);
+    migration::search::load(&dir.join("import"));
     let _ = CHROME_EXTENSIONS.set(extensions);
+    let _ = INSTALLED_EXTENSIONS.set(extension_store::init(&dir));
     let ui = format!("http://127.0.0.1:{}", args.port);
 
     // The UI server must be listening before the window loads the shell.
     let listener = std::net::TcpListener::bind(("127.0.0.1", args.port))
-        .with_context(|| format!("port {} is busy (is Atrium already running?)", args.port))?;
+        .with_context(|| format!("port {} is busy (is {} already running?)", args.port, brand::PRODUCT_NAME))?;
     listener.set_nonblocking(true)?;
     let _ = API_TOKEN.set(write_api_token(&dir).context("could not write the local API token")?);
+    instance::publish(&dir, args.port).context("could not record the running instance")?;
     let token_dir = dir.clone();
 
     // Opening the browser must not wait for an optional AI server to start.
@@ -157,11 +202,12 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
         .and_then(|saved| saved["url"].as_str().map(str::to_string));
     let endpoint = args.opencode_url.clone().or(saved_url).unwrap_or_else(|| local_url.clone());
     let auto_start = args.opencode_url.is_none() && endpoint == local_url;
-    let oc = OpenCode::new(endpoint);
+    let oc = if endpoint == local_url { OpenCode::local(args.opencode_port) } else { OpenCode::new(endpoint) };
     let oc_child = Arc::new(std::sync::Mutex::new(None));
     let app_child = oc_child.clone();
 
     app::run(ui.clone(), move |browser| {
+        browser.open_urls(urls);
         let (tx, _) = tokio::sync::broadcast::channel(1024);
         let app = Arc::new(App { agent: Agent::new(browser), oc: oc.clone(), events: tx,
             ui_origin: ui.clone(), oc_child: app_child, setup_lock: tokio::sync::Mutex::new(()),
@@ -174,6 +220,18 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
             server::spawn_event_pump(app.clone());
             let router = server::router(app.clone());
             tokio::spawn(async move { axum::serve(listener, router).await });
+            let started = app.clone();
+            tokio::spawn(async move {
+                for _ in 0..240 {
+                    if let Ok(memory) = started.agent.browser.op(app::Op::Memory).await {
+                        if memory["shell_ready"] == true || memory["engine"] == "WebKit" {
+                            return updater::confirm_started();
+                        }
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+            });
+            updater::spawn_auto(app.clone());
 
             // Serialize automatic startup with the onboarding's retry/connect actions.
             let _setup = app.setup_lock.lock().await;
@@ -201,7 +259,37 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
             let _ = c.start_kill();
         }
         let _ = std::fs::remove_file(token_dir.join(TOKEN_FILE));
+        instance::clear(&token_dir);
+        drop(instance_lock);
+        if updater::relaunch_requested() {
+            updater::relaunch();
+        }
     })
+}
+
+/// Starts this executable again with the same arguments and environment once this process
+/// has exited and released its port and Chromium profile. It is spawned before quitting
+/// because Chromium can end a stalled shutdown without returning to `on_exit`.
+fn relaunch() -> Result<()> {
+    let exe = std::env::current_exe()?;
+    let (env, cwd) = LAUNCH.get().context("launch environment was not recorded")?;
+    let mut command = std::process::Command::new("/bin/sh");
+    command
+        .arg("-c")
+        // A parent that has not reaped this process yet leaves a zombie, which has already exited.
+        .arg(r#"while ps -o stat= -p "$0" | grep -qv '^Z'; do sleep 0.1; done; exec "$@""#)
+        .arg(std::process::id().to_string())
+        .arg(exe)
+        .args(std::env::args_os().skip(1))
+        .env_clear()
+        .envs(env.iter().cloned())
+        .stdin(std::process::Stdio::null());
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    use std::os::unix::process::CommandExt;
+    command.process_group(0).spawn()?;
+    Ok(())
 }
 
 /// Terminal client: subscribe to the event relay, send the prompt, print the reply.
