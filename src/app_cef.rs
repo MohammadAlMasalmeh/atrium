@@ -2031,6 +2031,8 @@ wrap_dev_tools_message_observer! {struct DevObserver {bridge:Bridge,id:u64} impl
 wrap_keyboard_handler! {struct HostKeyboard {bridge:Bridge,id:u64} impl KeyboardHandler {
     fn on_pre_key_event(&self, _unused28:Option<&mut Browser>,event:Option<&KeyEvent>, _unused29:*mut u8, is_shortcut:Option<&mut i32>)->i32{
         let Some(e)=event else{return 0}; if e.type_!=KeyEventType::RAWKEYDOWN {return 0;}
+        // Control usually goes down just before Tab: the tab Ctrl+Tab would select starts loading.
+        if e.windows_key_code==17 && self.id!=SHELL {self.bridge.send(Event::Command(json!({"cmd":"shellCommand","name":"prewarm-cycle"})));}
         // F6 moves focus between the browser UI and the page; Escape leaves Glance.
         let plain = e.modifiers & ((1<<2)|(1<<3)|(1<<7)) == 0;
         if plain && e.windows_key_code==117 {

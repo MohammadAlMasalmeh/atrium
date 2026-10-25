@@ -330,6 +330,12 @@ body.side-open #side { display: flex; }
 .pw[hidden] { display: none; }
 .pw .btns { flex-wrap: wrap; }
 .pw button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Media offers matter more than a password prompt: the page is broken until answered. */
+.pw.media { padding: 14px; font-size: 13.5px; line-height: 1.35; background: var(--accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+.pw.media .head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 650; margin-bottom: 4px; }
+.pw.media .head svg { flex: none; width: 22px; height: 22px; fill: var(--accent-text); }
+.pw.media .btns { margin-top: 12px; flex-direction: column; gap: 6px; }
+.pw.media button { padding: 8px 12px; border-radius: 8px; font-size: 13.5px; font-weight: 600; }
 .empty { padding: 32px 8px; color: var(--fg-3); line-height: 1.55; }
 .empty b { display: block; color: var(--fg-2); font-weight: 600; margin-bottom: 4px; }
 .empty .mark { display: block; width: 22px; height: 22px; margin-bottom: 12px; fill: var(--fg-3); }
@@ -752,6 +758,7 @@ window.atriumShell = {
       case 'findPrev': if (S.find) find.run(true, false); else find.open(); break;
       case 'next-tab': cycleTab(1); break;
       case 'prev-tab': cycleTab(-1); break;
+      case 'prewarm-cycle': prewarm(cycleTarget(S.active, 1)); break;
       case 'focusStart': S.view = 'tab'; setNtpMode('search'); render(); setTimeout(() => ob.focus(), 30); break;
       case 'commandBar': openCmdk(''); break;
       case 'editUrl': if (!topEdit.open()) openCmdk(onWeb() ? activeTab().url : '', true); break;
@@ -813,10 +820,12 @@ function renderPw() {
   if (!o) return;
   let site = o.origin; try { site = new URL(o.origin).host; } catch {}
   site = `<b>${esc(site)}</b>`;
+  const play = '<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-2 6.5 6 3.5-6 3.5Z"/></svg>';
+  el.classList.toggle('media', o.kind === 'media' || o.kind === 'webkit');
   const html = o.kind === 'media'
-    ? `<div>Atrium's engine can't play this video's format.</div><div class="btns"><button class="yes" data-a="webkit">Play in WebKit</button><button data-a="close">Not now</button></div>`
+    ? `<div class="head">${play}Video won't play here</div><div>Atrium's engine can't play this video's format. WebKit can.</div><div class="btns"><button class="yes" data-a="webkit">Play in WebKit</button><button data-a="close">Not now</button></div>`
     : o.kind === 'webkit'
-    ? `<div>Playing in WebKit. You may need to sign in to ${site} again here.</div><div class="btns"><button data-a="chromium">Back to Atrium</button></div>`
+    ? `<div class="head">${play}Playing in WebKit</div><div>You may need to sign in to ${site} again here.</div><div class="btns"><button data-a="chromium">Back to Atrium</button></div>`
     : o.kind === 'save' || o.kind === 'update'
     ? `<div>${o.kind === 'save' ? 'Save' : 'Update'} password for ${esc(o.username || 'this account')} on ${site}?</div><div class="btns"><button class="yes" data-a="save">${o.kind === 'save' ? 'Save' : 'Update'}</button>${o.kind === 'save' ? '<button data-a="never">Never</button>' : ''}<button data-a="dismiss">Not now</button></div>`
     : o.kind === 'fill'
@@ -1215,14 +1224,20 @@ function selectTab(n) {
   const ids = sidebarOrder(); const id = n === 'last' ? ids[ids.length - 1] : ids[Number(n) - 1];
   if (id != null) { S.view = 'tab'; ipc({ cmd: 'activate', id }); }
 }
+// Control usually goes down just before Tab, so the tab Ctrl+Tab would select starts loading.
+document.addEventListener('keydown', (e) => { if (e.key === 'Control' && !e.repeat) prewarm(cycleTarget(S.active, 1)); }, true);
+// The tab `step` places from `from` in sidebar order.
+function cycleTarget(from, step) {
+  const ids = sidebarOrder(); if (!ids.length) return null;
+  const i = ids.indexOf(from);
+  return ids[i < 0 ? 0 : (i + step + ids.length) % ids.length];
+}
+function prewarm(id) { if (tabById(id)?.suspended) ipc({ cmd: 'prewarm', id }); }
 function cycleTab(step) {
-  const ids = sidebarOrder(); if (!ids.length) return;
-  const i = ids.indexOf(S.active);
-  const at = i < 0 ? 0 : (i + step + ids.length) % ids.length;
-  S.view = 'tab'; ipc({ cmd: 'activate', id: ids[at] });
+  const id = cycleTarget(S.active, step); if (id == null) return;
+  S.view = 'tab'; ipc({ cmd: 'activate', id });
   // Cycling usually continues, so the next tab in that direction starts loading if it sleeps.
-  const next = tabById(ids[(at + step + ids.length) % ids.length]);
-  if (next?.suspended) ipc({ cmd: 'prewarm', id: next.id });
+  prewarm(cycleTarget(id, step));
 }
 
 /* ── Downloads ─────────────────────────────────────── */
