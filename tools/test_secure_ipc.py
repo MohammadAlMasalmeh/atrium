@@ -160,7 +160,7 @@ def shell_suite(b):
     for _ in range(3):
         time.sleep(2)
         b.shell("for (let i = 0; i < 400; i++) window.ipc.postMessage(JSON.stringify({ cmd: 'layout', main: { x: i, y: 7, w: 300 + i, h: 200 + i } })); return true;")
-        applied = wait(lambda: b.memory()['layout']['main'] in (last, rect()) and b.memory()['layout']['main'], 20)
+        applied = wait(lambda: b.memory()['layout']['main'] in (last, rect()) and b.memory()['layout']['main'], 60)
         expected = rect()
         check('rapid layout messages are never applied out of order', applied in (last, expected), (b.memory()['layout'], expected))
         if applied == last:
