@@ -2254,9 +2254,6 @@ wrap_cookie_visitor! {struct CookieList {sink:Arc<CookieSink>} impl CookieVisito
     }
 }}
 impl Manager {
-    fn toast(&self, message: &str) {
-        self.shell(&format!("window.asideShell?.toast({})", json!(message)));
-    }
     /// What the shell shows for a tab. Offers carry origins and usernames, never passwords.
     fn pw_offer(&mut self, tab: u64, offer: Option<Json>) {
         match &offer {
