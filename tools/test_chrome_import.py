@@ -175,6 +175,23 @@ def write_search(profile):
     db.close()
 
 
+LOGINS = [(f'{FIX}/login', 'fixture-user', 'fixture-pass-one'), ('https://example.org/signin', 'org-user', 'fixture-pass-two')]
+
+
+def write_logins(profile):
+    """Login Data as Chrome on macOS stores it: v10 + AES-128-CBC with no host prefix."""
+    key = hashlib.pbkdf2_hmac('sha1', PASSWORD.encode(), b'saltysalt', 1003, 16)
+    def seal(text):
+        return b'v10' + subprocess.run(['openssl', 'enc', '-aes-128-cbc', '-K', key.hex(), '-iv', '20' * 16],
+                                       input=text.encode(), capture_output=True, check=True).stdout
+    db = sqlite3.connect(profile / 'Login Data')
+    db.execute('CREATE TABLE logins (origin_url TEXT, username_value TEXT, password_value BLOB, blacklisted_by_user INTEGER)')
+    db.executemany('INSERT INTO logins VALUES (?, ?, ?, 0)', [(url, user, seal(pw)) for url, user, pw in LOGINS])
+    db.execute("INSERT INTO logins VALUES ('https://never.example/', '', x'', 1)")
+    db.commit()
+    db.close()
+
+
 def make_chrome_root(root):
     profile = root / 'Default'
     profile.mkdir(parents=True)
@@ -182,6 +199,7 @@ def make_chrome_root(root):
     write_bookmarks(profile)
     write_history(profile)
     write_cookies(profile)
+    write_logins(profile)
     write_session(profile)
     write_search(profile)
 
@@ -302,11 +320,25 @@ def main(work):
         only = api('/api/setup/import/cookies', {'profile': 'Default', 'consent': True, 'domains': ['unrelated.invalid']})['cookies']
         check((only['imported'], only['domains']) == (1, ['unrelated.invalid']), 'domain filter', only)
 
+        unconsented = api('/api/setup/import', {'profile': 'Default', 'cookies': True})
+        check('cookies' not in unconsented['imported'] and any('security notice' in w for w in unconsented['warnings']),
+              'setup import skips cookies without consent', unconsented)
+        everything = api('/api/setup/import', {'profile': 'Default', 'passwords': True, 'cookies': True, 'cookie_consent': True})
+        p, c = everything['passwords'], everything['cookies']
+        check(set(everything['imported']) == {'passwords', 'cookies'} and not everything['warnings'], 'passwords and sign-ins in one import', everything)
+        check((p['added'], p['never'], p['imported']) == (len(LOGINS), 1, len(LOGINS)), 'Chrome passwords saved', p)
+        check(c['imported'] == len(IMPORTABLE) and c['verified'] == len(IMPORTABLE), 'cookies imported alongside', c)
+        check(not any(pw in json.dumps(everything) for _, _, pw in LOGINS), 'no passwords in the response', everything)
+        saved = {l['username']: l for l in api('/api/passwords')['logins']}
+        check(saved['fixture-user']['origin'] == FIX and api('/api/passwords/reveal', {'id': saved['org-user']['id']}) == {'password': LOGINS[1][2]},
+              'imported passwords are usable', saved)
+        check(api('/api/setup/import', {'profile': 'Default', 'passwords': True})['passwords']['unchanged'] == len(LOGINS), 'password re-import is idempotent')
+
         report = api('/api/setup/import/report')
-        check(len(report['runs']) == 5, 'every run recorded', [run['results'].keys() for run in report['runs']])
-        check(set(report['latest']) == {'bookmarks', 'history', 'tabs', 'search_engine', 'cookies'}, 'latest result per kind', report['latest'])
-        check(report['latest']['cookies']['imported'] == 1 and report['search_engine']['name'] == 'Fixture Search', 'report reflects newest runs', report['latest'])
-        print('PASS: bookmarks (folders), history (visit times), session tabs, search engine, cookies (attributes, '
+        check(len(report['runs']) == 8, 'every run recorded', [run['results'].keys() for run in report['runs']])
+        check(set(report['latest']) == {'bookmarks', 'history', 'tabs', 'search_engine', 'cookies', 'passwords'}, 'latest result per kind', report['latest'])
+        check(report['latest']['cookies']['imported'] == len(IMPORTABLE) and report['search_engine']['name'] == 'Fixture Search', 'report reflects newest runs', report['latest'])
+        print('PASS: bookmarks (folders), history (visit times), session tabs, search engine, passwords, cookies (attributes, '
               'expiry, HttpOnly, Cookie header), idempotent re-runs, and the import report', flush=True)
     finally:
         try:

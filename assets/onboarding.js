@@ -25,7 +25,7 @@ const STEPS = ['welcome', 'import', 'assistant'];
 const saved = store.get('onboarding', {});
 const st = {
   step: Math.min(saved.step || 0, STEPS.length - 1),
-  profiles: null, profile: null, opts: { bookmarks: true, history: true },
+  profiles: null, profile: null, opts: { bookmarks: true, history: true, passwords: true, cookies: true },
   imported: saved.imported || null, importing: false, importError: '',
   oc: null, ocTask: null, ocError: '', ocFailed: null, serverOpen: false,
 };
@@ -57,15 +57,20 @@ const screens = {
     const hero = `<div class="ob-hero">${CHROME}</div>`;
     if (st.profiles === null) {
       loadProfiles();
-      return { html: hero + title('Import from Chrome', 'Bring your bookmarks and history to Atrium.'), primary: ['Continue', next, { disabled: true }], skip: null };
+      return { html: hero + title('Import from Chrome', 'Bring your bookmarks, history, passwords and sign-ins to Atrium.'), primary: ['Continue', next, { disabled: true }], skip: null };
     }
     if (st.imported) {
       const r = st.imported;
-      const parts = [r.bookmarks && `${r.bookmarks.toLocaleString()} bookmarks`, r.history && `${r.history.toLocaleString()} history items`].filter(Boolean);
+      const n = (k, one, many) => r[k] ? `${r[k].toLocaleString()} ${r[k] === 1 ? one : many}` : '';
+      const parts = [n('bookmarks', 'bookmark', 'bookmarks'), n('history', 'history item', 'history items'),
+        n('passwords', 'password', 'passwords'), n('sites', 'signed-in site', 'signed-in sites')].filter(Boolean);
+      const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0];
       return {
-        html: hero + title('Import Complete', parts.length ? `Atrium imported ${parts.join(' and ')} from Chrome.` : 'That profile didn’t have any bookmarks or history to import.')
-          + (r.warnings?.length ? `<div class="ob-body"><div class="ob-note">${r.warnings.map(esc).join('<br>')}</div></div>` : ''),
+        html: hero + title('Import Complete', parts.length ? `Atrium imported ${list} from Chrome.` : 'That profile didn’t have anything to import.')
+          + `<div class="ob-body">${r.warnings?.length ? `<div class="ob-note">${r.warnings.map(esc).join('<br>')}</div>` : ''}
+          <div class="ob-note"><button class="ob-link" id="ob-reimport">Import Again…</button></div></div>`,
         primary: ['Continue', next], skip: null,
+        bind: () => { $('#ob-reimport').onclick = () => { st.imported = null; save(); draw(); }; },
       };
     }
     if (!st.profiles.length) return {
@@ -76,14 +81,18 @@ const screens = {
     const sw = (k, t, d) => `<div class="ob-row"><div class="txt"><b>${t}</b><span>${d}</span></div>
       <button class="ob-switch" role="switch" aria-checked="${st.opts[k]}" data-k="${k}" aria-label="${t}" ${st.importing ? 'disabled' : ''}></button></div>`;
     return {
-      html: hero + title('Import from Chrome', 'Bring your bookmarks and history to Atrium. Passwords and cookies stay in Chrome.') + `<div class="ob-body">
+      html: hero + title('Import from Chrome', 'Bring your bookmarks, history, passwords and sign-ins to Atrium. Chrome’s copies aren’t changed.') + `<div class="ob-body">
         <div class="ob-group">
           ${many ? `<div class="ob-row"><div class="txt"><b>Profile</b></div><label class="ob-popup"><span>${esc(st.profiles.find((p) => p.id === st.profile)?.name)}</span>${svg(G.updown)}<select id="ob-profile">${st.profiles.map((p) => `<option value="${esc(p.id)}" ${p.id === st.profile ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label></div>` : ''}
           ${sw('bookmarks', 'Bookmarks', 'Your bookmarks bar becomes Favorites')}
           ${sw('history', 'History', 'The last 400 sites you visited')}
+          ${sw('passwords', 'Passwords', 'Saved passwords move into Atrium’s password manager')}
+          ${sw('cookies', 'Sign-ins', 'Stay signed in to the sites you use in Chrome')}
         </div>
+        ${st.opts.passwords || st.opts.cookies ? '<div class="ob-note">macOS will ask whether Atrium may use “Chrome Safe Storage”. Enter your Mac password and choose Always Allow.</div>' : ''}
+        ${st.opts.cookies ? '<div class="ob-note">Sign-ins are live sessions: anything that can read your Atrium profile, including extensions, could use them to act as you. Some sites may still ask you to verify. Sign out of a site to revoke it.</div>' : ''}
         ${st.importError ? `<div class="ob-note err">${esc(st.importError)}</div>` : ''}</div>`,
-      primary: [st.importing ? 'Importing…' : 'Import', runImport, { busy: st.importing, disabled: !st.opts.bookmarks && !st.opts.history }],
+      primary: [st.importing ? 'Importing…' : 'Import', runImport, { busy: st.importing, disabled: !Object.values(st.opts).some(Boolean) }],
       skip: 'Not Now',
       bind: () => {
         root.querySelectorAll('.ob-switch').forEach((b) => b.onclick = () => { st.opts[b.dataset.k] = !st.opts[b.dataset.k]; draw(); });
@@ -178,7 +187,8 @@ async function loadProfiles() {
 }
 async function runImport() {
   st.importing = true; st.importError = ''; draw();
-  const r = await post('/api/setup/import', { profile: st.profile, ...st.opts, extensions: false });
+  // The sign-in notice is on screen whenever the switch is on, so turning it on is the consent.
+  const r = await post('/api/setup/import', { profile: st.profile, ...st.opts, cookie_consent: st.opts.cookies, extensions: false });
   st.importing = false;
   if (r.error) { st.importError = r.error; draw(); return; }
   if (r.history?.length) {
@@ -196,7 +206,8 @@ async function runImport() {
     }
     if (favs.length) { S.favs = favs; store.set('favs', favs); }
   }
-  st.imported = { bookmarks: r.bookmarks?.length || 0, history: r.history?.length || 0, warnings: r.warnings || [] };
+  st.imported = { bookmarks: r.bookmarks?.length || 0, history: r.history?.length || 0,
+    passwords: r.passwords?.imported || 0, sites: r.cookies?.domains?.length || 0, warnings: r.warnings || [] };
   save(); render(); draw();
 }
 async function refreshOc() {
@@ -272,6 +283,7 @@ document.addEventListener('keydown', (e) => {
 
 function open(step) {
   st.step = step != null ? Math.max(0, STEPS.indexOf(step)) : saved.done ? 0 : st.step;
+  if (step === 'import') st.imported = null;
   st.oc = null; st.autoStarted = false; st.ocError = ''; shown = null; S.overlay = 'onboarding'; render(); draw();
   setTimeout(() => $('#ob-go').focus({ preventScroll: true }), 50);
 }

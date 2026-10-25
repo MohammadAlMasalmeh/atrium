@@ -196,17 +196,11 @@ pub async fn safe_storage_password() -> Result<Vec<u8>> {
         let test = std::env::var("ATRIUM_TEST_CHROME_SAFE_STORAGE").ok().filter(|_| std::env::var("ATRIUM_MOCK_KEYCHAIN").as_deref() == Ok("1"));
         return test.map(String::into_bytes).context("Test instances cannot read the login keychain. Set ATRIUM_TEST_CHROME_SAFE_STORAGE with ATRIUM_MOCK_KEYCHAIN=1.");
     }
-    let output = tokio::process::Command::new("/usr/bin/security")
-        .args(["find-generic-password", "-w", "-s", "Chrome Safe Storage", "-a", "Chrome"])
-        .kill_on_drop(true)
-        .output()
-        .await?;
-    ensure!(output.status.success(), "Access to Chrome's cookie key was denied or it was not found.");
-    let mut password = output.stdout;
-    while password.last().is_some_and(|c| *c == b'\n') {
-        password.pop();
-    }
-    ensure!(!password.is_empty(), "Chrome's cookie key is empty.");
+    // The same keychain read as the password import, so one "Always Allow" covers both.
+    let password = tokio::task::spawn_blocking(crate::passwords::chrome::safe_storage_from_keychain)
+        .await?
+        .context("Access to Chrome's key was denied or it was not found.")?;
+    ensure!(!password.is_empty(), "Chrome's key is empty.");
     Ok(password)
 }
 

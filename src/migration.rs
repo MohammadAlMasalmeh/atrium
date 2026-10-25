@@ -1,5 +1,5 @@
-//! Opt-in Chrome migration. Chrome's files are only read, never changed. Cookies and
-//! Chrome's cookie key are read only by the separate, consented cookie import.
+//! Opt-in Chrome migration. Chrome's files are only read, never changed. Chrome's
+//! Safe Storage key is read only for a password import or a consented cookie import.
 pub mod cookies;
 pub mod search;
 pub mod session;
@@ -38,9 +38,15 @@ pub struct ImportRequest {
     pub tabs: bool,
     #[serde(default)]
     pub search_engine: bool,
-    /// Cookies need the separate `/api/setup/import/cookies` request with consent.
+    /// Saved passwords, into Atrium's password manager.
+    #[serde(default)]
+    pub passwords: bool,
+    /// Sign-in cookies. Needs `cookie_consent`, or the separate `/api/setup/import/cookies` request.
     #[serde(default)]
     pub cookies: bool,
+    /// True once the caller has shown `cookies::SECURITY_NOTICE` and the user agreed.
+    #[serde(default)]
+    pub cookie_consent: bool,
 }
 
 #[derive(Deserialize)]
@@ -504,11 +510,44 @@ pub async fn import(req: ImportRequest, data_dir: &Path, browser: &Handle) -> Re
             }
         }
     }
-    if req.cookies {
-        warn(&mut result, &anyhow::anyhow!("Cookies are imported separately, only after the user agrees to the security notice."));
+    let cookies = req.cookies && req.cookie_consent;
+    if req.cookies && !req.cookie_consent {
+        warn(&mut result, &anyhow::anyhow!("Cookies are imported only after the user agrees to the security notice."));
+    }
+    if req.passwords || cookies {
+        // One keychain read serves both, so macOS asks once.
+        match cookies::safe_storage_password().await {
+            Ok(secret) => {
+                if req.passwords {
+                    match import_passwords(&path, &secret).await {
+                        Ok(report) => { result["passwords"] = report.clone(); results.insert("passwords".into(), report); done(&mut result, "passwords"); }
+                        Err(e) => { warn(&mut result, &e); results.insert("passwords".into(), failed(&e)); }
+                    }
+                }
+                if cookies {
+                    let report = import_cookie_rows(&path, &secret, &[], browser).await.unwrap_or_else(|e| { warn(&mut result, &e); failed(&e) });
+                    if report["status"] == "imported" { done(&mut result, "cookies"); }
+                    result["cookies"] = report.clone();
+                    results.insert("cookies".into(), report);
+                }
+            }
+            Err(e) => {
+                warn(&mut result, &e);
+                if req.passwords { results.insert("passwords".into(), failed(&e)); }
+                if cookies { results.insert("cookies".into(), failed(&e)); }
+            }
+        }
     }
     result["report"] = record(&dir, &req.profile, &results)?;
     Ok(result)
+}
+
+async fn import_passwords(profile: &Path, secret: &[u8]) -> Result<Value> {
+    let data = crate::passwords::chrome::read(profile, secret).await?;
+    let mut report = tokio::task::spawn_blocking(move || crate::passwords::with(|s| crate::passwords::import(s, data))).await??;
+    report["status"] = json!("imported");
+    report["imported"] = json!(report["added"].as_u64().unwrap_or(0) + report["updated"].as_u64().unwrap_or(0) + report["unchanged"].as_u64().unwrap_or(0));
+    Ok(report)
 }
 
 pub async fn import_cookies(req: CookieRequest, data_dir: &Path, browser: &Handle) -> Result<Value> {
@@ -518,31 +557,36 @@ pub async fn import_cookies(req: CookieRequest, data_dir: &Path, browser: &Handl
     let _lock = IMPORT_LOCK.lock().await;
     let path = profile_at(&chrome_root()?, &req.profile)?;
     let dir = store_dir(data_dir)?;
-    let outcome = async {
-        let db = cookies::database(&path).context("No Chrome cookie database was found in this profile.")?;
-        let rows = sqlite(&db, cookies::QUERY).await.context("Chrome cookies could not be read. Close Chrome and try again.")?;
-        let key = cookies::derive_key(&cookies::safe_storage_password().await?)?;
-        let plan = cookies::plan(&rows, &key, &req.domains);
-        let (written, verified, mismatched) = write_cookies(browser, &plan.cookies).await?;
-        let mut errors = plan.errors.clone();
-        if !mismatched.is_empty() {
-            errors.push(format!("{} cookies did not read back as written: {}", mismatched.len(), mismatched.join(", ")));
-        }
-        anyhow::Ok(json!({
-            "status": "imported", "imported": written, "verified": verified, "found": rows.len(),
-            "rejected": plan.cookies.len() - written, "skipped": plan.skipped_expired + plan.skipped_partitioned + plan.skipped_filtered,
-            "skipped_expired": plan.skipped_expired, "skipped_partitioned": plan.skipped_partitioned, "skipped_filtered": plan.skipped_filtered,
-            "domains": plan.cookies.iter().map(|c| c.domain.trim_start_matches('.').to_string()).filter(|d| !d.is_empty())
-                .chain(plan.cookies.iter().filter(|c| c.domain.is_empty()).map(|c| c.url.split('/').nth(2).unwrap_or_default().to_string()))
-                .collect::<std::collections::BTreeSet<_>>(),
-            "errors": errors,
-        }))
-    }.await;
+    let outcome = match cookies::safe_storage_password().await {
+        Ok(secret) => import_cookie_rows(&path, &secret, &req.domains, browser).await,
+        Err(e) => Err(e),
+    };
     let report = outcome.unwrap_or_else(|e| failed(&e));
     let mut results = serde_json::Map::new();
     results.insert("cookies".into(), report.clone());
     let run = record(&dir, &req.profile, &results)?;
     Ok(json!({ "cookies": report, "security_notice": cookies::SECURITY_NOTICE, "report": run }))
+}
+
+async fn import_cookie_rows(path: &Path, secret: &[u8], domains: &[String], browser: &Handle) -> Result<Value> {
+    let db = cookies::database(path).context("No Chrome cookie database was found in this profile.")?;
+    let rows = sqlite(&db, cookies::QUERY).await.context("Chrome cookies could not be read. Close Chrome and try again.")?;
+    let key = cookies::derive_key(secret)?;
+    let plan = cookies::plan(&rows, &key, domains);
+    let (written, verified, mismatched) = write_cookies(browser, &plan.cookies).await?;
+    let mut errors = plan.errors.clone();
+    if !mismatched.is_empty() {
+        errors.push(format!("{} cookies did not read back as written: {}", mismatched.len(), mismatched.join(", ")));
+    }
+    Ok(json!({
+        "status": "imported", "imported": written, "verified": verified, "found": rows.len(),
+        "rejected": plan.cookies.len() - written, "skipped": plan.skipped_expired + plan.skipped_partitioned + plan.skipped_filtered,
+        "skipped_expired": plan.skipped_expired, "skipped_partitioned": plan.skipped_partitioned, "skipped_filtered": plan.skipped_filtered,
+        "domains": plan.cookies.iter().map(|c| c.domain.trim_start_matches('.').to_string()).filter(|d| !d.is_empty())
+            .chain(plan.cookies.iter().filter(|c| c.domain.is_empty()).map(|c| c.url.split('/').nth(2).unwrap_or_default().to_string()))
+            .collect::<std::collections::BTreeSet<_>>(),
+        "errors": errors,
+    }))
 }
 
 /// Returns (accepted by CEF, read back identically, names that differ).

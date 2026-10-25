@@ -1617,6 +1617,7 @@ function updateCmdk(event) {
     { t: 'Extensions', ic: 'puzzle', run: () => openExtensions() },
     { t: 'Summarize This Page', ic: 'file', run: () => askAgent(SKILLS[0].p, false) },
     { t: 'Set Up Atrium', ic: 'check', run: () => window.atriumOnboarding?.open() },
+    { t: 'Import from Chrome', ic: 'check', run: () => window.atriumOnboarding?.open('import') },
     { t: 'Find in Page', k: '⌘F', ic: 'search', run: () => find.open() },
     { t: 'Reopen Closed Tab', k: '⇧⌘T', ic: 'tabs', run: () => ipc({ cmd: 'menu', name: 'reopen-tab' }) },
     { t: 'Zoom In', k: '⌘=', ic: 'plus', run: () => ipc({ cmd: 'menu', name: 'zoom-in' }) },
