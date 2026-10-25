@@ -1,0 +1,416 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Atrium launch video</title>
+<!--
+  Launch video for X/Twitter, 1920x1080. Every frame is a pure function of time:
+  seek(t) poses the whole stage, so render.mjs can step through it frame by frame.
+  Open this file in a browser to preview it in real time; ?t=4.2 freezes a frame.
+-->
+<style>
+  :root { --paper: #F3F1EC; --ink: #141414; --dim: #8e8c87; --line: #2a2a2c; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--ink); }
+  body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; color: var(--paper);
+         -webkit-font-smoothing: antialiased; }
+  #stage { position: absolute; inset: 0; overflow: hidden;
+           background: radial-gradient(ellipse 70% 60% at 50% 45%, #1c1c1b 0%, var(--ink) 70%, #0d0d0d 100%); }
+  .layer { position: absolute; inset: 0; }
+  .grain { position: absolute; inset: 0; pointer-events: none; opacity: .07; mix-blend-mode: overlay;
+           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+  /* Lockup: the mark and the wordmark, laid out in their final positions. */
+  .lockup { position: absolute; left: 50%; top: 50%; display: flex; align-items: baseline; gap: .26em;
+            font-weight: 700; letter-spacing: -0.05em; line-height: 1; transform: translate(-50%, -50%);
+            white-space: nowrap; }
+  .lockup .mark { width: .66em; height: .68em; flex: none; position: relative; }
+  .lockup .mark svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: var(--paper); overflow: visible; }
+  .lockup .ghost { opacity: 0; }
+  .lockup .word { display: inline-block; position: relative; }
+  .lockup .word span { display: inline-block; will-change: transform; }
+  .glow { position: absolute; width: 520px; height: 520px; border-radius: 50%; pointer-events: none;
+          background: radial-gradient(circle, rgba(255, 214, 160, .55) 0%, rgba(255, 190, 120, .18) 35%, transparent 70%);
+          transform: translate(-50%, -50%); opacity: 0; mix-blend-mode: screen; }
+
+  /* Kinetic type */
+  .headline { position: absolute; left: 0; right: 0; text-align: center; font-weight: 700;
+              letter-spacing: -0.045em; line-height: 1.02; }
+  .mask { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 .04em .12em; margin: 0 -.04em -.12em; }
+  .mask > span { display: inline-block; }
+  .muted { color: var(--dim); }
+
+  /* Stats */
+  .label { font-size: 26px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+  .row { position: absolute; left: 260px; display: flex; align-items: center; gap: 36px; }
+  .row .name { width: 230px; font-size: 52px; font-weight: 700; letter-spacing: -0.04em; display: flex; align-items: center; gap: 18px; }
+  .row .name svg { width: 40px; height: 41px; fill: var(--paper); }
+  .bar { height: 76px; border-radius: 14px; }
+  .row .val { font-size: 52px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .row .val small { font-size: 30px; color: var(--dim); font-weight: 600; margin-left: 8px; letter-spacing: 0; }
+
+  /* Browser mock, after assets/shell.html */
+  .win { position: absolute; left: 240px; top: 200px; width: 1440px; height: 900px; border-radius: 22px;
+         background: #1e1e20; box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 60px 120px rgba(0,0,0,.6);
+         overflow: hidden; display: flex; transform-origin: 50% 0; }
+  .side { width: 300px; flex: none; padding: 18px 12px 12px 16px; display: flex; flex-direction: column; gap: 6px; }
+  .lights { display: flex; gap: 10px; padding: 4px 6px 18px; }
+  .lights i { width: 15px; height: 15px; border-radius: 50%; background: #3a3a3c; }
+  .lights i:nth-child(1) { background: #ff5f57; } .lights i:nth-child(2) { background: #febc2e; } .lights i:nth-child(3) { background: #28c840; }
+  .url { height: 46px; border-radius: 12px; background: rgba(255,255,255,.06); display: flex; align-items: center;
+         padding: 0 16px; font-size: 18px; color: #8e8e93; margin-bottom: 14px; }
+  .tab { height: 46px; border-radius: 11px; display: flex; align-items: center; gap: 14px; padding: 0 12px;
+         font-size: 18px; color: #d6d6d8; }
+  .tab.on { background: rgba(255,255,255,.1); color: #fff; }
+  .fv { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font-size: 13px; font-weight: 800; color: #fff; flex: none; }
+  .sec { font-size: 15px; font-weight: 600; color: #6e6e73; padding: 18px 12px 6px; }
+  .pane { flex: 1; margin: 12px 12px 12px 0; border-radius: 14px; background: #1c1c1e; box-shadow: 0 0 0 1px rgba(255,255,255,.05);
+          position: relative; }
+  .pane .lockup { top: 170px; font-size: 76px; }
+  .search { position: absolute; left: 120px; right: 120px; top: 260px; height: 76px; border-radius: 20px;
+            background: #26262a; box-shadow: 0 0 0 2px #0a84ff, 0 0 0 6px rgba(10,132,255,.22);
+            display: flex; align-items: center; padding: 0 14px 0 30px; font-size: 26px; color: #f2f2f4; gap: 16px; }
+  .search .q { flex: 1; white-space: nowrap; }
+  .search .ph { color: #6e6e73; }
+  .caret { display: inline-block; width: 2px; height: 30px; background: #0a84ff; vertical-align: -5px; margin-left: 1px; }
+  .toggle { position: relative; display: flex; background: rgba(255,255,255,.06); border-radius: 12px; padding: 4px; font-size: 19px; }
+  .toggle b { position: relative; z-index: 1; font-weight: 500; padding: 9px 18px; color: #aeaeb2; width: 96px; text-align: center; }
+  .toggle .pill { position: absolute; top: 4px; left: 4px; width: 96px; bottom: 4px; border-radius: 9px; background: #4a4a4e; }
+  .answer { position: absolute; left: 120px; right: 120px; top: 372px; border-radius: 20px; background: #232326;
+            box-shadow: 0 0 0 1px rgba(255,255,255,.06); padding: 30px 34px; }
+  .answer .who { display: flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 600; color: #aeaeb2; margin-bottom: 20px; }
+  .answer .who svg { width: 20px; height: 21px; fill: #aeaeb2; }
+  .answer p { font-size: 25px; line-height: 1.45; color: #ececee; }
+  .answer .item { display: flex; align-items: center; gap: 16px; margin-top: 16px; font-size: 23px; color: #d6d6d8; }
+  .answer .item b { font-weight: 650; color: #fff; }
+  .caption { position: absolute; left: 0; right: 0; top: 72px; text-align: center; font-size: 64px; font-weight: 700; letter-spacing: -0.04em; }
+
+  .foot { position: absolute; left: 0; right: 0; bottom: 56px; text-align: center; font-size: 20px; color: #5f5d59; letter-spacing: .01em; }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <!-- 1. Logo, then the swipe into the full lockup -->
+  <div class="layer" id="s1">
+    <div class="glow" id="s1-glow"></div>
+    <div class="lockup" id="s1-lock" style="font-size: 200px"></div>
+  </div>
+
+  <!-- 2. Headline -->
+  <div class="layer" id="s2">
+    <div class="headline" style="top: 330px; font-size: 168px">
+      <div><span class="mask"><span data-w>Chromium,</span></span></div>
+      <div class="muted"><span class="mask"><span data-w>minus</span></span> <span class="mask"><span data-w>the</span></span> <span id="s2-weight"></span></div>
+    </div>
+  </div>
+
+  <!-- 3. Memory -->
+  <div class="layer" id="s3">
+    <div class="label" style="position:absolute; left:260px; top:230px" id="s3-label">Memory with 10 tabs open</div>
+    <div class="row" style="top: 330px" id="s3-r1">
+      <div class="name"><svg viewBox="10 10 80 82"><path fill-rule="evenodd" d="M10 92 V50 A40 40 0 0 1 90 50 V92 Z M36 92 V64 A14 14 0 0 1 64 64 V92 Z"/></svg>atrium</div>
+      <div class="bar" id="s3-b1" style="background: var(--paper)"></div>
+      <div class="val"><span id="s3-v1">0</span><small>MiB</small></div>
+    </div>
+    <div class="row" style="top: 470px" id="s3-r2">
+      <div class="name muted">Chrome</div>
+      <div class="bar" id="s3-b2" style="background: #3a3a3c"></div>
+      <div class="val muted"><span id="s3-v2">0</span><small>MiB</small></div>
+    </div>
+    <div class="headline" style="top: 690px; font-size: 96px" id="s3-big">
+      <span class="mask"><span data-w>3.4×</span></span> <span class="mask"><span data-w>less</span></span> <span class="mask"><span data-w>memory.</span></span>
+    </div>
+    <div class="headline muted" style="top: 820px; font-size: 44px; letter-spacing: -0.02em" id="s3-sub">
+      <span class="mask"><span data-w>20 processes. Chrome uses 92.</span></span>
+    </div>
+    <div class="foot" id="s3-foot">Ten popular sites, one tab each, Apple Silicon. Physical footprint of the whole process tree, Chrome 155.</div>
+  </div>
+
+  <!-- 4. Product -->
+  <div class="layer" id="s4">
+    <div class="caption" id="s4-cap"><span class="mask"><span data-w>Ask</span></span> <span class="mask"><span data-w>any</span></span> <span class="mask"><span data-w>page.</span></span></div>
+    <div class="win" id="s4-win">
+      <div class="side">
+        <div class="lights"><i></i><i></i><i></i></div>
+        <div class="url">Search or enter address</div>
+        <div class="tab"><span class="fv" style="background:#e5322d">▶</span>YouTube</div>
+        <div class="tab"><span class="fv" style="background:#3b78e7">M</span>Inbox</div>
+        <div class="tab"><span class="fv" style="background:#6e6e73">W</span>Wikipedia</div>
+        <div class="tab"><span class="fv" style="background:#24292f; box-shadow: inset 0 0 0 1px #444">G</span>GitHub</div>
+        <div class="tab"><span class="fv" style="background:#ff6600">Y</span>Hacker News</div>
+        <div class="tab on"><span class="fv" style="background:#3a3a3c">+</span>New Tab</div>
+        <div class="sec">Chats</div>
+        <div class="tab" style="color:#8e8e93">Weekend plans</div>
+        <div class="tab" style="color:#8e8e93">Rust lifetimes</div>
+      </div>
+      <div class="pane">
+        <div class="lockup" id="s4-lock"><div class="mark"><svg viewBox="10 10 80 82"><path fill-rule="evenodd" d="M10 92 V50 A40 40 0 0 1 90 50 V92 Z M36 92 V64 A14 14 0 0 1 64 64 V92 Z"/></svg></div><div class="word">atrium</div></div>
+        <div class="search">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#8e8e93" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+          <div class="q"><span id="s4-q"></span><span class="caret" id="s4-caret"></span><span class="ph" id="s4-ph">Search or enter address</span></div>
+          <div class="toggle"><div class="pill" id="s4-pill"></div><b id="s4-t1" style="color:#fff">Search</b><b id="s4-t2">Ask</b></div>
+        </div>
+        <div class="answer" id="s4-ans">
+          <div class="who"><svg viewBox="10 10 80 82"><path fill-rule="evenodd" d="M10 92 V50 A40 40 0 0 1 90 50 V92 Z M36 92 V64 A14 14 0 0 1 64 64 V92 Z"/></svg>Assistant</div>
+          <p id="s4-p"></p>
+          <div class="item" data-i><span class="fv" style="background:#e5322d">▶</span><b>YouTube</b>A talk on building fast UIs, 24 min</div>
+          <div class="item" data-i><span class="fv" style="background:#3b78e7">M</span><b>Inbox</b>3 unread, one asks for a reply today</div>
+          <div class="item" data-i><span class="fv" style="background:#24292f">G</span><b>GitHub</b>Your pull request passed its checks</div>
+          <div class="item" data-i><span class="fv" style="background:#ff6600">Y</span><b>Hacker News</b>Top story: a new open source browser</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Features -->
+  <div class="layer" id="s5">
+    <div class="headline" id="s5-list" style="top: 455px; font-size: 140px; height: 180px; overflow: hidden"></div>
+  </div>
+
+  <!-- 6. Outro -->
+  <div class="layer" id="s6">
+    <div class="glow" id="s6-glow"></div>
+    <div class="lockup" id="s6-lock" style="font-size: 170px; top: 44%"></div>
+    <div class="headline muted" style="top: 640px; font-size: 46px; letter-spacing: -0.02em" id="s6-sub">
+      <span class="mask"><span data-w>A lighter browser for the Mac.</span></span>
+    </div>
+    <div class="headline" style="top: 730px; font-size: 32px; letter-spacing: 0; font-weight: 500; color: #b9b7b1" id="s6-url">
+      <span class="mask"><span data-w>Free and open source&nbsp;&nbsp;·&nbsp;&nbsp;github.com/MohammadAlMasalmeh/atrium</span></span>
+    </div>
+  </div>
+
+  <div class="grain"></div>
+</div>
+
+<script>
+const DURATION = 21.5;
+const MARK = `<svg viewBox="10 10 80 82"><path fill-rule="evenodd" d="M10 92 V50 A40 40 0 0 1 90 50 V92 Z M36 92 V64 A14 14 0 0 1 64 64 V92 Z"/></svg>`;
+const W = 1920, H = 1080;
+
+// --- timing helpers ---------------------------------------------------------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, p) => a + (b - a) * p;
+const prog = (t, a, d) => clamp((t - a) / d);
+const outCubic = p => 1 - Math.pow(1 - p, 3);
+const outQuint = p => 1 - Math.pow(1 - p, 5);
+const outExpo = p => p >= 1 ? 1 : 1 - Math.pow(2, -10 * p);
+const inCubic = p => p * p * p;
+const inOutCubic = p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+const inOutQuint = p => p < .5 ? 16 * Math.pow(p, 5) : 1 - Math.pow(-2 * p + 2, 5) / 2;
+const outBack = (p, s = 1.6) => 1 + (s + 1) * Math.pow(p - 1, 3) + s * Math.pow(p - 1, 2);
+const $ = s => document.querySelector(s);
+const show = (el, on) => { el.style.display = on ? "" : "none"; return on; };
+
+// Masked word rise: every [data-w] under root slides up out of its mask, staggered.
+function rise(root, t, start, { stagger = .07, dur = .75, out = null, outDur = .45 } = {}) {
+  root.querySelectorAll("[data-w]").forEach((el, i) => {
+    const p = outQuint(prog(t, start + i * stagger, dur));
+    let y = lerp(110, 0, p);
+    if (out !== null) y -= 110 * inCubic(prog(t, out + i * stagger * .5, outDur));
+    el.style.transform = `translateY(${y}%)`;
+  });
+}
+
+// --- the lockup animation (logo, then swipe into the wordmark) ---------------
+// Built twice: the opening and the outro. Final positions come from the real
+// flex layout, so the animation always lands exactly on the static lockup.
+function makeLockup(root) {
+  root.innerHTML = `<div class="mark">${MARK.replace("<svg", '<svg class="ghost"').repeat(4)}${MARK}</div>
+    <div class="word">${[..."atrium"].map(c => `<span>${c}</span>`).join("")}</div>`;
+  const mark = root.querySelector(".mark");
+  const svgs = [...mark.querySelectorAll("svg")];
+  const solid = svgs.pop();
+  const word = root.querySelector(".word");
+  const letters = [...word.querySelectorAll("span")];
+  const fs = parseFloat(root.style.fontSize);
+  const lr = root.getBoundingClientRect();
+  const mr = mark.getBoundingClientRect();
+  const wr = word.getBoundingClientRect();
+  const box = { mx: mr.left + mr.width / 2, my: mr.top + mr.height / 2, mw: mr.width, mh: mr.height, wl: wr.left };
+  const lettersBox = letters.map(l => { const r = l.getBoundingClientRect(); return { l: r.left, r: r.right }; });
+  const cx = lr.left + lr.width / 2, cy = lr.top + lr.height / 2;
+  const S0 = 1.9;                       // mark size while it stands alone
+
+  // Mark centre (screen px) and scale at local time u.
+  function markAt(u) {
+    const p = inOutQuint(prog(u, 1.45, .8));
+    return { x: lerp(cx, box.mx, p), y: lerp(cy, box.my, p), s: lerp(S0, 1, p) };
+  }
+  function pose(el, m, rise) {
+    el.style.transform = `translate(${m.x - box.mx}px, ${m.y - box.my}px) scale(${m.s})`;
+    el.style.clipPath = `inset(${(1 - rise) * 100}% -5% -5% -5%)`;
+  }
+
+  return {
+    seek(u, { glowEl, intro = 1 } = {}) {
+      // Rise: the arch grows up out of the floor, like a doorway being built.
+      const r = outExpo(prog(u, .15, .9 / intro));
+      const m = markAt(u);
+      const settle = 1 + .06 * (1 - outCubic(prog(u, .15, 1.1 / intro)));
+      pose(solid, { ...m, s: m.s * settle }, r);
+      solid.style.opacity = clamp(r * 3);
+
+      // Motion trail behind the mark while it travels.
+      svgs.forEach((g, i) => {
+        const back = markAt(u - (i + 1) * .018);
+        const moving = Math.abs(back.x - m.x) > 1;
+        pose(g, back, r);
+        g.style.opacity = moving ? .12 - i * .025 : 0;
+      });
+
+      // Letters slide out from behind the mark's trailing edge.
+      const edge = m.x + box.mw * m.s / 2;
+      letters.forEach((l, i) => {
+        const p = outQuint(prog(u, 1.68 + (letters.length - 1 - i) * .04, .8));
+        const hidden = edge - lettersBox[i].r;          // offset that tucks it behind the mark
+        l.style.transform = `translateX(${(1 - p) * hidden}px)`;
+      });
+      word.style.clipPath = `inset(-40% -10% -40% ${Math.max(0, edge + fs * .04 - box.wl)}px)`;
+
+      // Light through the doorway, before the swipe.
+      if (glowEl) {
+        glowEl.style.left = m.x + "px";
+        glowEl.style.top = (m.y + box.mh * m.s * .2) + "px";
+        const g = outCubic(prog(u, .7, .7)) * (1 - inCubic(prog(u, 1.4, .5)));
+        glowEl.style.opacity = g * .9;
+        glowEl.style.transform = `translate(-50%, -50%) scale(${lerp(.6, 1, g)})`;
+      }
+    },
+  };
+}
+
+// --- build -----------------------------------------------------------------
+const intro = makeLockup($("#s1-lock"));
+const outro = makeLockup($("#s6-lock"));
+$("#s2-weight").innerHTML = [..."weight."].map(c => `<span class="mask" style="padding:0 0 .12em; margin:0 0 -.12em"><span data-w>${c}</span></span>`).join("");
+const features = ["Ad blocking, built in.", "Idle tabs go to sleep.", "Imports from Chrome.", "Open source."];
+$("#s5-list").innerHTML = features.map(f => `<div style="position:absolute; left:0; right:0; top:0">${f}</div>`).join("");
+const QUERY = "summarize my open tabs";
+const ANSWER = "You have five tabs open. The highlights:";
+
+// --- scenes ----------------------------------------------------------------
+function seek(t) {
+  // 1. Opening lockup, 0 – 3.7
+  if (show($("#s1"), t < 3.7)) {
+    intro.seek(t, { glowEl: $("#s1-glow") });
+    const out = inCubic(prog(t, 3.15, .55));
+    $("#s1-lock").style.transform = `translate(-50%, -50%) translateY(${-60 * out}px) scale(${1 - .06 * out})`;
+    $("#s1-lock").style.opacity = 1 - out;
+    $("#s1-lock").style.filter = `blur(${out * 10}px)`;
+  }
+
+  // 2. Headline, 3.6 – 6.6
+  if (show($("#s2"), t >= 3.6 && t < 6.6)) {
+    const s2 = $("#s2");
+    const words = [...s2.querySelectorAll(".headline > div:first-child [data-w], .headline > div:last-child > .mask > [data-w]")];
+    words.forEach((el, i) => {
+      const p = outQuint(prog(t, 3.7 + i * .12, .8));
+      const o = inCubic(prog(t, 5.95 + i * .04, .45));
+      el.style.transform = `translateY(${lerp(110, 0, p) - 110 * o}%)`;
+    });
+    // "weight." drops off the line, letter by letter.
+    $("#s2-weight").querySelectorAll(".mask").forEach((m, i) => {
+      const inner = m.firstElementChild;
+      inner.style.transform = `translateY(${lerp(110, 0, outQuint(prog(t, 4.1 + i * .035, .8)))}%)`;
+      const f = prog(t, 5.25 + i * .07, .9);
+      m.style.overflow = f > 0 ? "visible" : "hidden";
+      m.style.display = "inline-block";
+      const rot = [-14, 9, -22, 16, -8, 24, 30][i];
+      m.style.transform = `translateY(${1400 * f * f}px) rotate(${rot * f * 2}deg)`;
+      m.style.color = f > 0 ? "var(--paper)" : "";
+    });
+  }
+
+  // 3. Memory, 6.6 – 10.8
+  if (show($("#s3"), t >= 6.6 && t < 10.8)) {
+    const out = inCubic(prog(t, 10.25, .5));
+    $("#s3").style.opacity = 1 - out;
+    $("#s3").style.transform = `translateY(${-40 * out}px)`;
+    const enter = outQuint(prog(t, 6.65, .7));
+    $("#s3-label").style.opacity = enter;
+    $("#s3-label").style.transform = `translateY(${20 * (1 - enter)}px)`;
+    [["#s3-r1", 0], ["#s3-r2", .1]].forEach(([s, d]) => {
+      const p = outQuint(prog(t, 6.75 + d, .7));
+      $(s).style.opacity = p;
+      $(s).style.transform = `translateX(${-60 * (1 - p)}px)`;
+    });
+    const MAX = 980, A = 1351, C = 4656;
+    const pa = outExpo(prog(t, 7.0, 1.0)), pc = inOutCubic(prog(t, 7.0, 1.9));
+    $("#s3-b1").style.width = (14 + MAX * A / C * pa) + "px";
+    $("#s3-b2").style.width = (14 + MAX * pc) + "px";
+    $("#s3-v1").textContent = Math.round(A * pa).toLocaleString("en-US");
+    $("#s3-v2").textContent = Math.round(C * pc).toLocaleString("en-US");
+    rise($("#s3-big"), t, 8.6, { stagger: .08 });
+    rise($("#s3-sub"), t, 9.05);
+    $("#s3-foot").style.opacity = .9 * outCubic(prog(t, 9.2, .6));
+  }
+
+  // 4. Product, 10.7 – 15.2
+  if (show($("#s4"), t >= 10.7 && t < 15.2)) {
+    const win = $("#s4-win");
+    const p = outQuint(prog(t, 10.75, 1.1));
+    const out = inCubic(prog(t, 14.7, .5));
+    const push = inOutCubic(prog(t, 12.9, 1.5));
+    win.style.transformOrigin = "870px 430px";
+    win.style.transform = `perspective(2400px) translateY(${lerp(420, 0, p) + 120 * out - 150 * push}px) rotateX(${lerp(24, 0, p)}deg) scale(${lerp(.9, 1, p) + .32 * push - .05 * out})`;
+    win.style.opacity = clamp(p * 2) * (1 - out);
+    rise($("#s4-cap"), t, 10.9, { out: 12.8 });
+
+    // Switch to Ask, then type.
+    const sw = inOutCubic(prog(t, 11.75, .3));
+    $("#s4-pill").style.transform = `translateX(${sw * 96}px)`;
+    $("#s4-t1").style.color = sw < .5 ? "#fff" : "#aeaeb2";
+    $("#s4-t2").style.color = sw >= .5 ? "#fff" : "#aeaeb2";
+    const n = Math.floor(clamp((t - 12.05) / 1.0) * QUERY.length);
+    $("#s4-q").textContent = QUERY.slice(0, n);
+    $("#s4-ph").style.display = n ? "none" : "";
+    $("#s4-ph").textContent = sw >= .5 ? "Ask about your tabs" : "Search or enter address";
+    const typing = t > 12.05 && t < 13.1;
+    $("#s4-caret").style.opacity = typing || Math.floor(t * 2.2) % 2 === 0 ? 1 : 0;
+
+    // Answer streams in.
+    const a = outQuint(prog(t, 13.25, .6));
+    $("#s4-ans").style.opacity = a;
+    $("#s4-ans").style.transform = `translateY(${30 * (1 - a)}px)`;
+    $("#s4-p").textContent = ANSWER.slice(0, Math.floor(clamp((t - 13.35) / .45) * ANSWER.length));
+    document.querySelectorAll("#s4-ans [data-i]").forEach((el, i) => {
+      const q = outQuint(prog(t, 13.75 + i * .14, .5));
+      el.style.opacity = q;
+      el.style.transform = `translateY(${16 * (1 - q)}px)`;
+    });
+  }
+
+  // 5. Features, 15.1 – 17.9
+  if (show($("#s5"), t >= 15.1 && t < 17.9)) {
+    const step = .62, s0 = 15.15;
+    [...$("#s5-list").children].forEach((el, i) => {
+      const a = outQuint(prog(t, s0 + i * step + (i ? .14 : 0), .55));
+      const last = i === features.length - 1;
+      const b = last ? inCubic(prog(t, 17.45, .4)) : inCubic(prog(t, s0 + (i + 1) * step, .26));
+      el.style.transform = `translateY(${lerp(140, 0, a) - 140 * b}%)`;
+      el.style.opacity = last ? 1 - b : 1;
+    });
+  }
+
+  // 6. Outro, from 17.8
+  if (show($("#s6"), t >= 17.8)) {
+    const u = (t - 17.8) * 1.15;
+    outro.seek(u, { glowEl: $("#s6-glow"), intro: 1.4 });
+    rise($("#s6-sub"), t, 19.75);
+    rise($("#s6-url"), t, 19.95);
+  }
+}
+
+window.seek = seek;
+window.DURATION = DURATION;
+document.fonts.ready.then(() => {
+  const fixed = new URLSearchParams(location.search).get("t");
+  if (fixed !== null) return seek(parseFloat(fixed));
+  if (navigator.webdriver) return seek(0);
+  const t0 = performance.now();
+  (function frame() { seek(((performance.now() - t0) / 1000) % (DURATION + 1)); requestAnimationFrame(frame); })();
+});
+</script>
+</body>
+</html>
