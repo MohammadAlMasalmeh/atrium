@@ -1,0 +1,2168 @@
+{
+  "date": "2026-10-24",
+  "workload": "real",
+  "metric": "Sum over each browser process tree of macOS physical footprint (proc_pid_rusage v2 ri_phys_footprint) and RSS, MiB. RSS double-counts shared pages. Medians per phase within a run; median/min/max across runs.",
+  "method": {
+    "baseline": "Installed Aside started with --headless, a throwaway profile, --force-device-scale-factor=2 and 1024x808 targets; no windows, Prohibited activation policy. It sends the windowed Chrome 154 user agent and navigator.webdriver is false; its User-Agent Client Hints brands are empty because of the override.",
+    "candidate": "This repository's release bundle with ASIDE_BACKGROUND_WINDOW=1 and ASIDE_MOCK_KEYCHAIN=1, fresh data directory.",
+    "sequencing": "Browsers run one at a time; real sites run the baseline first and the CEF run closes sites the baseline rejected; fixtures alternate the order per repetition.",
+    "phases": {
+      "live": "8 samples every 3s from 75s after pages were ready",
+      "idle": "8 samples every 3s from 215s after pages were ready"
+    },
+    "cef_policy": "max 6 live content views (plus the shell), 30 s minimum idle, agent inspection protects 180 s",
+    "visibility_guard": "window_audit.swift (50 ms polling, SIGKILL on frontmost, visible window, or Regular policy after 1 s) and watchdog.sh",
+    "caveats": [
+      "Headless Aside renders its own browser UI (sidebar and toolbar) without any window; the CEF build includes its shell renderer. Neither is the same as a visible, interactive window.",
+      "Background CEF pages report visibilityState hidden; headless targets report visible.",
+      "The system was shared with other agents and builds; load is recorded per browser run."
+    ]
+  },
+  "runs": [
+    {
+      "run": 1,
+      "order": [
+        "aside",
+        "cef"
+      ],
+      "Aside (headless)": {
+        "browser": "Aside (headless)",
+        "version": "Chrome/154.0.8037.100",
+        "live": {
+          "samples": 8,
+          "complete_footprint_samples": 8,
+          "footprint_mib": 5813.1,
+          "rss_mib": 11226.9,
+          "process_count": 95.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 549.0,
+              "footprint_mib": 713.9
+            },
+            "extension_renderer": {
+              "count": 2.0,
+              "rss_mib": 249.9,
+              "footprint_mib": 135.4
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 97.7,
+              "footprint_mib": 137.5
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 183.2,
+              "footprint_mib": 164.2
+            },
+            "other": {
+              "count": 2.0,
+              "rss_mib": 130.8,
+              "footprint_mib": 231.8
+            },
+            "renderer": {
+              "count": 85.0,
+              "rss_mib": 9817.0,
+              "footprint_mib": 4354.1
+            },
+            "utility": {
+              "count": 3.0,
+              "rss_mib": 195.1,
+              "footprint_mib": 76.0
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 5934.9,
+              "rss_mib": 11349.0,
+              "process_count": 95
+            },
+            {
+              "footprint_mib": 5848.7,
+              "rss_mib": 11539.5,
+              "process_count": 95
+            },
+            {
+              "footprint_mib": 5846.8,
+              "rss_mib": 11522.8,
+              "process_count": 95
+            },
+            {
+              "footprint_mib": 5813.6,
+              "rss_mib": 11292.6,
+              "process_count": 95
+            },
+            {
+              "footprint_mib": 5812.2,
+              "rss_mib": 11161.1,
+              "process_count": 95
+            },
+            {
+              "footprint_mib": 5812.6,
+              "rss_mib": 10505.5,
+              "process_count": 95
+            },
+            {
+              "footprint_mib": 5812.6,
+              "rss_mib": 10403.6,
+              "process_count": 95
+            },
+            {
+              "footprint_mib": 5736.8,
+              "rss_mib": 10383.2,
+              "process_count": 95
+            }
+          ]
+        },
+        "idle": {
+          "samples": 8,
+          "complete_footprint_samples": 8,
+          "footprint_mib": 3611.5,
+          "rss_mib": 6317.7,
+          "process_count": 53.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 583.0,
+              "footprint_mib": 619.6
+            },
+            "extension_renderer": {
+              "count": 2.0,
+              "rss_mib": 246.9,
+              "footprint_mib": 124.4
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 104.0,
+              "footprint_mib": 133.0
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 183.1,
+              "footprint_mib": 138.0
+            },
+            "other": {
+              "count": 2.0,
+              "rss_mib": 115.0,
+              "footprint_mib": 139.7
+            },
+            "renderer": {
+              "count": 43.0,
+              "rss_mib": 4891.9,
+              "footprint_mib": 2383.6
+            },
+            "utility": {
+              "count": 3.0,
+              "rss_mib": 195.5,
+              "footprint_mib": 73.3
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 3611.7,
+              "rss_mib": 6559.3,
+              "process_count": 53
+            },
+            {
+              "footprint_mib": 3611.5,
+              "rss_mib": 6565.0,
+              "process_count": 53
+            },
+            {
+              "footprint_mib": 3611.5,
+              "rss_mib": 6567.4,
+              "process_count": 53
+            },
+            {
+              "footprint_mib": 3611.5,
+              "rss_mib": 6507.7,
+              "process_count": 53
+            },
+            {
+              "footprint_mib": 3611.0,
+              "rss_mib": 6127.7,
+              "process_count": 53
+            },
+            {
+              "footprint_mib": 3611.1,
+              "rss_mib": 5970.5,
+              "process_count": 53
+            },
+            {
+              "footprint_mib": 3611.7,
+              "rss_mib": 6034.8,
+              "process_count": 53
+            },
+            {
+              "footprint_mib": 3611.8,
+              "rss_mib": 5928.7,
+              "process_count": 53
+            }
+          ]
+        },
+        "accepted": [
+          {
+            "name": "Google Search",
+            "reason": null,
+            "page": {
+              "url": "https://www.google.com/search",
+              "title": "chromium browser - Google Search",
+              "ready": "interactive",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 6758,
+              "nodes": 3692,
+              "resources": 36,
+              "iframes": 0,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "Gmail (signed out)",
+            "reason": null,
+            "page": {
+              "url": "https://workspace.google.com/intl/en-US/gmail/",
+              "title": "Gmail: Secure, AI-Powered Email for Everyone | Google Workspace",
+              "ready": "interactive",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 3507,
+              "nodes": 874,
+              "resources": 38,
+              "iframes": 0,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "GitHub",
+            "reason": null,
+            "page": {
+              "url": "https://github.com/tauri-apps/cef-rs",
+              "title": "GitHub - tauri-apps/cef-rs \u00b7 GitHub",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 6601,
+              "nodes": 2178,
+              "resources": 165,
+              "iframes": 0,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "Wikipedia",
+            "reason": null,
+            "page": {
+              "url": "https://en.wikipedia.org/wiki/Web_browser",
+              "title": "Web browser - Wikipedia",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 20216,
+              "nodes": 4050,
+              "resources": 24,
+              "iframes": 0,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "BBC News",
+            "reason": null,
+            "page": {
+              "url": "https://www.bbc.com/news",
+              "title": "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
+              "ready": "interactive",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 8527,
+              "nodes": 1407,
+              "resources": 76,
+              "iframes": 3,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "MDN",
+            "reason": null,
+            "page": {
+              "url": "https://developer.mozilla.org/en-US/docs/Web/API",
+              "title": "Web APIs | MDN",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 22252,
+              "nodes": 4397,
+              "resources": 68,
+              "iframes": 0,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "Stack Overflow",
+            "reason": null,
+            "page": {
+              "url": "https://stackoverflow.com/questions/tagged/rust",
+              "title": "Newest 'rust' Questions - Stack Overflow",
+              "ready": "interactive",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 8720,
+              "nodes": 1535,
+              "resources": 56,
+              "iframes": 1,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "Hacker News",
+            "reason": null,
+            "page": {
+              "url": "https://news.ycombinator.com/",
+              "title": "Hacker News",
+              "ready": "complete",
+              "visibility": "visible",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 4181,
+              "nodes": 821,
+              "resources": 6,
+              "iframes": 0,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          }
+        ],
+        "excluded": [
+          {
+            "name": "YouTube",
+            "reason": "Page not ready or insufficient rendered content",
+            "page": {
+              "url": "https://www.youtube.com/",
+              "title": "YouTube",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 29,
+              "nodes": 1855,
+              "resources": 38,
+              "iframes": 1,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "Reddit",
+            "reason": "Challenge or error page",
+            "page": {
+              "url": "https://www.reddit.com/r/rust/",
+              "title": "Reddit - Prove your humanity",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 240,
+              "nodes": 44,
+              "resources": 4,
+              "iframes": 3,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          }
+        ],
+        "pages_at_end": 8,
+        "target_replacements_followed": 0,
+        "guard": {
+          "ok": true,
+          "regular_policy_seconds": 0,
+          "test_process_frontmost_before": false,
+          "test_process_frontmost_after": false,
+          "audit_polls": 5421,
+          "audit_interval_ms": 50,
+          "activation_policies_seen": [
+            "not-registered",
+            "prohibited"
+          ],
+          "policy_timeline": [
+            {
+              "policy": "not-registered",
+              "t": 0.057235002517700195
+            },
+            {
+              "policy": "prohibited",
+              "t": 0.17422592639923096
+            },
+            {
+              "policy": "not-registered",
+              "t": 344.2746059894562
+            }
+          ],
+          "violations": [],
+          "watchdog": "instance 17121 exited; never frontmost",
+          "helpers_outliving_browser": 1
+        },
+        "system_before": {
+          "load_1m": 8.3,
+          "load_5m": 24.7,
+          "memory_free_percent": 65,
+          "waited_seconds": 0,
+          "quiet": true
+        },
+        "system_after": {
+          "load_1m": 24.9,
+          "load_5m": 35.0,
+          "memory_free_percent": 56
+        },
+        "system_slept_seconds": 0.0
+      },
+      "CEF build": {
+        "browser": "CEF build",
+        "live": {
+          "samples": 8,
+          "complete_footprint_samples": 8,
+          "footprint_mib": 5349.1,
+          "rss_mib": 9013.3,
+          "process_count": 92.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 704.8,
+              "footprint_mib": 725.7
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 92.0,
+              "footprint_mib": 273.8
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 144.8,
+              "footprint_mib": 121.1
+            },
+            "renderer": {
+              "count": 86.0,
+              "rss_mib": 7975.6,
+              "footprint_mib": 4139.2
+            },
+            "utility": {
+              "count": 3.0,
+              "rss_mib": 164.8,
+              "footprint_mib": 80.5
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 4891.6,
+              "rss_mib": 9010.9,
+              "process_count": 94
+            },
+            {
+              "footprint_mib": 5067.6,
+              "rss_mib": 8926.5,
+              "process_count": 95
+            },
+            {
+              "footprint_mib": 5212.2,
+              "rss_mib": 9015.8,
+              "process_count": 94
+            },
+            {
+              "footprint_mib": 5406.0,
+              "rss_mib": 9064.4,
+              "process_count": 93
+            },
+            {
+              "footprint_mib": 5391.7,
+              "rss_mib": 9117.3,
+              "process_count": 91
+            },
+            {
+              "footprint_mib": 5390.1,
+              "rss_mib": 9121.7,
+              "process_count": 90
+            },
+            {
+              "footprint_mib": 5356.2,
+              "rss_mib": 8978.8,
+              "process_count": 89
+            },
+            {
+              "footprint_mib": 5342.1,
+              "rss_mib": 8945.9,
+              "process_count": 89
+            }
+          ],
+          "cef_live_views": [
+            9,
+            9,
+            9,
+            9,
+            9,
+            9,
+            9,
+            9
+          ]
+        },
+        "idle": {
+          "samples": 8,
+          "complete_footprint_samples": 8,
+          "footprint_mib": 2889.3,
+          "rss_mib": 4140.0,
+          "process_count": 43.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 381.9,
+              "footprint_mib": 540.0
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 89.0,
+              "footprint_mib": 218.8
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 111.3,
+              "footprint_mib": 94.5
+            },
+            "renderer": {
+              "count": 37.0,
+              "rss_mib": 3399.8,
+              "footprint_mib": 1961.1
+            },
+            "utility": {
+              "count": 3.0,
+              "rss_mib": 162.4,
+              "footprint_mib": 74.8
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 2889.6,
+              "rss_mib": 4117.9,
+              "process_count": 43
+            },
+            {
+              "footprint_mib": 2889.4,
+              "rss_mib": 4129.2,
+              "process_count": 43
+            },
+            {
+              "footprint_mib": 2889.4,
+              "rss_mib": 4150.8,
+              "process_count": 43
+            },
+            {
+              "footprint_mib": 2893.7,
+              "rss_mib": 4094.2,
+              "process_count": 43
+            },
+            {
+              "footprint_mib": 2889.2,
+              "rss_mib": 4109.6,
+              "process_count": 43
+            },
+            {
+              "footprint_mib": 2806.8,
+              "rss_mib": 4226.6,
+              "process_count": 43
+            },
+            {
+              "footprint_mib": 2802.2,
+              "rss_mib": 4306.8,
+              "process_count": 43
+            },
+            {
+              "footprint_mib": 2802.2,
+              "rss_mib": 4306.9,
+              "process_count": 43
+            }
+          ],
+          "cef_live_views": [
+            7,
+            7,
+            7,
+            7,
+            7,
+            7,
+            7,
+            7
+          ]
+        },
+        "accepted": [
+          {
+            "name": "Google Search",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 2,
+              "nodes": 4833,
+              "ready": "complete",
+              "resources": 90,
+              "textLength": 6732,
+              "title": "chromium browser - Google Search",
+              "url": "https://www.google.com/search",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "Gmail (signed out)",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 2,
+              "nodes": 884,
+              "ready": "complete",
+              "resources": 97,
+              "textLength": 3507,
+              "title": "Gmail: Secure, AI-Powered Email for Everyone | Google Workspace",
+              "url": "https://workspace.google.com/intl/en-US/gmail/",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "GitHub",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 0,
+              "nodes": 2184,
+              "ready": "complete",
+              "resources": 187,
+              "textLength": 6591,
+              "title": "GitHub - tauri-apps/cef-rs \u00b7 GitHub",
+              "url": "https://github.com/tauri-apps/cef-rs",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "Wikipedia",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 0,
+              "nodes": 4169,
+              "ready": "complete",
+              "resources": 24,
+              "textLength": 20106,
+              "title": "Web browser - Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Web_browser",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                776,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "BBC News",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 4,
+              "nodes": 1409,
+              "ready": "complete",
+              "resources": 79,
+              "textLength": 8594,
+              "title": "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
+              "url": "https://www.bbc.com/news",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1280,
+                788,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "MDN",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 0,
+              "nodes": 4397,
+              "ready": "complete",
+              "resources": 68,
+              "textLength": 22308,
+              "title": "Web APIs | MDN",
+              "url": "https://developer.mozilla.org/en-US/docs/Web/API",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1280,
+                788,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "Stack Overflow",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 22,
+              "nodes": 3342,
+              "ready": "complete",
+              "resources": 143,
+              "textLength": 9981,
+              "title": "Newest 'rust' Questions - Stack Overflow",
+              "url": "https://stackoverflow.com/questions/tagged/rust",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                776,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "Hacker News",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 0,
+              "nodes": 821,
+              "ready": "complete",
+              "resources": 6,
+              "textLength": 4205,
+              "title": "Hacker News",
+              "url": "https://news.ycombinator.com/",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          }
+        ],
+        "excluded": [
+          {
+            "name": "YouTube",
+            "reason": "Excluded because it failed in the baseline",
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 1,
+              "nodes": 1520,
+              "ready": "complete",
+              "resources": 49,
+              "textLength": 151,
+              "title": "YouTube",
+              "url": "https://www.youtube.com/",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "Reddit",
+            "reason": "Excluded because it failed in the baseline",
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 2,
+              "nodes": 1289,
+              "ready": "complete",
+              "resources": 52,
+              "textLength": 3598,
+              "title": "The Rust Programming Language",
+              "url": "https://www.reddit.com/r/rust/",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          }
+        ],
+        "guard": {
+          "ok": true,
+          "regular_policy_seconds": 0,
+          "test_process_frontmost_before": false,
+          "test_process_frontmost_after": false,
+          "audit_polls": 4365,
+          "audit_interval_ms": 50,
+          "activation_policies_seen": [
+            "not-registered",
+            "prohibited"
+          ],
+          "policy_timeline": [
+            {
+              "policy": "not-registered",
+              "t": 0.05313301086425781
+            },
+            {
+              "policy": "prohibited",
+              "t": 0.22754597663879395
+            },
+            {
+              "policy": "not-registered",
+              "t": 277.0230749845505
+            }
+          ],
+          "violations": [],
+          "watchdog": "instance 25989 exited; never frontmost",
+          "helpers_outliving_browser": 0
+        },
+        "log_lines": {
+          "total": 462,
+          "error": 186,
+          "fatal": 0,
+          "panic": 0
+        },
+        "system_before": {
+          "load_1m": 24.9,
+          "load_5m": 35.0,
+          "memory_free_percent": 56,
+          "waited_seconds": 0,
+          "quiet": true
+        },
+        "system_after": {
+          "load_1m": 57.0,
+          "load_5m": 49.1,
+          "memory_free_percent": 60
+        },
+        "system_slept_seconds": 0.0
+      },
+      "comparable": true
+    },
+    {
+      "run": 2,
+      "order": [
+        "aside",
+        "cef"
+      ],
+      "Aside (headless)": {
+        "browser": "Aside (headless)",
+        "version": "Chrome/154.0.8037.100",
+        "live": {
+          "samples": 8,
+          "complete_footprint_samples": 8,
+          "footprint_mib": 2967.6,
+          "rss_mib": 4702.6,
+          "process_count": 50.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 221.5,
+              "footprint_mib": 346.2
+            },
+            "extension_renderer": {
+              "count": 2.0,
+              "rss_mib": 203.8,
+              "footprint_mib": 135.2
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 82.8,
+              "footprint_mib": 132.3
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 118.4,
+              "footprint_mib": 90.4
+            },
+            "other": {
+              "count": 2.0,
+              "rss_mib": 69.6,
+              "footprint_mib": 213.3
+            },
+            "renderer": {
+              "count": 40.0,
+              "rss_mib": 3851.1,
+              "footprint_mib": 1977.9
+            },
+            "utility": {
+              "count": 3.0,
+              "rss_mib": 172.8,
+              "footprint_mib": 72.9
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 2980.4,
+              "rss_mib": 4712.9,
+              "process_count": 50
+            },
+            {
+              "footprint_mib": 2975.2,
+              "rss_mib": 4864.7,
+              "process_count": 50
+            },
+            {
+              "footprint_mib": 2974.2,
+              "rss_mib": 4764.2,
+              "process_count": 50
+            },
+            {
+              "footprint_mib": 2968.9,
+              "rss_mib": 4760.5,
+              "process_count": 50
+            },
+            {
+              "footprint_mib": 2965.6,
+              "rss_mib": 4669.1,
+              "process_count": 50
+            },
+            {
+              "footprint_mib": 2965.6,
+              "rss_mib": 4692.3,
+              "process_count": 50
+            },
+            {
+              "footprint_mib": 2966.3,
+              "rss_mib": 4448.8,
+              "process_count": 50
+            },
+            {
+              "footprint_mib": 2966.2,
+              "rss_mib": 4326.5,
+              "process_count": 50
+            }
+          ]
+        },
+        "idle": {
+          "samples": 8,
+          "complete_footprint_samples": 8,
+          "footprint_mib": 2908.2,
+          "rss_mib": 4994.6,
+          "process_count": 50.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 341.1,
+              "footprint_mib": 334.0
+            },
+            "extension_renderer": {
+              "count": 2.0,
+              "rss_mib": 203.6,
+              "footprint_mib": 135.4
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 84.6,
+              "footprint_mib": 132.2
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 134.1,
+              "footprint_mib": 88.0
+            },
+            "other": {
+              "count": 2.0,
+              "rss_mib": 114.5,
+              "footprint_mib": 209.9
+            },
+            "renderer": {
+              "count": 40.0,
+              "rss_mib": 3943.2,
+              "footprint_mib": 1936.1
+            },
+            "utility": {
+              "count": 3.0,
+              "rss_mib": 173.5,
+              "footprint_mib": 72.7
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 2908.5,
+              "rss_mib": 4976.9,
+              "process_count": 50
+            },
+            {
+              "footprint_mib": 2908.4,
+              "rss_mib": 4989.9,
+              "process_count": 50
+            },
+            {
+              "footprint_mib": 2908.3,
+              "rss_mib": 4993.9,
+              "process_count": 50
+            },
+            {
+              "footprint_mib": 2908.2,
+              "rss_mib": 4994.5,
+              "process_count": 50
+            },
+            {
+              "footprint_mib": 2908.2,
+              "rss_mib": 4994.8,
+              "process_count": 50
+            },
+            {
+              "footprint_mib": 2908.1,
+              "rss_mib": 4996.2,
+              "process_count": 50
+            },
+            {
+              "footprint_mib": 2907.4,
+              "rss_mib": 4999.3,
+              "process_count": 50
+            },
+            {
+              "footprint_mib": 2902.9,
+              "rss_mib": 5018.3,
+              "process_count": 50
+            }
+          ]
+        },
+        "accepted": [
+          {
+            "name": "Google Search",
+            "reason": null,
+            "page": {
+              "url": "https://www.google.com/search",
+              "title": "chromium browser - Google Search",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 7202,
+              "nodes": 4210,
+              "resources": 100,
+              "iframes": 1,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "Gmail (signed out)",
+            "reason": null,
+            "page": {
+              "url": "https://workspace.google.com/intl/en-US/gmail/",
+              "title": "Gmail: Secure, AI-Powered Email for Everyone | Google Workspace",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 3507,
+              "nodes": 884,
+              "resources": 96,
+              "iframes": 2,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "GitHub",
+            "reason": null,
+            "page": {
+              "url": "https://github.com/tauri-apps/cef-rs",
+              "title": "GitHub - tauri-apps/cef-rs \u00b7 GitHub",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 6601,
+              "nodes": 2178,
+              "resources": 175,
+              "iframes": 0,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "Wikipedia",
+            "reason": null,
+            "page": {
+              "url": "https://en.wikipedia.org/wiki/Web_browser",
+              "title": "Web browser - Wikipedia",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 20216,
+              "nodes": 4050,
+              "resources": 24,
+              "iframes": 0,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "BBC News",
+            "reason": null,
+            "page": {
+              "url": "https://www.bbc.com/news",
+              "title": "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 8594,
+              "nodes": 1408,
+              "resources": 86,
+              "iframes": 4,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "MDN",
+            "reason": null,
+            "page": {
+              "url": "https://developer.mozilla.org/en-US/docs/Web/API",
+              "title": "Web APIs | MDN",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 22252,
+              "nodes": 4397,
+              "resources": 70,
+              "iframes": 0,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "Stack Overflow",
+            "reason": null,
+            "page": {
+              "url": "https://stackoverflow.com/questions/tagged/rust",
+              "title": "Newest 'rust' Questions - Stack Overflow",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 9205,
+              "nodes": 1594,
+              "resources": 141,
+              "iframes": 22,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "Hacker News",
+            "reason": null,
+            "page": {
+              "url": "https://news.ycombinator.com/",
+              "title": "Hacker News",
+              "ready": "complete",
+              "visibility": "visible",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 4206,
+              "nodes": 821,
+              "resources": 6,
+              "iframes": 0,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          }
+        ],
+        "excluded": [
+          {
+            "name": "YouTube",
+            "reason": "Page not ready or insufficient rendered content",
+            "page": {
+              "url": "https://www.youtube.com/",
+              "title": "YouTube",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 29,
+              "nodes": 1855,
+              "resources": 38,
+              "iframes": 1,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          },
+          {
+            "name": "Reddit",
+            "reason": "Challenge or error page",
+            "page": {
+              "url": "https://www.reddit.com/r/rust/",
+              "title": "Reddit - Prove your humanity",
+              "ready": "complete",
+              "visibility": "hidden",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "textLength": 240,
+              "nodes": 44,
+              "resources": 5,
+              "iframes": 3,
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+              "webdriver": false,
+              "brands": "Not A(Brand/99, Chromium/154"
+            }
+          }
+        ],
+        "pages_at_end": 8,
+        "target_replacements_followed": 0,
+        "guard": {
+          "ok": true,
+          "regular_policy_seconds": 0,
+          "test_process_frontmost_before": false,
+          "test_process_frontmost_after": false,
+          "audit_polls": 5392,
+          "audit_interval_ms": 50,
+          "activation_policies_seen": [
+            "not-registered",
+            "prohibited"
+          ],
+          "policy_timeline": [
+            {
+              "policy": "not-registered",
+              "t": 0.05516791343688965
+            },
+            {
+              "policy": "prohibited",
+              "t": 0.2373189926147461
+            },
+            {
+              "policy": "not-registered",
+              "t": 340.6022969484329
+            }
+          ],
+          "violations": [],
+          "watchdog": "instance 34447 exited; never frontmost",
+          "helpers_outliving_browser": 1
+        },
+        "system_before": {
+          "load_1m": 57.0,
+          "load_5m": 49.1,
+          "memory_free_percent": 60,
+          "waited_seconds": 0,
+          "quiet": true
+        },
+        "system_after": {
+          "load_1m": 8.6,
+          "load_5m": 40.3,
+          "memory_free_percent": 63
+        },
+        "system_slept_seconds": 0.0
+      },
+      "CEF build": {
+        "browser": "CEF build",
+        "live": {
+          "samples": 8,
+          "complete_footprint_samples": 8,
+          "footprint_mib": 4999.3,
+          "rss_mib": 8910.9,
+          "process_count": 88.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 666.2,
+              "footprint_mib": 650.3
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 91.8,
+              "footprint_mib": 278.2
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 137.7,
+              "footprint_mib": 113.6
+            },
+            "other": {
+              "count": 0.0,
+              "rss_mib": 0.0,
+              "footprint_mib": 0.0
+            },
+            "renderer": {
+              "count": 82.0,
+              "rss_mib": 7842.8,
+              "footprint_mib": 3901.0
+            },
+            "utility": {
+              "count": 3.0,
+              "rss_mib": 165.0,
+              "footprint_mib": 80.6
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 4924.9,
+              "rss_mib": 9138.4,
+              "process_count": 96
+            },
+            {
+              "footprint_mib": 4985.9,
+              "rss_mib": 9172.3,
+              "process_count": 94
+            },
+            {
+              "footprint_mib": 5153.4,
+              "rss_mib": 9338.6,
+              "process_count": 94
+            },
+            {
+              "footprint_mib": 5040.8,
+              "rss_mib": 8864.9,
+              "process_count": 88
+            },
+            {
+              "footprint_mib": 5019.9,
+              "rss_mib": 8885.5,
+              "process_count": 88
+            },
+            {
+              "footprint_mib": 4965.9,
+              "rss_mib": 8886.5,
+              "process_count": 88
+            },
+            {
+              "footprint_mib": 4956.7,
+              "rss_mib": 8858.4,
+              "process_count": 88
+            },
+            {
+              "footprint_mib": 5012.7,
+              "rss_mib": 8935.2,
+              "process_count": 88
+            }
+          ],
+          "cef_live_views": [
+            9,
+            9,
+            9,
+            9,
+            9,
+            9,
+            9,
+            9
+          ]
+        },
+        "idle": {
+          "samples": 8,
+          "complete_footprint_samples": 8,
+          "footprint_mib": 4638.4,
+          "rss_mib": 7946.4,
+          "process_count": 85.0,
+          "by_type": {
+            "browser": {
+              "count": 1.0,
+              "rss_mib": 526.5,
+              "footprint_mib": 653.8
+            },
+            "gpu": {
+              "count": 1.0,
+              "rss_mib": 93.9,
+              "footprint_mib": 235.8
+            },
+            "network": {
+              "count": 1.0,
+              "rss_mib": 123.4,
+              "footprint_mib": 110.2
+            },
+            "renderer": {
+              "count": 79.0,
+              "rss_mib": 7046.2,
+              "footprint_mib": 3556.2
+            },
+            "utility": {
+              "count": 3.0,
+              "rss_mib": 164.4,
+              "footprint_mib": 81.2
+            }
+          },
+          "raw_totals": [
+            {
+              "footprint_mib": 4646.2,
+              "rss_mib": 8134.2,
+              "process_count": 85
+            },
+            {
+              "footprint_mib": 4642.9,
+              "rss_mib": 8175.1,
+              "process_count": 85
+            },
+            {
+              "footprint_mib": 4639.8,
+              "rss_mib": 7919.6,
+              "process_count": 85
+            },
+            {
+              "footprint_mib": 4637.0,
+              "rss_mib": 7900.8,
+              "process_count": 85
+            },
+            {
+              "footprint_mib": 4636.3,
+              "rss_mib": 7528.1,
+              "process_count": 85
+            },
+            {
+              "footprint_mib": 4700.3,
+              "rss_mib": 8212.0,
+              "process_count": 85
+            },
+            {
+              "footprint_mib": 4606.8,
+              "rss_mib": 7973.1,
+              "process_count": 85
+            },
+            {
+              "footprint_mib": 4590.5,
+              "rss_mib": 7902.2,
+              "process_count": 85
+            }
+          ],
+          "cef_live_views": [
+            7,
+            7,
+            7,
+            7,
+            7,
+            7,
+            7,
+            7
+          ]
+        },
+        "accepted": [
+          {
+            "name": "Google Search",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 1,
+              "nodes": 4351,
+              "ready": "complete",
+              "resources": 112,
+              "textLength": 6672,
+              "title": "chromium browser - Google Search",
+              "url": "https://www.google.com/search",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "Gmail (signed out)",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 2,
+              "nodes": 885,
+              "ready": "complete",
+              "resources": 98,
+              "textLength": 3507,
+              "title": "Gmail: Secure, AI-Powered Email for Everyone | Google Workspace",
+              "url": "https://workspace.google.com/intl/en-US/gmail/",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "GitHub",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 0,
+              "nodes": 2181,
+              "ready": "complete",
+              "resources": 176,
+              "textLength": 6622,
+              "title": "GitHub - tauri-apps/cef-rs \u00b7 GitHub",
+              "url": "https://github.com/tauri-apps/cef-rs",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1280,
+                788,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "Wikipedia",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 0,
+              "nodes": 4167,
+              "ready": "complete",
+              "resources": 26,
+              "textLength": 20106,
+              "title": "Web browser - Wikipedia",
+              "url": "https://en.wikipedia.org/wiki/Web_browser",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "BBC News",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 4,
+              "nodes": 1410,
+              "ready": "complete",
+              "resources": 84,
+              "textLength": 8591,
+              "title": "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
+              "url": "https://www.bbc.com/news",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "MDN",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 0,
+              "nodes": 4397,
+              "ready": "complete",
+              "resources": 68,
+              "textLength": 22252,
+              "title": "Web APIs | MDN",
+              "url": "https://developer.mozilla.org/en-US/docs/Web/API",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "Stack Overflow",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 22,
+              "nodes": 3342,
+              "ready": "complete",
+              "resources": 143,
+              "textLength": 10477,
+              "title": "Newest 'rust' Questions - Stack Overflow",
+              "url": "https://stackoverflow.com/questions/tagged/rust",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "Hacker News",
+            "reason": null,
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 0,
+              "nodes": 821,
+              "ready": "complete",
+              "resources": 6,
+              "textLength": 4224,
+              "title": "Hacker News",
+              "url": "https://news.ycombinator.com/",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1280,
+                788,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          }
+        ],
+        "excluded": [
+          {
+            "name": "YouTube",
+            "reason": "Excluded because it failed in the baseline",
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 1,
+              "nodes": 1929,
+              "ready": "complete",
+              "resources": 63,
+              "textLength": 151,
+              "title": "YouTube",
+              "url": "https://www.youtube.com/",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          },
+          {
+            "name": "Reddit",
+            "reason": "Excluded because it failed in the baseline",
+            "page": {
+              "brands": "Not:A-Brand/8, Chromium/156",
+              "iframes": 2,
+              "nodes": 1367,
+              "ready": "complete",
+              "resources": 44,
+              "textLength": 3894,
+              "title": "The Rust Programming Language",
+              "url": "https://www.reddit.com/r/rust/",
+              "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+              "viewport": [
+                1024,
+                808,
+                2
+              ],
+              "visibility": "visible",
+              "webdriver": false
+            }
+          }
+        ],
+        "guard": {
+          "ok": true,
+          "regular_policy_seconds": 0.053,
+          "test_process_frontmost_before": false,
+          "test_process_frontmost_after": false,
+          "audit_polls": 4573,
+          "audit_interval_ms": 50,
+          "activation_policies_seen": [
+            "not-registered",
+            "prohibited",
+            "regular"
+          ],
+          "policy_timeline": [
+            {
+              "policy": "not-registered",
+              "t": 0.052287936210632324
+            },
+            {
+              "policy": "regular",
+              "t": 0.17709898948669434
+            },
+            {
+              "policy": "prohibited",
+              "t": 0.22976601123809814
+            },
+            {
+              "policy": "not-registered",
+              "t": 271.5796719789505
+            }
+          ],
+          "violations": [],
+          "watchdog": "instance 44984 exited; never frontmost",
+          "helpers_outliving_browser": 0
+        },
+        "log_lines": {
+          "total": 315,
+          "error": 44,
+          "fatal": 0,
+          "panic": 0
+        },
+        "system_before": {
+          "load_1m": 8.6,
+          "load_5m": 40.3,
+          "memory_free_percent": 63,
+          "waited_seconds": 0,
+          "quiet": true
+        },
+        "system_after": {
+          "load_1m": 11.8,
+          "load_5m": 23.0,
+          "memory_free_percent": 55
+        },
+        "system_slept_seconds": 0.0
+      },
+      "comparable": true
+    }
+  ],
+  "failed_runs": [
+    {
+      "run": 3,
+      "order": [
+        "aside",
+        "cef"
+      ],
+      "Aside (headless)": {
+        "note": "Complete; only the logged medians were kept because the harness was interrupted.",
+        "accepted": [
+          "Google Search",
+          "Gmail (signed out)",
+          "GitHub",
+          "Wikipedia",
+          "BBC News",
+          "MDN",
+          "Stack Overflow",
+          "Hacker News"
+        ],
+        "live": {
+          "footprint_mib": 6007.6,
+          "rss_mib": 10243.0,
+          "process_count": 94.0,
+          "renderers": 84.0
+        },
+        "idle": {
+          "footprint_mib": 3261.7,
+          "rss_mib": 3676.1,
+          "process_count": 47.0,
+          "renderers": 37.0
+        },
+        "guard_ok": true,
+        "load_1m_before": 11.8
+      },
+      "failure": {
+        "browser": "cef",
+        "error": "The CEF browser process stopped responding about 44 s after launch while the real-site tabs were loading. A macOS sample showed the main (UI) thread, Chrome_IOThread, and several ThreadPoolForegroundWorker threads all waiting to acquire the same pthread reader-writer lock for writing inside the Chromium Embedded Framework; the last Chromium log line before it was a CEF \"Timeout of new browser info response for frame\" error. The API timed out and the harness was interrupted after 12 minutes; the instance was then stopped.",
+        "system": {
+          "load_1m": 34.6,
+          "load_5m": 37.7
+        }
+      }
+    }
+  ],
+  "summary": {
+    "live": {
+      "Aside (headless)": {
+        "footprint_mib": {
+          "median": 4390.4,
+          "min": 2967.6,
+          "max": 5813.1,
+          "runs": [
+            5813.1,
+            2967.6
+          ]
+        },
+        "rss_mib": {
+          "median": 7964.8,
+          "min": 4702.6,
+          "max": 11226.9,
+          "runs": [
+            11226.9,
+            4702.6
+          ]
+        },
+        "process_count": {
+          "median": 72.5,
+          "min": 50.0,
+          "max": 95.0,
+          "runs": [
+            95.0,
+            50.0
+          ]
+        },
+        "by_type_median_of_runs": {
+          "browser": {
+            "count": 1.0,
+            "rss_mib": 385.2,
+            "footprint_mib": 530.0
+          },
+          "extension_renderer": {
+            "count": 2.0,
+            "rss_mib": 226.9,
+            "footprint_mib": 135.3
+          },
+          "gpu": {
+            "count": 1.0,
+            "rss_mib": 90.2,
+            "footprint_mib": 134.9
+          },
+          "network": {
+            "count": 1.0,
+            "rss_mib": 150.8,
+            "footprint_mib": 127.3
+          },
+          "other": {
+            "count": 2.0,
+            "rss_mib": 100.2,
+            "footprint_mib": 222.6
+          },
+          "renderer": {
+            "count": 62.5,
+            "rss_mib": 6834.1,
+            "footprint_mib": 3166.0
+          },
+          "utility": {
+            "count": 3.0,
+            "rss_mib": 183.9,
+            "footprint_mib": 74.5
+          }
+        }
+      },
+      "CEF build": {
+        "footprint_mib": {
+          "median": 5174.2,
+          "min": 4999.3,
+          "max": 5349.1,
+          "runs": [
+            5349.1,
+            4999.3
+          ]
+        },
+        "rss_mib": {
+          "median": 8962.1,
+          "min": 8910.9,
+          "max": 9013.3,
+          "runs": [
+            9013.3,
+            8910.9
+          ]
+        },
+        "process_count": {
+          "median": 90.0,
+          "min": 88.0,
+          "max": 92.0,
+          "runs": [
+            92.0,
+            88.0
+          ]
+        },
+        "by_type_median_of_runs": {
+          "browser": {
+            "count": 1.0,
+            "rss_mib": 685.5,
+            "footprint_mib": 688.0
+          },
+          "gpu": {
+            "count": 1.0,
+            "rss_mib": 91.9,
+            "footprint_mib": 276.0
+          },
+          "network": {
+            "count": 1.0,
+            "rss_mib": 141.2,
+            "footprint_mib": 117.3
+          },
+          "other": {
+            "count": 0.0,
+            "rss_mib": 0.0,
+            "footprint_mib": 0.0
+          },
+          "renderer": {
+            "count": 84.0,
+            "rss_mib": 7909.2,
+            "footprint_mib": 4020.1
+          },
+          "utility": {
+            "count": 3.0,
+            "rss_mib": 164.9,
+            "footprint_mib": 80.5
+          }
+        }
+      },
+      "footprint_reduction_percent": {
+        "median": -30.2,
+        "min": -68.5,
+        "max": 8.0,
+        "runs": [
+          8.0,
+          -68.5
+        ]
+      },
+      "rss_reduction_percent": {
+        "median": -34.9,
+        "min": -89.5,
+        "max": 19.7,
+        "runs": [
+          19.7,
+          -89.5
+        ]
+      },
+      "comparable_runs": 2
+    },
+    "idle": {
+      "Aside (headless)": {
+        "footprint_mib": {
+          "median": 3259.8,
+          "min": 2908.2,
+          "max": 3611.5,
+          "runs": [
+            3611.5,
+            2908.2
+          ]
+        },
+        "rss_mib": {
+          "median": 5656.1,
+          "min": 4994.6,
+          "max": 6317.7,
+          "runs": [
+            6317.7,
+            4994.6
+          ]
+        },
+        "process_count": {
+          "median": 51.5,
+          "min": 50.0,
+          "max": 53.0,
+          "runs": [
+            53.0,
+            50.0
+          ]
+        },
+        "by_type_median_of_runs": {
+          "browser": {
+            "count": 1.0,
+            "rss_mib": 462.1,
+            "footprint_mib": 476.8
+          },
+          "extension_renderer": {
+            "count": 2.0,
+            "rss_mib": 225.2,
+            "footprint_mib": 129.9
+          },
+          "gpu": {
+            "count": 1.0,
+            "rss_mib": 94.3,
+            "footprint_mib": 132.6
+          },
+          "network": {
+            "count": 1.0,
+            "rss_mib": 158.6,
+            "footprint_mib": 113.0
+          },
+          "other": {
+            "count": 2.0,
+            "rss_mib": 114.8,
+            "footprint_mib": 174.8
+          },
+          "renderer": {
+            "count": 41.5,
+            "rss_mib": 4417.5,
+            "footprint_mib": 2159.8
+          },
+          "utility": {
+            "count": 3.0,
+            "rss_mib": 184.5,
+            "footprint_mib": 73.0
+          }
+        }
+      },
+      "CEF build": {
+        "footprint_mib": {
+          "median": 3763.8,
+          "min": 2889.3,
+          "max": 4638.4,
+          "runs": [
+            2889.3,
+            4638.4
+          ]
+        },
+        "rss_mib": {
+          "median": 6043.2,
+          "min": 4140.0,
+          "max": 7946.4,
+          "runs": [
+            4140.0,
+            7946.4
+          ]
+        },
+        "process_count": {
+          "median": 64.0,
+          "min": 43.0,
+          "max": 85.0,
+          "runs": [
+            43.0,
+            85.0
+          ]
+        },
+        "by_type_median_of_runs": {
+          "browser": {
+            "count": 1.0,
+            "rss_mib": 454.2,
+            "footprint_mib": 596.9
+          },
+          "gpu": {
+            "count": 1.0,
+            "rss_mib": 91.5,
+            "footprint_mib": 227.3
+          },
+          "network": {
+            "count": 1.0,
+            "rss_mib": 117.3,
+            "footprint_mib": 102.3
+          },
+          "renderer": {
+            "count": 58.0,
+            "rss_mib": 5223.0,
+            "footprint_mib": 2758.6
+          },
+          "utility": {
+            "count": 3.0,
+            "rss_mib": 163.4,
+            "footprint_mib": 78.0
+          }
+        }
+      },
+      "footprint_reduction_percent": {
+        "median": -19.8,
+        "min": -59.5,
+        "max": 20.0,
+        "runs": [
+          20.0,
+          -59.5
+        ]
+      },
+      "rss_reduction_percent": {
+        "median": -12.3,
+        "min": -59.1,
+        "max": 34.5,
+        "runs": [
+          34.5,
+          -59.1
+        ]
+      },
+      "comparable_runs": 2
+    }
+  }
+}

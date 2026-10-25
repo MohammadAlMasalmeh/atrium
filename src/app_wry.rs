@@ -110,6 +110,7 @@ pub enum Op {
     Screenshot { tab: Option<u64>, reply: Reply<Result<String, String>> },
     Cdp { tab: Option<u64>, method: String, params: Value, reply: Reply<Result<Value, String>> },
     Accessibility { assistive: Option<bool>, tree: bool, reply: Reply<Value> },
+    DevTools { tab: Option<u64>, method: String, params: Value, reply: Reply<Result<Value, String>> },
 }
 
 pub enum TabEv {
@@ -556,7 +557,7 @@ impl Browser {
     fn handle_op(&mut self, op: Op) {
         // Tell the shell which tab the agent is touching so it can show it.
         let touched = match &op {
-            Op::Tabs(_) | Op::InspectGoogle { .. } | Op::Shell { .. } | Op::Memory(_) | Op::Cdp { .. } | Op::Accessibility { .. } | Op::Action { .. } => None,
+            Op::Tabs(_) | Op::InspectGoogle { .. } | Op::Shell { .. } | Op::Memory(_) | Op::Cdp { .. } | Op::Accessibility { .. } | Op::Action { .. } | Op::DevTools { .. } => None,
             Op::Eval { tab, .. } | Op::Act { tab, .. } | Op::Navigate { tab, .. } | Op::History { tab, .. } | Op::Screenshot { tab, .. } => Some(tab.or(self.active)),
             _ => Some(None),
         };
@@ -604,6 +605,7 @@ impl Browser {
                     let _ = reply.send(Err("Nothing to capture: that tab has no page".into()));
                 }
             },
+            Op::DevTools { reply, .. } => { let _ = reply.send(Err("DevTools methods require the Chromium engine".into())); }
         }
         if let Some(Some(id)) = touched {
             let scratch = self.tabs.iter().any(|t| t.id == id && t.scratch);
