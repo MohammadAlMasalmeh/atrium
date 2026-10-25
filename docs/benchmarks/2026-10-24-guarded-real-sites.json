@@ -1,5 +1,23 @@
 {
-  "partial": true,
+  "date": "2026-10-24",
+  "workload": "real",
+  "metric": "Sum over each browser process tree of macOS physical footprint (proc_pid_rusage v2 ri_phys_footprint) and RSS, MiB. RSS double-counts shared pages. Medians per phase within a run; median/min/max across runs.",
+  "method": {
+    "baseline": "Installed Aside started with --headless, a throwaway profile, --force-device-scale-factor=2 and 1024x808 targets; no windows, Prohibited activation policy. It sends the windowed Chrome 154 user agent and navigator.webdriver is false; its User-Agent Client Hints brands are empty because of the override.",
+    "candidate": "This repository's release bundle with ASIDE_BACKGROUND_WINDOW=1 and ASIDE_MOCK_KEYCHAIN=1, fresh data directory.",
+    "sequencing": "Browsers run one at a time; real sites run the baseline first and the CEF run closes sites the baseline rejected; fixtures alternate the order per repetition.",
+    "phases": {
+      "live": "8 samples every 3s from 75s after pages were ready",
+      "idle": "8 samples every 3s from 215s after pages were ready"
+    },
+    "cef_policy": "max 6 live content views (plus the shell), 30 s minimum idle, agent inspection protects 180 s",
+    "visibility_guard": "window_audit.swift (50 ms polling, SIGKILL on frontmost, visible window, or Regular policy after 1 s) and watchdog.sh",
+    "caveats": [
+      "Headless Aside renders its own browser UI (sidebar and toolbar) without any window; the CEF build includes its shell renderer. Neither is the same as a visible, interactive window.",
+      "Background CEF pages report visibilityState hidden; headless targets report visible.",
+      "The system was shared with other agents and builds; load is recorded per browser run."
+    ]
+  },
   "runs": [
     {
       "run": 1,
@@ -1809,5 +1827,342 @@
       },
       "comparable": true
     }
-  ]
+  ],
+  "failed_runs": [
+    {
+      "run": 3,
+      "order": [
+        "aside",
+        "cef"
+      ],
+      "Aside (headless)": {
+        "note": "Complete; only the logged medians were kept because the harness was interrupted.",
+        "accepted": [
+          "Google Search",
+          "Gmail (signed out)",
+          "GitHub",
+          "Wikipedia",
+          "BBC News",
+          "MDN",
+          "Stack Overflow",
+          "Hacker News"
+        ],
+        "live": {
+          "footprint_mib": 6007.6,
+          "rss_mib": 10243.0,
+          "process_count": 94.0,
+          "renderers": 84.0
+        },
+        "idle": {
+          "footprint_mib": 3261.7,
+          "rss_mib": 3676.1,
+          "process_count": 47.0,
+          "renderers": 37.0
+        },
+        "guard_ok": true,
+        "load_1m_before": 11.8
+      },
+      "failure": {
+        "browser": "cef",
+        "error": "The CEF browser process stopped responding about 44 s after launch while the real-site tabs were loading. A macOS sample showed the main (UI) thread, Chrome_IOThread, and several ThreadPoolForegroundWorker threads all waiting to acquire the same pthread reader-writer lock for writing inside the Chromium Embedded Framework; the last Chromium log line before it was a CEF \"Timeout of new browser info response for frame\" error. The API timed out and the harness was interrupted after 12 minutes; the instance was then stopped.",
+        "system": {
+          "load_1m": 34.6,
+          "load_5m": 37.7
+        }
+      }
+    }
+  ],
+  "summary": {
+    "live": {
+      "Aside (headless)": {
+        "footprint_mib": {
+          "median": 4390.4,
+          "min": 2967.6,
+          "max": 5813.1,
+          "runs": [
+            5813.1,
+            2967.6
+          ]
+        },
+        "rss_mib": {
+          "median": 7964.8,
+          "min": 4702.6,
+          "max": 11226.9,
+          "runs": [
+            11226.9,
+            4702.6
+          ]
+        },
+        "process_count": {
+          "median": 72.5,
+          "min": 50.0,
+          "max": 95.0,
+          "runs": [
+            95.0,
+            50.0
+          ]
+        },
+        "by_type_median_of_runs": {
+          "browser": {
+            "count": 1.0,
+            "rss_mib": 385.2,
+            "footprint_mib": 530.0
+          },
+          "extension_renderer": {
+            "count": 2.0,
+            "rss_mib": 226.9,
+            "footprint_mib": 135.3
+          },
+          "gpu": {
+            "count": 1.0,
+            "rss_mib": 90.2,
+            "footprint_mib": 134.9
+          },
+          "network": {
+            "count": 1.0,
+            "rss_mib": 150.8,
+            "footprint_mib": 127.3
+          },
+          "other": {
+            "count": 2.0,
+            "rss_mib": 100.2,
+            "footprint_mib": 222.6
+          },
+          "renderer": {
+            "count": 62.5,
+            "rss_mib": 6834.1,
+            "footprint_mib": 3166.0
+          },
+          "utility": {
+            "count": 3.0,
+            "rss_mib": 183.9,
+            "footprint_mib": 74.5
+          }
+        }
+      },
+      "CEF build": {
+        "footprint_mib": {
+          "median": 5174.2,
+          "min": 4999.3,
+          "max": 5349.1,
+          "runs": [
+            5349.1,
+            4999.3
+          ]
+        },
+        "rss_mib": {
+          "median": 8962.1,
+          "min": 8910.9,
+          "max": 9013.3,
+          "runs": [
+            9013.3,
+            8910.9
+          ]
+        },
+        "process_count": {
+          "median": 90.0,
+          "min": 88.0,
+          "max": 92.0,
+          "runs": [
+            92.0,
+            88.0
+          ]
+        },
+        "by_type_median_of_runs": {
+          "browser": {
+            "count": 1.0,
+            "rss_mib": 685.5,
+            "footprint_mib": 688.0
+          },
+          "gpu": {
+            "count": 1.0,
+            "rss_mib": 91.9,
+            "footprint_mib": 276.0
+          },
+          "network": {
+            "count": 1.0,
+            "rss_mib": 141.2,
+            "footprint_mib": 117.3
+          },
+          "other": {
+            "count": 0.0,
+            "rss_mib": 0.0,
+            "footprint_mib": 0.0
+          },
+          "renderer": {
+            "count": 84.0,
+            "rss_mib": 7909.2,
+            "footprint_mib": 4020.1
+          },
+          "utility": {
+            "count": 3.0,
+            "rss_mib": 164.9,
+            "footprint_mib": 80.5
+          }
+        }
+      },
+      "footprint_reduction_percent": {
+        "median": -30.2,
+        "min": -68.5,
+        "max": 8.0,
+        "runs": [
+          8.0,
+          -68.5
+        ]
+      },
+      "rss_reduction_percent": {
+        "median": -34.9,
+        "min": -89.5,
+        "max": 19.7,
+        "runs": [
+          19.7,
+          -89.5
+        ]
+      },
+      "comparable_runs": 2
+    },
+    "idle": {
+      "Aside (headless)": {
+        "footprint_mib": {
+          "median": 3259.8,
+          "min": 2908.2,
+          "max": 3611.5,
+          "runs": [
+            3611.5,
+            2908.2
+          ]
+        },
+        "rss_mib": {
+          "median": 5656.1,
+          "min": 4994.6,
+          "max": 6317.7,
+          "runs": [
+            6317.7,
+            4994.6
+          ]
+        },
+        "process_count": {
+          "median": 51.5,
+          "min": 50.0,
+          "max": 53.0,
+          "runs": [
+            53.0,
+            50.0
+          ]
+        },
+        "by_type_median_of_runs": {
+          "browser": {
+            "count": 1.0,
+            "rss_mib": 462.1,
+            "footprint_mib": 476.8
+          },
+          "extension_renderer": {
+            "count": 2.0,
+            "rss_mib": 225.2,
+            "footprint_mib": 129.9
+          },
+          "gpu": {
+            "count": 1.0,
+            "rss_mib": 94.3,
+            "footprint_mib": 132.6
+          },
+          "network": {
+            "count": 1.0,
+            "rss_mib": 158.6,
+            "footprint_mib": 113.0
+          },
+          "other": {
+            "count": 2.0,
+            "rss_mib": 114.8,
+            "footprint_mib": 174.8
+          },
+          "renderer": {
+            "count": 41.5,
+            "rss_mib": 4417.5,
+            "footprint_mib": 2159.8
+          },
+          "utility": {
+            "count": 3.0,
+            "rss_mib": 184.5,
+            "footprint_mib": 73.0
+          }
+        }
+      },
+      "CEF build": {
+        "footprint_mib": {
+          "median": 3763.8,
+          "min": 2889.3,
+          "max": 4638.4,
+          "runs": [
+            2889.3,
+            4638.4
+          ]
+        },
+        "rss_mib": {
+          "median": 6043.2,
+          "min": 4140.0,
+          "max": 7946.4,
+          "runs": [
+            4140.0,
+            7946.4
+          ]
+        },
+        "process_count": {
+          "median": 64.0,
+          "min": 43.0,
+          "max": 85.0,
+          "runs": [
+            43.0,
+            85.0
+          ]
+        },
+        "by_type_median_of_runs": {
+          "browser": {
+            "count": 1.0,
+            "rss_mib": 454.2,
+            "footprint_mib": 596.9
+          },
+          "gpu": {
+            "count": 1.0,
+            "rss_mib": 91.5,
+            "footprint_mib": 227.3
+          },
+          "network": {
+            "count": 1.0,
+            "rss_mib": 117.3,
+            "footprint_mib": 102.3
+          },
+          "renderer": {
+            "count": 58.0,
+            "rss_mib": 5223.0,
+            "footprint_mib": 2758.6
+          },
+          "utility": {
+            "count": 3.0,
+            "rss_mib": 163.4,
+            "footprint_mib": 78.0
+          }
+        }
+      },
+      "footprint_reduction_percent": {
+        "median": -19.8,
+        "min": -59.5,
+        "max": 20.0,
+        "runs": [
+          20.0,
+          -59.5
+        ]
+      },
+      "rss_reduction_percent": {
+        "median": -12.3,
+        "min": -59.1,
+        "max": 34.5,
+        "runs": [
+          34.5,
+          -59.1
+        ]
+      },
+      "comparable_runs": 2
+    }
+  }
 }
