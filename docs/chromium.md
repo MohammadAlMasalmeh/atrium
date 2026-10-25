@@ -11,17 +11,20 @@ remote DevTools port is opened by the browser.
 The Rust process owns the tab registry and communicates with CEF on its UI thread
 through queued tasks. OpenCode startup runs independently of the window. Only an
 OpenCode child started by this app is stopped on exit. An existing server is reused.
-The shell calls a loopback Axum server. Requests must use the expected Host and,
+The shell sends commands to Rust as CEF process messages through a native
+`window.ipc.postMessage` (see [Shell IPC and local API
+security](#shell-ipc-and-local-api-security)). It loads its document and reads
+state from a loopback Axum server. Requests must use the expected Host and,
 when present, the shell's Origin. Every route except `/shell` also requires a
 per-launch secret in the `x-atrium-token` header. The browser writes it to
 `<data dir>/api-token` (mode 0600) at startup and removes it on exit. The native
-side attaches the header only to requests from the shell's own browser for the
-local API origin, so website tabs and external requests never carry it. `atrium
-mcp` and `atrium ask` read the token from the data directory or `ATRIUM_API_TOKEN`.
-Any process running as the same user can still read that file, so this stops
-websites and other users rather than hostile local software. The shell currently
-shares the persistent request context with website views; it is not a separate
-Chromium storage partition.
+side attaches the header only to API requests from the shell's main frame while it
+shows the shell document, so website tabs and external requests never carry it.
+`atrium mcp` and `atrium ask` read the token from the data directory or
+`ATRIUM_API_TOKEN`. Any process running as the same user can still read that file,
+so this stops websites and other users rather than hostile local software. The
+shell currently shares the persistent request context with website views; it is
+not a separate Chromium storage partition.
 
 ### Layout stability
 
@@ -29,9 +32,8 @@ Tab BrowserViews are children of the CEF window, whose default fill layout sizes
 every child to the full window on each layout pass. The window delegate's
 `on_layout_changed` re-applies tab bounds synchronously in that same pass, so
 pages are never painted at full-window size between a resize, view creation,
-or eviction and the next shell layout message. The shell's IPC is one `fetch`
-per message, so layout messages are kept to one in flight (the newest rect
-wins) to prevent stale rects being applied out of order. Sidebar lists replace
+or eviction and the next shell layout message. Shell IPC messages arrive in the
+order they were sent, so the newest layout rect is always applied last. Sidebar lists replace
 only rows whose markup changed, so state pushes from any tab don't re-create
 favicons or restart spinners. Screenshots of hidden tabs, including the
 assistant preview, keep the tab painted but positioned outside the window
@@ -70,6 +72,63 @@ frontmost application never changed to the test instance, the window reported
 CEF framework, sandbox helper executables, Chromium credits, and verified ad hoc
 signatures. CEF updates require changing the pin, rebuilding, and re-running the
 integration checks. There is no automatic updater or notarized distribution yet.
+
+## Shell IPC and local API security
+
+The shell's commands travel as CEF process messages, not HTTP:
+
+- **Marking the shell.** The browser process creates the shell's BrowserView with
+  `extra_info` naming the shell URL.
+- **Exposing `window.ipc`.** The renderer helper (`src/bin/atrium_helper.rs`) defines
+  a read-only, native `window.ipc.postMessage(string)` only when the browser carries
+  that marker, the frame is the main frame at exactly `<api>/shell`, and the context
+  is the main world. Website tabs, frames, and extension worlds never see it.
+- **Sending.** Each call sends one `atrium.shell.command` message, at most 256 KiB.
+- **Receiving.** `Client::on_process_message_received` accepts it only from a
+  renderer, for the shell's recorded browser identifier, from the shell's main frame,
+  with a JSON object body. Rejected messages are dropped and counted.
+- **Ordering.** Accepted commands go through the same FIFO queue as every other UI
+  event. Messages from one frame arrive in order, so the old one-layout-in-flight
+  workaround and the `fetch` fallback are gone. The WebKit build keeps its own
+  native `window.ipc`.
+
+The shell still loads its document and reads state, history, and frozen overlay images
+from the loopback API. The token is attached only to those requests, and only from the
+shell's main frame while it shows the shell document. `/api/browser/command` remains
+for token holders such as scripts and tests.
+
+Navigation and popup rules:
+
+- The shell browser cannot navigate away from `/shell`. A user-gesture navigation to
+  an http(s) URL, such as a dropped link, opens as a tab instead.
+- Website tabs and frames cannot load the API origin.
+- Website popups open as tabs only with a user gesture and an http(s) URL.
+- Agent actions (click, type, key, select, scroll) run with `userGesture: true`, so
+  links the assistant clicks still open. Its reads and `evaluate` don't.
+- Agent tools only open http(s) URLs or `about:blank`.
+
+Other protections:
+
+- Every local response forbids framing, sniffing, caching, and referrers.
+- `atrium run` makes the data directory 0700.
+- When Atrium starts `opencode serve`, it passes a random `OPENCODE_SERVER_PASSWORD`,
+  or the user's own if set, and authenticates with it.
+- Exit cleanup (token file, OpenCode child) runs before CEF shutdown, because
+  Chromium's teardown watchdog sometimes terminates the process inside `shutdown()`.
+
+`/api/browser/memory` also reports:
+
+- `layout`: the applied main-pane rect, plus whether an overlay covers it or Glance
+  is open;
+- `shell_ipc`: counters for accepted process messages, rejected process messages,
+  and HTTP commands.
+
+Shell scripting (`/api/debug/shell`, and evaluation or screenshots of the shell) is
+available in debug builds, or in release builds started with
+`ATRIUM_TEST_SHELL_EVAL=1`, and it still needs the token. Use that variable only for
+test instances.
+
+Findings, severities, and accepted risks are in [SECURITY-REVIEW.md](SECURITY-REVIEW.md).
 
 ## Memory behavior
 
@@ -127,11 +186,68 @@ the token. With an appropriate synthetic
 extension loaded, `--expect-extension` also checks its content script. The lifecycle
 check opens clean and dirty pages, waits for eviction, checks draft retention,
 and wakes a sleeping page. Rust unit tests cover eviction selection, migration
-parsing, path validation, and endpoint validation:
+parsing, path validation, endpoint validation, and the security fixes:
 
 ```sh
 CEF_PATH="$PWD/target/cef" PATH="$PWD/target/build-tools/bin:$PATH" cargo test --locked
 ```
+
+`tools/test_secure_ipc.py` starts its own background instances, with a mock
+keychain, an invisible window, and a fresh profile, plus `ATRIUM_TEST_SHELL_EVAL=1` for
+the first one. It runs the watchdog beside each instance (`--watchdog`) and fails if
+an instance becomes the frontmost application. The fixture server must be running:
+
+```sh
+python3 tools/fixture_server.py --port 7881
+python3 tools/test_secure_ipc.py --port 7880 --opencode-port 7885 \
+  --fixture http://127.0.0.1:7881   # add --skip-opencode without an opencode binary
+```
+
+It drives the real shell UI. It creates tabs, switches them by clicking a sidebar
+row, and closes them with the close button. It checks that the native pane follows
+the shell layout and that 400 back-to-back layout messages apply in order. It opens
+the command bar, which covers the page and loads the frozen backdrop through the
+token route, then closes it with Escape, and opens and closes Glance. It confirms
+that all of this went over process messages, with no HTTP command.
+
+A hostile fixture page (`/evil`) then probes `window.ipc`, CORS and no-cors requests
+to the API, popups (`file:` and http, without a gesture), framing the shell, and
+navigating to it. The HTTP checks cover:
+
+- missing and wrong tokens;
+- bad Origins: other sites, `null`, the fixture port, and `localhost`;
+- DNS-rebinding Host headers;
+- preflights;
+- hardening headers;
+- file modes;
+- `atrium mcp --api` to a non-loopback host.
+
+A second instance checks that shell scripting is off without the variable and that an
+existing 0755 data directory is tightened. Unless `--skip-opencode` is given, it also
+checks that the OpenCode server it starts on `--opencode-port` refuses
+unauthenticated requests and stops on quit.
+
+### Recorded run: October 24, 2026 (`feat/ipc`)
+
+| Command | Result |
+| --- | --- |
+| `cargo test --release --locked --offline` | 20 + 1 tests passed |
+| `test_secure_ipc.py --port 7880 --fixture http://127.0.0.1:7881` | `PASS: 70 secure IPC and local-surface checks`, using opencode 1.18.10 on port 7885 |
+| `smoke_chromium.py` against a background instance on 7882 | passed |
+| `test_tab_lifecycle.py` against the same instance | `PASS: idle renderers release; drafts stay; agent and selected sleeping tabs wake` |
+
+All instances ran with the watchdog, and none became frontmost.
+
+Not covered:
+
+- Keyboard input to the shell. The background window gets no real key events, so
+  overlays are opened through the shell's own functions, and Escape is dispatched
+  as a DOM event.
+- Downloads, because they open a save dialog.
+- Extension content scripts in the shell.
+
+In background mode, every page reports `hidden` and its timers are throttled, so the
+agent's settle wait after a click can take about 15 seconds.
 
 For a repeatable RAM comparison, start a **fresh, empty**, extension-free release
 profile on port 7783 and keep the fixture server on 7789. Then run:
