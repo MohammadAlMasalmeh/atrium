@@ -97,6 +97,9 @@ pub enum Op {
     /// Scratch tabs are invisible to the user (background reads).
     NewTab { url: Option<String>, background: bool, scratch: bool, reply: Reply<u64> },
     Close { id: u64, reply: Reply<()> },
+    /// The agent now works in this tab; the chat view previews it. A tab the agent
+    /// `opened` stays out of the sidebar until the user opens it.
+    AgentTab { id: u64, opened: bool, reply: Reply<()> },
     /// Load a URL in `tab` (or the active tab); returns the tab used.
     Navigate { tab: Option<u64>, url: String, reply: Reply<u64> },
     History { tab: Option<u64>, action: &'static str, reply: Reply<Result<(), String>> },
@@ -579,6 +582,10 @@ impl Browser {
             }
             Op::Close { id, reply } => {
                 self.close(id);
+                let _ = reply.send(());
+            }
+            Op::AgentTab { id, opened, reply } => {
+                self.shell_js(&format!("atriumShell.agent({id}, {opened})"));
                 let _ = reply.send(());
             }
             Op::Navigate { tab, url, reply } => {

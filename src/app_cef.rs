@@ -72,6 +72,13 @@ pub enum Op {
         id: u64,
         reply: Reply<()>,
     },
+    /// The agent now works in this tab; the chat view previews it. A tab the agent
+    /// `opened` stays out of the sidebar until the user opens it.
+    AgentTab {
+        id: u64,
+        opened: bool,
+        reply: Reply<()>,
+    },
     Navigate {
         tab: Option<u64>,
         url: String,
@@ -1035,6 +1042,7 @@ impl Manager {
             Op::Tabs(reply) => { let _ = reply.send(self.state()); }
             Op::NewTab { url, background, scratch, reply } => { let id = self.new_tab(url, !background, scratch); let _ = reply.send(id); }
             Op::Close { id, reply } => { self.close(id); let _ = reply.send(()); }
+            Op::AgentTab { id, opened, reply } => { self.shell(&format!("window.atriumShell?.agent({id}, {opened})")); let _ = reply.send(()); }
             Op::Navigate { tab, url, reply } => { let id = self.navigate(tab.or(self.active), url); let _ = reply.send(id); }
             Op::History { tab, action, reply } => {
                 let id = tab.or(self.active).filter(|id| self.tab(*id).is_some());

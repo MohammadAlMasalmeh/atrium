@@ -132,6 +132,13 @@ impl Agent {
         *self.current.lock().unwrap() = tab;
     }
 
+    /// Make `tab` the agent's page and tell the shell, so the chat view previews it.
+    /// `opened`: the agent created the tab, so it isn't one of the user's yet.
+    async fn adopt(&self, tab: u64, opened: bool) {
+        self.set_current(Some(tab));
+        let _ = self.browser.op(|reply| Op::AgentTab { id: tab, opened, reply }).await;
+    }
+
     pub fn current(&self) -> Option<u64> {
         *self.current.lock().unwrap()
     }
@@ -284,7 +291,7 @@ impl Agent {
             "open_tab" => {
                 let url = agent_url(&req("url")?)?;
                 let id = self.browser.op(|reply| Op::NewTab { url: Some(url), background: true, scratch: false, reply }).await?;
-                self.set_current(Some(id));
+                self.adopt(id, true).await;
                 self.wait_loaded(id).await;
                 Ok(text(format!("Opened a new tab.{}", self.changes(id).await)))
             }
@@ -301,7 +308,7 @@ impl Agent {
                 };
                 let t = (*tabs.get(idx).ok_or_else(|| anyhow!("no tab with index {idx}"))?).clone();
                 if name == "switch_tab" {
-                    self.set_current(Some(t.id));
+                    self.adopt(t.id, false).await;
                     self.seen.lock().unwrap().remove(&t.id);
                     Ok(text(format!("The agent now works in [{idx}] {} — {}", t.title, t.url)))
                 } else {
@@ -332,7 +339,7 @@ impl Agent {
                     (_, None) => {
                         let url = agent_url(&url)?;
                         let id = self.browser.op(|reply| Op::NewTab { url: Some(url), background: true, scratch: false, reply }).await?;
-                        self.set_current(Some(id));
+                        self.adopt(id, true).await;
                         id
                     }
                 };
@@ -379,7 +386,7 @@ impl Agent {
                                     Some(t) => self.browser.op(|reply| Op::Navigate { tab: Some(t), url: url.clone(), reply }).await?,
                                     None => {
                                         let id = self.browser.op(|reply| Op::NewTab { url: Some(url.clone()), background: true, scratch: false, reply }).await?;
-                                        self.set_current(Some(id));
+                                        self.adopt(id, true).await;
                                         id
                                     }
                                 };

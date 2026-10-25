@@ -694,6 +694,7 @@ const S = {
   pinned: store.get('pinned', {}),   // space id -> [{ url, title }]
   tabSpace: new Map(), lastTab: new Map(),
   agentTabs: new Map(),              // session id -> tab the agent works in
+  agentOwned: new Set(),             // tabs the agent opened: out of the sidebar until the user opens one
   pw: new Map(),                     // tab id -> password offer (origin and usernames only)
   chatsFolded: store.get('chatsFolded', false),
   peek: false,                       // the hidden sidebar is floating over the page
@@ -703,7 +704,7 @@ const spaceColor = (sp) => SPACE_COLORS[(sp?.color || 0) % SPACE_COLORS.length];
 const curSpace = () => S.spaces.find((s) => s.id === S.space) || S.spaces[0];
 const tabById = (id) => S.tabs.find((t) => t.id === id);
 const activeTab = () => tabById(S.active);
-const spaceTabs = () => S.tabs.filter((t) => t.kind === 'web' && (S.tabSpace.get(t.id) ?? S.space) === S.space);
+const spaceTabs = () => S.tabs.filter((t) => t.kind === 'web' && !S.agentOwned.has(t.id) && (S.tabSpace.get(t.id) ?? S.space) === S.space);
 const pinnedHere = () => (S.pinned[S.space] ||= []);
 const onWeb = () => { const t = activeTab(); return S.view === 'tab' && !!t && t.kind === 'web'; };
 const agentTabOf = (sid) => { const id = S.agentTabs.get(sid); return id != null && tabById(id) ? id : null; };
@@ -713,6 +714,9 @@ window.atriumShell = {
   state(st) {
     const prev = S.active;
     S.tabs = st.tabs.filter((t) => t.kind !== 'scratch'); S.active = st.active; S.split = st.split; S.glance = st.glance;
+    // An agent tab the user opens becomes one of theirs.
+    S.agentOwned.delete(S.active); S.agentOwned.delete(S.split);
+    for (const id of S.agentOwned) if (!tabById(id)) S.agentOwned.delete(id);
     for (const t of S.tabs) if (!S.tabSpace.has(t.id)) S.tabSpace.set(t.id, S.space);
     const sp = S.tabSpace.get(S.active);
     if (sp != null && sp !== S.space && st.reveal) { S.space = sp; store.set('space', sp); }
@@ -766,9 +770,10 @@ window.atriumShell = {
     }
     reportUi();
   },
-  // The agent is working in tab `id`.
-  agent(id) {
+  // The agent is working in tab `id`, which it `opened` itself or took over from the user.
+  agent(id, opened) {
     if (chat.id) S.agentTabs.set(chat.id, id);
+    if (opened && id !== S.active) S.agentOwned.add(id);
     if (!S.tabSpace.has(id)) S.tabSpace.set(id, S.space);
     pip.refresh(true); render();
   },
