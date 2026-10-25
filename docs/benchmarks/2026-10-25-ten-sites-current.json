@@ -1,0 +1,110 @@
+{
+ "date": "2026-10-25",
+ "method": "Memory and load times of ad-heavy sites with built-in ad blocking on and off.\n\nEach condition starts this build as a background test instance with a fresh data\ndirectory, opens the sites one at a time in foreground tabs, and samples the process\ntree once every page has loaded and sat live for --settle seconds. The site count\nof the ad-heavy set stays within the live-tab budget, so no page is evicted; a longer\n--sites list measures the browser as eviction leaves it. Memory includes the WebKit\nprocesses behind the shell that appear during the run.\n",
+ "summary": {
+  "on": {
+   "footprint_mib": 1221.7,
+   "processes": 16,
+   "renderers": 10,
+   "load_ms_median": 1075.5,
+   "fcp_ms_median": 304,
+   "frames": 24.0
+  }
+ },
+ "runs": [
+  {
+   "blocking": true,
+   "pages": [
+    {
+     "url": "https://www.google.com/search?q=chromium+browser",
+     "fcp": 180,
+     "frames": 1,
+     "load": 1430,
+     "ready": "complete",
+     "resources": 61
+    },
+    {
+     "url": "https://www.youtube.com/",
+     "fcp": 304,
+     "frames": 2,
+     "load": 1489,
+     "ready": "complete",
+     "resources": 46
+    },
+    {
+     "url": "https://mail.google.com/",
+     "fcp": 560,
+     "frames": 3,
+     "load": 1222,
+     "ready": "complete",
+     "resources": 99
+    },
+    {
+     "url": "https://github.com/tauri-apps/cef-rs",
+     "fcp": 728,
+     "frames": 1,
+     "load": 929,
+     "ready": "complete",
+     "resources": 162
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/Web_browser",
+     "fcp": 404,
+     "frames": 1,
+     "load": 556,
+     "ready": "complete",
+     "resources": 31
+    },
+    {
+     "url": "https://www.bbc.com/news",
+     "fcp": 104,
+     "frames": 10,
+     "load": 1876,
+     "ready": "complete",
+     "resources": 150
+    },
+    {
+     "url": "https://developer.mozilla.org/en-US/docs/Web/API",
+     "fcp": 272,
+     "frames": 1,
+     "load": 177,
+     "ready": "complete",
+     "resources": 63
+    },
+    {
+     "url": "https://stackoverflow.com/questions/tagged/rust",
+     "fcp": null,
+     "frames": 1,
+     "load": 195,
+     "ready": "complete",
+     "resources": 6
+    },
+    {
+     "url": "https://www.reddit.com/r/rust/",
+     "fcp": 740,
+     "frames": 3,
+     "load": 1505,
+     "ready": "complete",
+     "resources": 57
+    },
+    {
+     "url": "https://news.ycombinator.com/",
+     "fcp": 284,
+     "frames": 1,
+     "load": 318,
+     "ready": "complete",
+     "resources": 7
+    }
+   ],
+   "footprint_mib": 1221.7,
+   "rss_mib": 1691.1,
+   "processes": 16,
+   "renderers": 10,
+   "live_tabs": 6,
+   "content_blocking": {
+    "blocked_requests": 45,
+    "enabled": true
+   }
+  }
+ ]
+}
