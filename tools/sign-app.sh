@@ -1,7 +1,9 @@
 #!/bin/sh
 # Sign an Atrium.app bundle inside-out with per-process entitlements.
 #
-#   ATRIUM_SIGN_IDENTITY     "Developer ID Application: ..." (or its SHA-1). Unset or "-" signs ad hoc.
+#   ATRIUM_SIGN_IDENTITY     "Developer ID Application: ..." (or its SHA-1). "-" signs ad hoc. Unset
+#                            uses this Mac's Apple Development identity when there is one (not on CI),
+#                            otherwise ad hoc.
 #   ATRIUM_SIGN_KEYCHAIN     optional keychain to search for the identity (CI).
 #   ATRIUM_HARDENED_RUNTIME  1 to use the hardened runtime for an ad hoc signature (local testing).
 #
@@ -15,6 +17,12 @@ usage() { echo "usage: $0 path/to/App.app" >&2; exit 2; }
 APP=${1%/}
 [ -d "$APP/Contents/MacOS" ] || usage
 ENTITLEMENTS="$(cd "$(dirname "$0")" && pwd)/entitlements"
+# Keychain access is granted to a signature's designated requirement. An ad hoc one changes
+# with every build, so each rebuild asks for the login keychain password again; a development
+# certificate keeps "Always Allow" across rebuilds.
+if [ -z "${ATRIUM_SIGN_IDENTITY+set}" ] && [ -z "${CI:-}" ]; then
+    ATRIUM_SIGN_IDENTITY=$(/usr/bin/security find-identity -v -p codesigning 2>/dev/null | sed -n 's/^ *[0-9]*) [0-9A-F]* "\(Apple Development: .*\)"$/\1/p' | head -1)
+fi
 IDENTITY=${ATRIUM_SIGN_IDENTITY:--}
 [ -n "$IDENTITY" ] || IDENTITY=-
 
@@ -22,7 +30,14 @@ WORK=$(mktemp -d /private/tmp/atrium-sign.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 set -- --force --sign "$IDENTITY"
 ADHOC_RUNTIME=0
-if [ "$IDENTITY" != "-" ]; then
+case "$IDENTITY" in
+    "Apple Development:"*) DEVELOPMENT=1 ;;
+    *) DEVELOPMENT=0 ;;
+esac
+if [ "$DEVELOPMENT" = "1" ]; then
+    # Local builds only: no secure timestamp, so signing works offline.
+    set -- "$@" --options runtime --timestamp=none
+elif [ "$IDENTITY" != "-" ]; then
     set -- "$@" --options runtime --timestamp
 elif [ "${ATRIUM_HARDENED_RUNTIME:-0}" = "1" ]; then
     set -- "$@" --options runtime --timestamp=none

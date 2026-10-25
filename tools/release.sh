@@ -27,6 +27,8 @@ VERSION=$(/usr/bin/plutil -extract CFBundleVersion raw "$APP_SRC/Contents/Info.p
 case "$(uname -m)" in arm64) ARCH=arm64 ;; *) ARCH=x86_64 ;; esac
 IDENTITY=${ATRIUM_SIGN_IDENTITY:--}
 [ -n "$IDENTITY" ] || IDENTITY=-
+# Releases never fall back to sign-app.sh's local development identity.
+export ATRIUM_SIGN_IDENTITY="$IDENTITY"
 
 DIST=dist
 STAGE=$DIST/stage
