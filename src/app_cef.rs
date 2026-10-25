@@ -142,6 +142,7 @@ enum Event {
     Capture(u64, bool),
     Download(u64, u32, bool),
     Popup(String),
+    Adopt(Browser),
     Command(Json),
     Quit,
     DevResult(i32, bool, Json),
@@ -207,6 +208,7 @@ struct Manager {
     next_id: u64,
     next_call: i32,
     pending: HashMap<i32, (Instant, u64, Pending)>,
+    adopted: std::collections::HashSet<i32>,
     closing: Arc<AtomicBool>,
 }
 impl Manager {
@@ -797,6 +799,10 @@ impl Manager {
                 self.restore_session();
                 let mut maintenance = Maintenance::new(self.bridge.clone());
                 post_delayed_task(ThreadId::UI, Some(&mut maintenance), 10000);
+                if mac::background() {
+                    let mut sweep = Sweep::new(self.bridge.clone());
+                    post_delayed_task(ThreadId::UI, Some(&mut sweep), 250);
+                }
             }
             Event::Created(id, browser) => {
                 let mut observer = DevObserver::new(self.bridge.clone());
@@ -908,6 +914,23 @@ impl Manager {
             Event::Popup(url) => {
                 self.new_tab(Some(url), true, false);
             }
+            Event::Adopt(browser) => {
+                let url = foreign_url(&browser);
+                let id = browser.identifier();
+                if url.starts_with("devtools://") || self.adopted.contains(&id) {
+                    return;
+                }
+                let Some(host) = browser.host() else { return };
+                mac::hide_window(host.window_handle());
+                // The first commit can be a blank placeholder before the requested page.
+                if url.is_empty() || url == "about:blank" {
+                    return;
+                }
+                self.adopted.insert(id);
+                eprintln!("opened a Chromium-created window as a tab: {url}");
+                self.new_tab(Some(url), true, false);
+                host.close_browser(1);
+            }
             Event::DevResult(id, success, data) => self.finish(id, success, data),
             Event::Quit => {
                 self.save_session();
@@ -949,7 +972,31 @@ fn on_before_command_line_processing(&self, process_type:Option<&CefString>,comm
     }
 }
 fn browser_process_handler(&self)->Option<BrowserProcessHandler>{Some(HostProcess::new(self.bridge.clone()))}} }
-wrap_browser_process_handler! {struct HostProcess {bridge:Bridge} impl BrowserProcessHandler {fn on_context_initialized(&self){self.bridge.send(Event::Init);}}}
+wrap_browser_process_handler! {struct HostProcess {bridge:Bridge} impl BrowserProcessHandler {
+    fn on_context_initialized(&self){self.bridge.send(Event::Init);}
+    // Chromium itself creates top-level browser windows for extension tabs.create, windows.create,
+    // and openOptionsPage. They are hidden at once and their pages reopened as Atrium tabs.
+    fn default_client(&self)->Option<Client>{Some(ForeignClient::new(self.bridge.clone()))}
+}}
+wrap_client! {struct ForeignClient {bridge:Bridge} impl Client {
+    fn life_span_handler(&self)->Option<LifeSpanHandler>{Some(ForeignLife::new(self.bridge.clone()))}
+    fn display_handler(&self)->Option<DisplayHandler>{Some(ForeignDisplay::new(self.bridge.clone()))}
+}}
+wrap_life_span_handler! {struct ForeignLife {bridge:Bridge} impl LifeSpanHandler {
+    fn on_after_created(&self,browser:Option<&mut Browser>){
+        let Some(b)=browser else{return};
+        if !foreign_url(b).starts_with("devtools://") { if let Some(host)=b.host() { mac::hide_window(host.window_handle()); } }
+        self.bridge.send(Event::Adopt(b.clone()));
+    }
+    fn on_before_popup(&self, _unused7:Option<&mut Browser>, _unused8:Option<&mut Frame>, _unused9:i32,url:Option<&CefString>, _unused10:Option<&CefString>, _unused11:WindowOpenDisposition, _unused12:i32, _unused13:Option<&PopupFeatures>, _unused14:Option<&mut WindowInfo>, _unused15:Option<&mut Option<Client>>, _unused16:Option<&mut BrowserSettings>, _unused17:Option<&mut Option<DictionaryValue>>, _unused18:Option<&mut i32>)->i32{if let Some(u)=url{self.bridge.send(Event::Popup(u.to_string()));}1}
+}}
+wrap_display_handler! {struct ForeignDisplay {bridge:Bridge} impl DisplayHandler {
+    fn on_address_change(&self,browser:Option<&mut Browser>,frame:Option<&mut Frame>, _unused20:Option<&CefString>){if let (Some(b),true)=(browser,frame.is_some_and(|f|f.is_main()!=0)){self.bridge.send(Event::Adopt(b.clone()));}}
+}}
+fn foreign_url(browser: &Browser) -> String {
+    browser.main_frame().map(|f| CefString::from(&f.url()).to_string()).unwrap_or_default()
+}
+wrap_task! {struct Sweep {bridge:Bridge} impl Task {fn execute(&self){mac::sweep();if self.bridge.manager.upgrade().is_some(){let mut next=Self::new(self.bridge.clone());post_delayed_task(ThreadId::UI,Some(&mut next),250);}}}}
 wrap_browser_view_delegate! {struct HostView {} impl ViewDelegate {} impl BrowserViewDelegate {fn browser_runtime_style(&self)->RuntimeStyle{RuntimeStyle::ALLOY} fn chrome_toolbar_type(&self, _unused0:Option<&mut BrowserView>)->ChromeToolbarType{ChromeToolbarType::NONE}}}
 wrap_window_delegate! {
     struct HostWindow {bridge:Bridge,closing:Arc<AtomicBool>}
@@ -1060,6 +1107,7 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
             next_id: 0,
             next_call: 0,
             pending: HashMap::new(),
+            adopted: Default::default(),
             closing,
         })
     });
