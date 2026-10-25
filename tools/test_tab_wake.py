@@ -25,10 +25,11 @@ class Fixture(BaseHTTPRequestHandler):
         gate = gates.get(self.path)
         if gate:
             gate.wait(20)
+        image = '<img src="/fifth-image" width="1" height="1">' if self.path == '/fifth' else ''
         body = f'''<!doctype html><title>Wake {self.path}</title>
           <style>body{{margin:0;background:coral}}section{{height:2000px}}
           section+section{{background:royalblue}}</style>
-          <section>{self.path}</section><section>Saved scroll position</section>
+          <section>{self.path}</section><section>Saved scroll position</section>{image}
           <script>if (!sessionStorage.seen) {{ sessionStorage.seen = 1; scrollTo(0, 2400); }}</script>'''.encode()
         self.send_response(200)
         self.send_header('Content-Type', 'text/html')
@@ -121,11 +122,12 @@ with tempfile.TemporaryDirectory(prefix='atrium-wake-', dir='/private/tmp') as d
         second = opened('/second')
         third = opened('/third')
         fourth = opened('/fourth')
+        fifth = opened('/fifth')
         control = opened('/control')
         opened('/filler')
         client.command(cmd='activate', id=control)
         print('Waiting for real policy eviction (minimum idle: 30 seconds)', flush=True)
-        wait(lambda: all(tab(id)['suspended'] for id in (first, second, third, fourth)), 'policy eviction', 85)
+        wait(lambda: all(tab(id)['suspended'] for id in (first, second, third, fourth, fifth)), 'policy eviction', 85)
         wait(lambda: memory()['live_renderers'] <= 2, 'renderer budget')
         check(True, 'memory pressure still releases renderers to the two-tab budget')
 
@@ -148,6 +150,19 @@ with tempfile.TemporaryDirectory(prefix='atrium-wake-', dir='/private/tmp') as d
         client.tool('switch_tab', {'index': next(i for i, t in enumerate(client.api('/api/browser/tabs')['tabs']) if t['id'] == first)})
         check(json.loads(client.tool('evaluate', {'code': 'return scrollY;'})[0]['text']) == 2400,
               'scroll position is restored before the live page is revealed')
+
+        # A parsed page is shown at first paint, while an image still keeps it loading.
+        gates['/fifth-image'] = Event()
+        started = time.monotonic()
+        client.command(cmd='activate', id=fifth)
+        wait(lambda: in_place(fifth), 'parsed handoff', 5)
+        elapsed = time.monotonic() - started
+        still_loading = next(t for t in client.api('/api/browser/tabs')['tabs'] if t['id'] == fifth)['loading']
+        check(elapsed < 1.5 and still_loading, f'a parsed page replaces its snapshot before its images finish ({elapsed:.2f} s)')
+        client.tool('switch_tab', {'index': next(i for i, t in enumerate(client.api('/api/browser/tabs')['tabs']) if t['id'] == fifth)})
+        check(json.loads(client.tool('evaluate', {'code': 'return scrollY;'})[0]['text']) == 2400,
+              'an early handoff still restores the scroll position')
+        gates['/fifth-image'].set()
 
         # A page that never finishes loading is handed over after the fallback delay.
         gates['/second'] = Event()

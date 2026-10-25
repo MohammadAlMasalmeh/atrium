@@ -225,6 +225,8 @@ enum Event {
     /// The main frame started loading a document (true) or failed to (false).
     Document(u64, bool),
     Loaded(u64),
+    /// The main frame's document exists; a waking tab can be shown once it has parsed and painted.
+    DocumentReady(u64),
     /// A waking tab has had long enough to load; show it even if it hasn't finished.
     WakeTimeout(u64),
     Capture(u64, bool),
@@ -1021,6 +1023,15 @@ impl Manager {
             FROZEN.lock().unwrap().remove(&key);
         }
     }
+    /// Shows a waking tab once its document has parsed and painted at the saved scroll
+    /// position, without waiting for images and subframes; the load event and the
+    /// timeout remain as fallbacks.
+    fn reveal_parsed(&mut self, id: u64) {
+        let Some(tab) = self.tab_mut(id).filter(|t| t.waking && t.browser.is_some()) else { return };
+        let scroll = tab.scroll.take().map(|(x, y)| format!("scrollTo({x}, {y});")).unwrap_or_default();
+        self.isolated(id, format!("new Promise((done) => {{ const ready = () => {{ {scroll} requestAnimationFrame(() => requestAnimationFrame(() => done(true))); }}; \
+            if (document.readyState === 'loading') addEventListener('DOMContentLoaded', ready, {{ once: true }}); else ready(); }})"), false, Pending::Woken(id));
+    }
     /// Replaces a waking tab's snapshot with its live view.
     fn woken(&mut self, id: u64) {
         let Some(tab) = self.tab_mut(id).filter(|t| t.waking) else { return };
@@ -1666,6 +1677,7 @@ impl Manager {
                 }
             }
             Event::Crashed(id, reason) => self.crashed(id, &reason),
+            Event::DocumentReady(id) => self.reveal_parsed(id),
             Event::Loaded(id) => {
                 if let Some(t) = self.tab_mut(id) {
                     t.document_loading = false;
@@ -1884,6 +1896,7 @@ fn is_about(url: &str, base: &str) -> bool {
 }
 // Tabs never load the API origin, so no page shares the shell's origin and storage.
 wrap_request_handler! {struct TabRequests {bridge:Bridge,id:u64,base:String} impl RequestHandler {
+    fn on_document_available_in_main_frame(&self, _browser:Option<&mut Browser>){self.bridge.send(Event::DocumentReady(self.id));}
     fn on_render_process_terminated(&self, _unused50:Option<&mut Browser>, status:TerminationStatus, code:i32, error:Option<&CefString>){self.bridge.send(Event::Crashed(self.id, termination_reason(status, code, error)));}
     fn on_before_browse(&self, _browser:Option<&mut Browser>, _frame:Option<&mut Frame>, request:Option<&mut Request>, _user_gesture:i32, _is_redirect:i32)->i32{
         request.is_some_and(|r| {
