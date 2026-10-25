@@ -43,6 +43,8 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/frozen/:slot", get(frozen))
         .route("/api/state", get(state))
         .route("/api/browser/command", post(browser_command))
+        .route("/api/browser/action", post(browser_action))
+        .route("/api/browser/downloads", get(browser_downloads))
         .route("/api/browser/memory", get(browser_memory))
         .route("/api/browser/tabs", get(browser_tabs))
         .route("/api/sessions", get(sessions))
@@ -424,6 +426,17 @@ async fn browser_command(State(app): Shared, Json(body): Json<Value>) -> Json<Va
     Json(match app.agent.browser.op(|reply| Op::Shell { body, reply }).await {
         Ok(()) => json!({"ok":true}), Err(e) => json!({"error":e.to_string()})
     })
+}
+/// Browser commands that answer: find, zoom, print to PDF, save page, downloads, closed tabs.
+async fn browser_action(State(app): Shared, Json(body): Json<Value>) -> Json<Value> {
+    Json(match app.agent.browser.op(|reply| Op::Action { body, reply }).await {
+        Ok(Ok(value)) => json!({ "ok": true, "result": value }),
+        Ok(Err(e)) => json!({ "error": e }),
+        Err(e) => json!({ "error": e.to_string() }),
+    })
+}
+async fn browser_downloads(State(app): Shared) -> Json<Value> {
+    browser_action(State(app), Json(json!({ "cmd": "downloads" }))).await
 }
 async fn browser_memory(State(app): Shared) -> Json<Value> {
     Json(app.agent.browser.op(Op::Memory).await.unwrap_or_else(|e|json!({"error":e.to_string()})))

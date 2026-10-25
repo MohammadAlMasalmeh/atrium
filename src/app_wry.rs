@@ -91,6 +91,8 @@ pub enum Op {
     Tabs(Reply<TabsState>),
     Shell { body: Value, reply: Reply<()> },
     Memory(Reply<Value>),
+    /// Chromium-only browser commands (find, zoom, printing, downloads).
+    Action { body: Value, reply: Reply<Result<Value, String>> },
     /// Background tabs open without taking focus (the agent's own pages).
     /// Scratch tabs are invisible to the user (background reads).
     NewTab { url: Option<String>, background: bool, scratch: bool, reply: Reply<u64> },
@@ -131,6 +133,11 @@ pub enum UserEvent {
 pub struct Handle(Arc<Mutex<EventLoopProxy<UserEvent>>>);
 
 impl Handle {
+    pub fn open_urls(&self, urls: Vec<String>) {
+        for url in urls {
+            let _ = self.send(UserEvent::Op(Op::NewTab { url: Some(url), background: false, scratch: false, reply: oneshot::channel().0 }));
+        }
+    }
     fn send(&self, ev: UserEvent) -> Result<()> {
         self.0
             .lock()
@@ -549,7 +556,7 @@ impl Browser {
     fn handle_op(&mut self, op: Op) {
         // Tell the shell which tab the agent is touching so it can show it.
         let touched = match &op {
-            Op::Tabs(_) | Op::InspectGoogle { .. } | Op::Shell { .. } | Op::Memory(_) | Op::Cdp { .. } | Op::Accessibility { .. } => None,
+            Op::Tabs(_) | Op::InspectGoogle { .. } | Op::Shell { .. } | Op::Memory(_) | Op::Cdp { .. } | Op::Accessibility { .. } | Op::Action { .. } => None,
             Op::Eval { tab, .. } | Op::Act { tab, .. } | Op::Navigate { tab, .. } | Op::History { tab, .. } | Op::Screenshot { tab, .. } => Some(tab.or(self.active)),
             _ => Some(None),
         };
@@ -558,6 +565,7 @@ impl Browser {
             Op::Memory(reply) => { let _ = reply.send(json!({"engine":"WebKit","tabs":self.tabs.len()})); }
             Op::Cdp { reply, .. } => { let _ = reply.send(Err("DevTools methods need the Chromium engine".into())); }
             Op::Accessibility { reply, .. } => { let _ = reply.send(json!({"error":"Accessibility state needs the Chromium engine"})); }
+            Op::Action { body: _, reply } => { let _ = reply.send(Err("This command needs the Chromium engine".into())); }
             Op::Tabs(r) => {
                 let _ = r.send(self.state());
             }
