@@ -75,33 +75,36 @@ Stack Overflow, Daily Mail), all open at once, median of two runs
 | Page load (median) | 1,406 ms | 832 ms | **−41%** |
 | First contentful paint (median) | 480 ms | 328 ms | **−32%** |
 
-**Against Google Chrome**, ten popular sites opened one at a time in a visible
-window (`tools/bench_three_way.py`, Chrome 155; Atrium two runs, Chrome one):
+**Against Google Chrome and Aside**, ten popular sites opened one at a time, each
+in a new foreground tab of a visible window, one run each on 2026-10-25
+(`tools/bench_three_way.py`, Chrome 155, Aside on Chromium 154):
 
-| | Atrium | Chrome |
-| --- | --- | --- |
-| Memory, no tabs | **181 MiB** | 628 MiB |
-| Memory, 10 tabs after 6 min idle | **2,418 MiB** | 2,904 MiB |
-| Memory, 10 tabs live | **1,222 MiB** | 3,272 MiB |
-| Startup to a ready window | **0.7 s** | 1.2 s |
-| Switching back to an idle tab | reloads (evicted) | **instant** |
-
-The 10-live-tab Atrium figure is from the current build with ad blocking, in a
-background window 60 s after the last page loaded (one run, 16 processes,
-`docs/benchmarks/2026-10-25-ten-sites-current.json`). Before ad blocking it was
-4,990 MiB. Atrium's startup is the median of fresh and warm launches with a
-visible window, timed until the shell reports ready (an earlier harness run
-reported 3.3 s, measured just after a rebuild). Chrome's figures are from the
-earlier windowed run, where startup ends when its DevTools port is up.
+| | Atrium | Chrome | Aside |
+| --- | --- | --- | --- |
+| Memory, no tabs | **261 MiB** | 582 MiB | 1,425 MiB |
+| Memory, 10 tabs live (60 s after the last load) | **1,351 MiB** | 4,656 MiB | 6,315 MiB |
+| Memory, 10 tabs after 6 min idle | **1,046 MiB** | 3,189 MiB | 4,094 MiB |
+| Processes, 10 tabs live | **20** | 92 | 93 |
+| Startup | 2.0 s | **1.0 s** | 2.8 s |
+| First contentful paint (median) | 526 ms | **316 ms** | 400 ms |
+| Load event (median) | 1,084 ms | **787 ms** | 1,108 ms |
+| Switching back to an idle tab | 0.6–1.8 s (reloads) | **0.1 s** | **0.1 s** |
 
 Where Atrium is behind:
-- **Idle tabs:** Atrium frees memory by evicting idle tabs, so they reload when
-  selected again.
+- **First paint and load:** on the same pages Chrome paints first. Atrium also
+  loads fuller pages on some sites (see below).
+- **Startup:** Chrome is up in half the time. Atrium's figure runs until the shell
+  and first tab are ready; Chrome's ends when its DevTools port opens.
+- **Idle tabs:** Atrium keeps memory low by evicting idle tabs, so switching back
+  reloads them.
 
-Page timings against Chrome are not compared here, because on some sites Chrome
-received a lighter page (Reddit: 44 DOM nodes in Chrome against 3,481 in Atrium).
-Methodology and raw results are in [docs/chromium.md](docs/chromium.md) and
-[docs/benchmarks](docs/benchmarks).
+Page timings are medians over the eight sites where all three browsers received
+the same page. On Google Search and Reddit, Chrome and Aside were served a
+lightweight page (49 and 44 DOM nodes) while Atrium got the full one (4,624 and
+3,253), so those two sites are left out. Memory is the physical footprint of the
+browser's process tree, including Atrium's shell WebKit processes. Raw results are
+in [docs/benchmarks/2026-10-25-three-way-current.json](docs/benchmarks/2026-10-25-three-way-current.json);
+methodology is in [docs/chromium.md](docs/chromium.md).
 
 ## Infrastructure
 
