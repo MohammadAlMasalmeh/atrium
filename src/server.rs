@@ -240,7 +240,7 @@ mod tests {
     use crate::app::{TabInfo, TabsState};
     #[test]
     fn mentions_cannot_reach_the_shell_or_scratch_pages() {
-        let tab = |id, kind| TabInfo { id, kind, title: String::new(), url: String::new(), loading: false, icon: None, suspended: false };
+        let tab = |id, kind| TabInfo { id, kind, title: String::new(), url: String::new(), loading: false, icon: None, suspended: false, crashed: false };
         let state = TabsState { tabs: vec![tab(1, "web"), tab(2, "scratch"), tab(3, "newtab")], active: Some(1) };
         assert_eq!(web_tabs(&state, &[crate::app::SHELL, 2, 3, 1, 1, 99]), vec![1]);
     }
