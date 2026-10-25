@@ -58,6 +58,47 @@ The app menu's **About** item opens a page with the app, Chromium, and CEF
 versions and every third-party notice, including the Chromium credits shipped in
 the bundle.
 
+## Performance
+
+Measured on an Apple Silicon Mac with fresh profiles. Memory is the physical
+footprint of the browser's whole process tree (what Activity Monitor calls Memory),
+including the WebKit processes behind Atrium's shell.
+
+**Built-in ad blocking** on six ad-heavy sites (BBC News, CNN, Forbes, weather.com,
+Stack Overflow, Daily Mail), all open at once, median of two runs
+(`tools/bench_content_blocking.py`):
+
+| | Blocking off | Blocking on | Change |
+| --- | --- | --- | --- |
+| Memory | 4,775 MiB | 1,775 MiB | **−63%** |
+| Processes | 74 | 18.5 | **−75%** |
+| Page load (median) | 1,406 ms | 832 ms | **−41%** |
+| First contentful paint (median) | 480 ms | 328 ms | **−32%** |
+
+**Against Google Chrome**, ten popular sites opened one at a time in a visible
+window (`tools/bench_three_way.py`, Chrome 155; Atrium two runs, Chrome one):
+
+| | Atrium | Chrome |
+| --- | --- | --- |
+| Memory, no tabs | **181 MiB** | 628 MiB |
+| Memory, 10 tabs after 6 min idle | **2,418 MiB** | 2,904 MiB |
+| Memory, 10 tabs live | 4,990 MiB | **3,272 MiB** |
+| Startup | 3.3 s | **1.2 s** |
+| Switching back to an idle tab | reloads (evicted) | **instant** |
+
+Where Atrium is behind:
+- **Live memory and the process count:** this run predates ad blocking. It was
+  driven by ad frames, which the A/B above cuts by about two thirds.
+- **Startup:** most of the time goes to showing the visible window. The shell is
+  ready 0.8 s after launch in a background window.
+- **Idle tabs:** Atrium frees memory by evicting idle tabs, so they reload when
+  selected again.
+
+Page timings against Chrome are not compared here, because on some sites Chrome
+received a lighter page (Reddit: 44 DOM nodes in Chrome against 3,481 in Atrium).
+Methodology and raw results are in [docs/chromium.md](docs/chromium.md) and
+[docs/benchmarks](docs/benchmarks).
+
 ## Infrastructure
 
 - Sandboxed CEF subprocesses and a persistent Chromium profile.
@@ -65,6 +106,10 @@ the bundle.
 - Background tab eviction, with a six-page target and a five-minute idle timeout.
   Active/split pages, drafts, media checks, downloads, capture, and agent work can
   prevent eviction. Selecting an evicted tab reloads it.
+- Built-in ad blocking: third-party requests to about 60 ad exchanges, ad servers,
+  and ID-sync endpoints are refused, so ad frames never get their own renderer
+  processes. Top-level navigations and analytics scripts are left alone.
+  `ATRIUM_CONTENT_BLOCKING=0` turns it off.
 - Limits background assistant reads to three concurrent operations, with page cleanup on cancellation.
 - Browser automation through CEF's DevTools protocol: navigation, page reading,
   element actions, JavaScript evaluation, and screenshots.
