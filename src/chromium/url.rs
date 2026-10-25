@@ -22,6 +22,6 @@ pub fn normalize_url(raw: &str) -> String {
                 _ => format!("%{b:02X}"),
             })
             .collect();
-        format!("https://www.google.com/search?q={q}")
+        crate::migration::search::query_url(&q)
     }
 }

@@ -140,6 +140,7 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
         extensions.push(path);
     }
     extensions::record_review(&dir, &extensions);
+    migration::search::load(&dir.join("import"));
     let _ = CHROME_EXTENSIONS.set(extensions);
     let ui = format!("http://127.0.0.1:{}", args.port);
 

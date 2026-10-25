@@ -3,10 +3,16 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 import argparse
+import html
+import json
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
+        if path.startswith('/cookies'):
+            # Echoes the Cookie request header so tests can check what the browser sent.
+            received = json.dumps({'host': self.headers.get('Host', ''), 'cookie': self.headers.get('Cookie', '')})
+            return self.send(f'<!doctype html><meta charset="utf-8"><title>Cookies</title><pre id="received">{html.escape(received)}</pre>'.encode())
         draft = 'draft' in path
         body = f'''<!doctype html><meta charset="utf-8"><title>Fixture {path}</title>
         <h1>Chromium fixture</h1><button id="increment">Increment</button><output id="count">0</output>
@@ -16,6 +22,8 @@ class Handler(BaseHTTPRequestHandler):
         let count = 0; document.querySelector('#increment').onclick = () => document.querySelector('#count').value = ++count;
         {'document.querySelector("#draft").value = "Unsaved test draft";' if draft else ''}
         </script>'''.encode()
+        self.send(body)
+    def send(self, body):
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.send_header('Cache-Control', 'no-store')
