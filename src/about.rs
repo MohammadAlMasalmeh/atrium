@@ -7,6 +7,8 @@ use axum::{
 
 use crate::brand;
 
+const PROJECT_LICENSE_TEXT: &str = include_str!("../LICENSE");
+const PROJECT_NOTICE: &str = include_str!("../NOTICE");
 const NOTICES: &str = include_str!("../THIRD-PARTY-NOTICES.txt");
 const CEF_LICENSE: &str = include_str!("../docs/licenses/CEF-LICENSE.txt");
 const CHROMIUM_LICENSE: &str = include_str!("../docs/licenses/Chromium-LICENSE.txt");
@@ -59,11 +61,7 @@ fn secured(content_type: &'static str, body: impl IntoResponse) -> Response {
 
 pub fn page_html() -> String {
     let name = esc(brand::PRODUCT_NAME);
-    let license = if brand::PROJECT_LICENSE.is_empty() {
-        "Not yet chosen".to_string()
-    } else {
-        esc(brand::PROJECT_LICENSE)
-    };
+    let license = esc(brand::PROJECT_LICENSE);
     let engine = match engine_versions() {
         Some((cef, chromium)) => format!(
             r#"<dt>Chromium</dt><dd id="chromium-version">{}</dd><dt>CEF</dt><dd id="cef-version">{}</dd>"#,
@@ -98,6 +96,9 @@ a {{ color: #0a84ff; }}
 <dt>Bundle ID</dt><dd id="bundle-id">{bundle_id}</dd>
 <dt>License</dt><dd id="project-license">{license}</dd>
 </dl>
+<h2 id="atrium-license">Atrium license</h2>
+<pre id="project-notice-text">{project_notice}</pre>
+<pre id="project-license-text">{project_license_text}</pre>
 <h2>Third-party software</h2>
 <p>{name} includes Chromium, the Chromium Embedded Framework, and the Rust crates listed below.</p>
 <ul>
@@ -115,6 +116,8 @@ a {{ color: #0a84ff; }}
 </body></html>"##,
         version = env!("CARGO_PKG_VERSION"),
         bundle_id = esc(brand::BUNDLE_ID),
+        project_notice = esc(PROJECT_NOTICE),
+        project_license_text = esc(PROJECT_LICENSE_TEXT),
         cef_license = esc(CEF_LICENSE),
         chromium_license = esc(CHROMIUM_LICENSE),
         notices = esc(NOTICES),

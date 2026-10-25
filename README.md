@@ -5,11 +5,19 @@
 > update themselves; the Chromium engine is only as current as the pinned CEF
 > version. Do not use it for sensitive browsing. See [SECURITY.md](SECURITY.md).
 
-<!-- TODO(maintainer): choose the license before publishing. -->
 | | |
 | --- | --- |
 | **Name** | **Atrium**, set in `src/brand.rs` (see [CONTRIBUTING.md](CONTRIBUTING.md#renaming-the-product)). It is not affiliated with the commercial Aside browser. |
-| **License** | *Not yet chosen.* Until a `LICENSE` file is added, no license is granted. Third-party components keep their own licenses; see [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). |
+| **License** | [Apache License 2.0](LICENSE). Contributions and forks are welcome. Third-party components keep their own licenses; see [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). |
+
+## License
+
+Atrium's original code is licensed under the [Apache License, Version 2.0](LICENSE).
+You may use, modify, distribute, and sell it under those terms. Redistributions
+must include the license and preserve the applicable notices, including the
+attribution in [NOTICE](NOTICE); modified files must identify changes as required
+by Section 4. See [CONTRIBUTING.md](CONTRIBUTING.md#contribution-license) for
+contribution terms. Third-party components retain their own licenses.
 
 Atrium is a macOS browser written in Rust, using Chromium Embedded Framework (CEF) for
 websites and a local OpenCode server for the assistant. Chromium is the default

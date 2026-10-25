@@ -216,8 +216,8 @@ try:
     check(page['chromium'] == page['runtime'],
           f'Chromium version {page["chromium"]} matches the running engine ({page["runtime"]})')
     check(bool(re.fullmatch(r'\d+\.\d+\.\d+\+g[0-9a-f]+', page['cef'] or '')), f'About page shows the CEF version {page["cef"]}')
-    check(page['bundle'] == bundle_id and page['license'] == (brand('PROJECT_LICENSE') or 'Not yet chosen'),
-          'About page shows the bundle ID and project license placeholder')
+    check(page['bundle'] == bundle_id and page['license'] == brand('PROJECT_LICENSE'),
+          'About page shows the bundle ID and project license')
     check(page['notices'] == digest('THIRD-PARTY-NOTICES.txt') and page['crates'] == 4,
           'About page shows the complete THIRD-PARTY-NOTICES.txt')
     check(page['cefLicense'] == digest('docs/licenses/CEF-LICENSE.txt')

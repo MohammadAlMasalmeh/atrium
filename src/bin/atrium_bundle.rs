@@ -52,6 +52,8 @@ fn main() -> anyhow::Result<()> {
         }
         let resources = path.join("Contents/Resources");
         std::fs::create_dir_all(&resources)?;
+        std::fs::write(resources.join("LICENSE"), include_str!("../../LICENSE"))?;
+        std::fs::write(resources.join("NOTICE"), include_str!("../../NOTICE"))?;
         std::fs::write(
             resources.join("crash_reporter.cfg"),
             include_str!("../../assets/crash_reporter.cfg"),

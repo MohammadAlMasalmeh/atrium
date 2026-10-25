@@ -9,5 +9,5 @@ pub const BUNDLE_ID: &str = "dev.atrium-rs.browser";
 pub const EXECUTABLE: &str = "atrium";
 /// Default profile directory under the home directory. Changing it orphans existing profiles.
 pub const DATA_DIR: &str = ".atrium-rs";
-/// The project's own license (SPDX expression), shown on the About page. Empty until chosen.
-pub const PROJECT_LICENSE: &str = "";
+/// The project's own license (SPDX identifier), shown on the About page.
+pub const PROJECT_LICENSE: &str = "Apache-2.0";

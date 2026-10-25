@@ -6,6 +6,19 @@ Thanks for helping. This is an experimental macOS browser in Rust that embeds
 Chromium through CEF. Read [docs/chromium.md](docs/chromium.md) first; it explains
 the architecture, what is verified, and what is missing.
 
+## Contribution license
+
+Atrium's original code uses the [Apache License, Version 2.0](LICENSE).
+Unless you explicitly state otherwise, contributions you intentionally submit
+for inclusion are licensed under those same terms (Section 5). Contributors
+retain copyright in their work; submitting a contribution does not assign
+ownership to the maintainer. Submit only work you have the right to license,
+and identify separately licensed third-party code and its notices.
+
+Forks and redistributions must comply with Section 4 of [LICENSE](LICENSE),
+including preserving applicable attribution from [NOTICE](NOTICE) and identifying
+changes in modified files.
+
 ## Build
 
 Requirements: macOS (Apple Silicon is what has been exercised), Rust stable, Xcode
