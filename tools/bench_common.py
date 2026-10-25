@@ -286,6 +286,30 @@ class CefInstance:
     def command(self, **data):
         return self.client.command(**data)
 
+    def focus(self, tab_id, attempts=8):
+        """Make tab_id the agent's page. switch_tab takes an index into the non-scratch tabs as the
+        app sees them when the tool runs, which can differ from an earlier listing while a close
+        is in flight, so the choice is confirmed against a fresh listing."""
+        for _ in range(attempts):
+            listing = lambda: [t['id'] for t in self.api('/api/browser/tabs')['tabs'] if t.get('kind') != 'scratch']
+            ids = listing()
+            if tab_id not in ids:
+                raise RuntimeError(f'tab {tab_id} is not open')
+            index = ids.index(tab_id)
+            try:
+                self.client.tool('switch_tab', {'index': index})
+            except AssertionError:
+                time.sleep(.5)
+                continue
+            if listing() == ids:
+                return index
+            time.sleep(.5)
+        raise RuntimeError(f'could not select tab {tab_id} for the agent')
+
+    def evaluate(self, tab_id, code):
+        self.focus(tab_id)
+        return json.loads(self.client.tool('evaluate', {'code': code})[0]['text'])
+
     def devtools(self, method, params=None, tab=None):
         result = self.client.request('/api/browser/devtools', {'tab': tab, 'method': method, 'params': params or {}}, timeout=40)
         if 'error' in result:
@@ -322,6 +346,12 @@ class AsideBaseline:
     Aside uses a different profile and is never contacted.
     """
 
+    # Headless mode advertises "HeadlessChrome" and navigator.webdriver, and sites serve such
+    # clients fewer ads and embeds, so the baseline presents itself like a windowed Aside.
+    CHROME_MAJOR = 154
+    USER_AGENT = ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) '
+                  f'Chrome/{CHROME_MAJOR}.0.0.0 Safari/537.36')
+
     # Aside's sidebar and toolbar take 280x42 px; this window gives a 1024x808 page viewport.
     def __init__(self, profile, scale_factor=2, size=(1304, 850)):
         self.profile = Path(profile)
@@ -332,7 +362,8 @@ class AsideBaseline:
         self.process = subprocess.Popen(
             [ASIDE, '--headless', f'--user-data-dir={self.profile}', '--remote-debugging-port=0', '--no-first-run',
              '--no-default-browser-check', '--use-mock-keychain', f'--window-size={size[0]},{size[1]}',
-             f'--force-device-scale-factor={scale_factor}'],
+             f'--force-device-scale-factor={scale_factor}', f'--user-agent={self.USER_AGENT}',
+             '--disable-blink-features=AutomationControlled'],
             stdout=self._log, stderr=self._log)
         self.guard = Guard(self.process.pid)
         self.pid = self.process.pid
@@ -350,6 +381,9 @@ class AsideBaseline:
             raise RuntimeError(f'Aside baseline did not start (exit {self.process.returncode}); guard {self.guard.finish()}')
         self.port = int(port_file.read_text().splitlines()[0])
         self.version = self.json('/json/version')
+        if not self.version.get('Browser', '').startswith(f'Chrome/{self.CHROME_MAJOR}.'):
+            self.stop()
+            raise RuntimeError(f'Aside is now {self.version.get("Browser")}; update AsideBaseline.CHROME_MAJOR')
         # Tabs created before Aside's startup window exists can be dropped; wait for its first page.
         for _ in range(60):
             if any(t.get('type') == 'page' for t in self.json('/json/list')):

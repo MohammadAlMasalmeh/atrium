@@ -51,7 +51,8 @@ EXPRESSION = """({url:location.href,title:document.title,ready:document.readySta
 visibility:document.visibilityState,viewport:[innerWidth,innerHeight,devicePixelRatio],
 textLength:document.body?.innerText.length || 0, preview:document.body?.innerText.slice(0,350) || '',
 nodes:document.querySelectorAll('*').length,resources:performance.getEntriesByType('resource').length,
-iframes:document.querySelectorAll('iframe').length})"""
+iframes:document.querySelectorAll('iframe').length,userAgent:navigator.userAgent,webdriver:navigator.webdriver,
+brands:(navigator.userAgentData?.brands || []).map(b => b.brand + '/' + b.version).join(', ')})"""
 
 
 def log(*items, **kwargs):
@@ -125,13 +126,22 @@ def run_cef(run, exclude=()):
         if REAL:
             time.sleep(20)
             for site in sites:
+                try:
+                    inst.api('/api/browser/memory', timeout=30)
+                except Exception as error:
+                    raise RuntimeError(f'CEF browser stopped responding: {error}') from error
                 info = inspect_cef(inst, site['cef_id'])
                 reason = valid(info, site) if isinstance(info, dict) else str(info)
                 if not reason and site['name'] in exclude:
                     reason = 'Excluded because it failed in the baseline'
                 (excluded if reason else accepted).append({'name': site['name'], 'reason': reason, 'page': public(info)})
-                if reason:
-                    inst.command(cmd='close', id=site['cef_id'])
+            rejected = {s['cef_id'] for s in sites if any(e['name'] == s['name'] for e in excluded)}
+            for tab_id in rejected:
+                inst.command(cmd='close', id=tab_id)
+            for _ in range(60):
+                if not rejected & {t['id'] for t in inst.api('/api/browser/tabs')['tabs']}:
+                    break
+                time.sleep(.5)
             # Renew agent protection so every accepted page is live in the first phase.
             for site in sites:
                 if any(a['name'] == site['name'] for a in accepted):
@@ -145,12 +155,14 @@ def run_cef(run, exclude=()):
             else:
                 raise RuntimeError('CEF fixture workload did not load')
             accepted = [{'name': s['name'], 'reason': None} for s in sites]
-            tabs = inst.api('/api/browser/tabs')
-            index = next(i for i, t in enumerate(tabs['tabs']) if t['id'] == tabs['active'])
-            inst.client.tool('switch_tab', {'index': index})
-            result['active_page'] = public(json.loads(inst.client.tool('evaluate', {'code': 'return ' + EXPRESSION + ';'})[0]['text']))
+            result['active_page'] = public(inst.evaluate(inst.api('/api/browser/tabs')['active'], 'return ' + EXPRESSION + ';'))
         start = time.monotonic()
-        views = lambda: inst.api('/api/browser/memory')['live_renderers']
+        def views():
+            try:
+                return inst.api('/api/browser/memory', timeout=30)['live_renderers']
+            except (AssertionError, urllib.error.URLError, TimeoutError) as error:
+                log('CEF: live-view count unavailable:', str(error)[:120])
+                return None
         log('CEF: pages ready; live phase')
         wait_until(start, LIVE_AT)
         result['live'] = sample_phase(inst.pid, LIVE_SAMPLES, LIVE_EVERY, views)
@@ -169,17 +181,14 @@ def run_cef(run, exclude=()):
 def inspect_cef(inst, tab_id):
     try:
         inst.command(cmd='activate', id=tab_id)
-        tabs = inst.api('/api/browser/tabs')['tabs']
-        index = next(i for i, t in enumerate(tabs) if t['id'] == tab_id)
-        inst.client.tool('switch_tab', {'index': index})
         last = None
         for _ in range(30):
             try:
-                info = json.loads(inst.client.tool('evaluate', {'code': 'return ' + EXPRESSION + ';'})[0]['text'])
+                info = inst.evaluate(tab_id, 'return ' + EXPRESSION + ';')
                 last = info
                 if info.get('ready') in ('interactive', 'complete') and info.get('textLength', 0) > 80:
                     return info
-            except (AssertionError, urllib.error.URLError, json.JSONDecodeError) as error:
+            except (AssertionError, RuntimeError, urllib.error.URLError, json.JSONDecodeError) as error:
                 last = str(error)
             time.sleep(1)
         return last
@@ -286,16 +295,24 @@ try:
                 raise SystemExit(f'Visibility guard failed for {outcome["browser"]}: {outcome["guard"]}')
             if outcome['system_slept_seconds'] > 5:
                 raise SystemExit(f'The Mac slept for {outcome["system_slept_seconds"]} s during a measurement; rerun')
+            log(outcome['browser'], 'accepted', [a['name'] for a in outcome['accepted']],
+                'excluded', [(e['name'], e['reason']) for e in outcome['excluded']])
             for phase in ('live', 'idle'):
                 log(outcome['browser'], phase, 'footprint', outcome[phase]['footprint_mib'], 'rss', outcome[phase]['rss_mib'],
-                    'processes', outcome[phase]['process_count'])
+                    'processes', outcome[phase]['process_count'],
+                    {k: v.get('count') for k, v in outcome[phase]['by_type'].items()}, outcome[phase].get('cef_live_views', ''))
         if args.cef_only:
             record['comparable'] = False
         else:
             names = lambda b: sorted(a['name'] for a in record[b]['accepted'])
             record['comparable'] = names('CEF build') == names('Aside (headless)')
         runs.append(record)
+        record = None
         args.output.write_text(json.dumps({'partial': True, 'runs': runs}, indent=2) + '\n')
+except BaseException as error:
+    unfinished = [record] if globals().get('record') else []
+    args.output.write_text(json.dumps({'partial': True, 'error': repr(error)[:500], 'runs': runs + unfinished}, indent=2) + '\n')
+    raise
 finally:
     if fixture:
         fixture.stop()
@@ -307,7 +324,9 @@ report = {
                'median/min/max across runs.'),
     'method': {
         'baseline': None if args.cef_only else ('Installed Aside started with --headless, a throwaway profile, '
-                                                '--force-device-scale-factor=2 and 1024x808 targets; no windows, Prohibited activation policy.'),
+                                                '--force-device-scale-factor=2 and 1024x808 targets; no windows, Prohibited activation policy. '
+                                                'It sends the windowed Chrome 154 user agent and navigator.webdriver is false; its '
+                                                'User-Agent Client Hints brands are empty because of the override.'),
         'candidate': 'This repository\'s release bundle with ASIDE_BACKGROUND_WINDOW=1 and ASIDE_MOCK_KEYCHAIN=1, fresh data directory.',
         'sequencing': ('Browsers run one at a time; real sites run the baseline first and the CEF run closes sites the '
                        'baseline rejected; fixtures alternate the order per repetition.'),
@@ -315,7 +334,8 @@ report = {
                    'idle': f'{IDLE_SAMPLES} samples every {IDLE_EVERY}s from {IDLE_AT}s after pages were ready'},
         'cef_policy': 'max 6 live content views (plus the shell), 30 s minimum idle, agent inspection protects 180 s',
         'visibility_guard': 'window_audit.swift (50 ms polling, SIGKILL on frontmost, visible window, or Regular policy after 1 s) and watchdog.sh',
-        'caveats': ['Headless Aside has no browser UI, sidebar, or visible window; the CEF build includes its shell renderer.',
+        'caveats': ['Headless Aside renders its own browser UI (sidebar and toolbar) without any window; the CEF build '
+                    'includes its shell renderer. Neither is the same as a visible, interactive window.',
                     'Background CEF pages report visibilityState hidden; headless targets report visible.',
                     'The system was shared with other agents and builds; load is recorded per browser run.'],
     },
