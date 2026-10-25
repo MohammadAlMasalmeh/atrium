@@ -71,6 +71,138 @@ CEF framework, sandbox helper executables, Chromium credits, and verified ad hoc
 signatures. CEF updates require changing the pin, rebuilding, and re-running the
 integration checks. There is no automatic updater or notarized distribution yet.
 
+## Accessibility
+
+### Engine
+
+CEF does not turn on Chromium's platform accessibility by itself; the embedder
+must detect an assistive client and call `SetAccessibilityState`. The
+application class (`src/chromium/mac.rs`) handles the attributes assistive
+clients set on `NSApp`: `AXEnhancedUserInterface` (VoiceOver) and
+`AXManualAccessibility` (Voice Control, Switch Control, and others). The UI
+thread also reads `NSWorkspace.isVoiceOverEnabled` at startup and every ten
+seconds. While any of these is on, every BrowserHost, including the shell and
+browsers created later, is set to `STATE_ENABLED` (Chromium's complete mode, with
+native `NSAccessibility` objects). When all of them turn off, the hosts are set to
+`STATE_DISABLED`, as cefclient does. `ATRIUM_FORCE_ACCESSIBILITY=1` keeps it on.
+Without an assistive client, the window's native tree has no web areas, so
+idle users don't pay for the accessibility tree.
+
+Native focus order: the shell BrowserView comes first, then page views. A
+`CefFocusHandler` turns `OnTakeFocus` (tabbing past either end of a document)
+into an explicit move. Tab past the end of a page goes to the assistant panel if
+it is open, otherwise to the start of the sidebar. Shift+Tab before the start of
+a page goes to the end of the sidebar. In the shell, Tab from the last sidebar
+control enters the page, and Shift+Tab from the first assistant control returns
+to it. F6 toggles focus between the page and the sidebar's current tab. Escape
+in a Glance page closes Glance. Shell commands are now sent one at a time and in
+order, so a "focus the page" request cannot overtake the command that opens that
+page. If the page is not visible yet, the request waits up to two seconds for the
+shell to uncover it.
+
+### Shell
+
+- Landmarks: the sidebar is a navigation landmark, the page area is `main`, and
+  the docked assistant is a complementary landmark. Headings mark the space name,
+  Chats, and the chat title.
+- Pinned and open tabs are `tablist`/`tab` with `aria-selected` on the active tab.
+  Tab names include loading, sleeping, split view, and assistant activity. The
+  two lists share one roving Tab stop. ArrowUp and ArrowDown move between rows
+  and wrap, Home and End jump to the first and last row, Enter or Space activates
+  a tab, and Delete or Backspace closes it (or unpins a pinned page). After a
+  close, focus moves to the neighboring row. When a row is re-rendered, focus
+  follows its id.
+- Icon-only buttons have names and `aria-keyshortcuts`. Toggle buttons
+  (Assistant, Pin, Spaces, Search/Ask) expose `aria-pressed`. The address
+  control is a button named with the current URL. Start page rows, chat rows,
+  the agent preview, and step groups (with `aria-expanded`) respond to the
+  keyboard. Decorative SVG icons are hidden from assistive technology.
+- The command bar and Glance are modal dialogs. The rest of the shell is
+  `inert` while either is open. The command bar input is a combobox whose
+  results are a grouped listbox with `aria-activedescendant`. Tab stays inside
+  the dialog; in Glance it cycles through the header buttons and the Glance page.
+  Escape, or running an action, returns focus to where it came from: a shell
+  control, or the page when the dialog was opened from the page.
+- Toasts and a hidden announcer are polite `status` regions. They announce when
+  the assistant starts working, its reply (the first 280 characters), permission
+  requests, and closed or unpinned tabs. Streaming text in the conversation log
+  is not live, so it is not read token by token. The start page field no longer
+  traps Tab when it is empty (Tab still switches Search/Ask while typing).
+- Focus rings use `:focus-visible` with the accent color, and the address bar
+  uses the existing accent glow. A hidden sidebar is `visibility: hidden`, so its
+  controls leave the Tab order. Hiding it while focus is inside moves focus out.
+- `prefers-reduced-motion: reduce` stops looping animations (spinners, pulses,
+  shimmer) and transitions (sidebar slide, loading bar, toasts).
+- Contrast: `--fg-2` and `--fg-3` were raised (light .66/.56, dark .7/.56). Link
+  and mention text uses `--accent-text`, and selected rows and primary buttons use
+  `--accent-strong` (AccentColor mixed toward black or white). Error text uses
+  `--danger`. All text colors reach 4.5:1 on the card, menu, and field surfaces
+  in light and dark mode, checked with the accent color the test build resolves.
+  A light system accent color such as yellow can fall below that for accent text,
+  because the mix ratio is fixed.
+
+### Testing
+
+`tools/test_accessibility.py` starts its own fixture server (port 7821),
+background instance (port 7820, with `ATRIUM_MOCK_KEYCHAIN=1`,
+`ATRIUM_BACKGROUND_WINDOW=1`, and `ATRIUM_DEBUG_API=1`), and watchdog, then exits
+non-zero on any failure:
+
+```sh
+python3 tools/test_accessibility.py --verbose
+```
+
+It uses two token-protected endpoints. They are enabled only in debug builds or
+when `ATRIUM_DEBUG_API=1` is set at launch:
+
+- `POST /api/debug/cdp` `{tab: id | "shell" | null, method, params}` runs an
+  allowlisted DevTools method (`Accessibility.*` tree reads,
+  `Input.dispatchKeyEvent`, `Emulation.setEmulatedMedia`,
+  `Emulation.setFocusEmulationEnabled`, `Runtime.evaluate`) through
+  `Manager::cdp`.
+- `POST /api/debug/accessibility` `{assistive?: bool, tree?: bool}` reports
+  whether accessibility is enabled, VoiceOver state, and which view has native
+  focus. `assistive` sends `AXManualAccessibility` to `NSApp` in process, the
+  same path an assistive client uses. `tree` walks the window's
+  `NSAccessibility` tree in process, which needs no TCC permission.
+
+The test checks the shell's tree (landmarks, tab roles and selection, button
+names and pressed states, live regions, dialog semantics, and that every button,
+tab, link, and field is named). It drives the sidebar and command bar with real
+key events from `Input.dispatchKeyEvent`. It checks native focus moving with the
+focus command, F6, Tab, and Shift+Tab across view boundaries. It reads a fixture
+page's tree (heading, button, labelled textarea, link) and checks that the native
+tree has no web areas before an assistive client and, after one, has `AXWebArea`
+nodes for both the shell and the page with `AXTabGroup`/`AXRadioButton` tabs. It
+also checks reduced motion and contrast in light and dark mode under emulated
+media, and that the instance never became frontmost. Background windows can't be
+key, so the shell's document focus is emulated, and keys are injected through
+DevTools rather than the window server.
+
+### Needs a manual VoiceOver pass
+
+This was not run with VoiceOver, because test instances must not start it or
+request Accessibility permission. Before release, a person should check, in a
+normal window with VoiceOver on (⌘F5):
+
+- Chromium turns on within a moment of VoiceOver starting, and turns off after.
+- VO+arrow navigation across the sidebar, page, and assistant, and the rotor's
+  landmark, heading, and form lists.
+- How tab rows are announced (selected state, position, the Delete hint), and the
+  address, toggle, and dialog announcements.
+- Toasts and assistant replies are spoken once, not repeatedly while text streams.
+- F6, Tab, and Shift+Tab with real keyboard focus. The test used emulated
+  document focus. In a real window, check that focus lands visibly after closing
+  the focused tab and when an overlay closes.
+- Glance, popups, native `<select>` model pickers, and the `prompt()` used to
+  rename spaces.
+- Increase Contrast, Reduce Motion, and Reduce Transparency system settings, and
+  non-blue accent colors.
+
+Not covered: Favorites can only be removed with a right-click, spaces can only be
+renamed with a double-click, and Voice Control labels for page content are not
+tested.
+
 ## Memory behavior
 
 `src/memory.rs` chooses the oldest eligible background pages. The default target
@@ -253,7 +385,8 @@ Chrome Sync have not been validated or implemented here.
   and update/rollback infrastructure.
 - Extension permission management and tests against real required extensions.
 - Renderer-crash recovery, complete popup/opener and OAuth behavior, permission
-  prompts, downloads, printing, accessibility, and broader website compatibility.
+  prompts, downloads, printing, a manual VoiceOver pass (see Accessibility), and
+  broader website compatibility.
 - Password management, passkeys, account migration, and local API isolation
   beyond the same-user token.
 - Per-tab history/scroll restoration and better media-aware eviction coverage.
