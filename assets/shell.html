@@ -515,7 +515,8 @@ window.atriumShell = {
     switch (name) {
       case 'commandBar': openCmdk(''); break;
       case 'editUrl': openCmdk(onWeb() ? activeTab().url : '', true); break;
-      case 'toggleSidebar': document.body.classList.toggle('sb-hidden'); layoutSoon(); break;
+      // Report now as well: hidden or busy windows can delay the next animation frame.
+      case 'toggleSidebar': document.body.classList.toggle('sb-hidden'); layoutNow(); layoutSoon(); break;
       case 'toggleAssistant': toggleSide(); break;
       case 'toggleSplit': toggleSplit(); break;
       case 'newChat': newChat(true); break;

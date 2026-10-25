@@ -225,7 +225,13 @@ def native_suite(app):
     check('shell overlays cover the native chrome', overlays)
 
     def capture():
-        png = app.api('/api/debug/window.png', raw=True)
+        def attempt():
+            try:
+                return app.api('/api/debug/window.png', raw=True)
+            except urllib.error.HTTPError as e:
+                raise urllib.error.URLError(f'{e.code}: {e.read().decode(errors="replace")}')
+        # The window server can return nothing for an off-screen window while it is busy.
+        png = wait('window image', attempt, timeout=10)
         assert png[:8] == b'\x89PNG\r\n\x1a\n', png[:40]
         return f'{len(png)} bytes'
     check('window capture', capture)
