@@ -242,15 +242,33 @@ Public websites vary by time, region, cookies, viewport, and browser version;
 signed-in Gmail and user documents are outside this test.
 
 [Partial report](benchmarks/2026-10-24-guarded-real-sites.json): two
-completed repetitions, the third stopped (see the hang below). No conclusion
-can be drawn. Renderer counts on these sites follow ad and embed iframes:
-Aside alone went from 84 renderers (6,008 MiB) to 37 (3,262 MiB) within two
-minutes with no eviction, and in run 2 this build ran 82 renderers
-(4,999 MiB live, 4,638 MiB after eviction to 7 views) against Aside's 40
-(2,968 MiB) on the same eight sites. The variance within one browser is larger
-than any difference between them. Whether this build's renderers outlive
-evicted pages on real sites (79 renderers with 7 views) is under separate
-investigation and was only measured here.
+completed repetitions; the third stopped when this build hung (below). In
+both completed runs the browsers accepted the same eight sites; YouTube (not
+rendered in time headless) and Reddit (challenge page) were excluded from
+both. CEF had all 9 views live in the first phase and 7 after eviction. Load
+average 8–57.
+
+| Run | Phase | Aside footprint (processes) | This build footprint (processes) | Reduction |
+| --- | --- | ---: | ---: | ---: |
+| 1 | All pages live | 5,813 MiB (95) | 5,349 MiB (92) | 8.0% |
+| 1 | After eviction | 3,612 MiB (53) | 2,889 MiB (43) | 20.0% |
+| 2 | All pages live | 2,968 MiB (50) | 4,999 MiB (88) | −68.5% |
+| 2 | After eviction | 2,908 MiB (50) | 4,638 MiB (85) | −59.5% |
+| 3 | All pages live | 6,008 MiB (94) | hung | |
+| 3 | After eviction | 3,262 MiB (47) | | |
+
+**These results support no memory claim for real websites, in either
+direction.** Renderers are 80–90% of both footprints, and their number follows
+the ads and embeds a site serves at that moment: Aside alone ran 85, 40, and
+84 renderers in three runs and in run 3 fell from 84 to 37 within two minutes
+with no eviction; Stack Overflow reported 1 iframe in one Aside run and 22 in
+the next. The browsers run minutes apart and never see the same ad auction.
+Two differences were consistent: this build's GPU process used 219–278 MiB
+against Aside's 132–138 MiB on these pages (the reverse of the fixture
+result), and in run 2 this build kept 79 renderers with 7 live views. That
+fits renderers outliving evicted pages; it is under separate investigation
+and was only measured here. A fair comparison needs identical content, for
+example a Web Page Replay archive served to both browsers, and more runs.
 
 **Hang observed.** In the third real-site repetition the CEF browser process
 stopped responding 44 seconds after launch while the sites loaded: the UI
