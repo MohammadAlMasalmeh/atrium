@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Atrium marks</title>
+<style>
+  :root { --paper: #F3F1EC; --ink: #141414; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 56px; background: var(--paper); color: var(--ink);
+         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; background: #dcd9d2;
+          border: 2px solid #dcd9d2; }
+  .tile { background: var(--paper); padding: 40px 36px 28px; }
+  .stage { height: 280px; display: grid; place-items: center; }
+  .stage svg { width: 168px; height: 168px; fill: var(--ink); }
+  .meta { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; }
+  .label { font-size: 13px; letter-spacing: .02em; color: #7a776f; }
+  .label b { color: var(--ink); font-weight: 600; margin-right: 6px; }
+  .uses { display: flex; gap: 10px; align-items: center; }
+  .icon { width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; }
+  .icon svg { width: 26px; height: 26px; }
+  .icon.dark { background: var(--ink); } .icon.dark svg { fill: var(--paper); }
+  .icon.light { background: #fff; box-shadow: inset 0 0 0 1px #e2dfd8; } .icon.light svg { fill: var(--ink); }
+  .tiny svg { width: 16px; height: 16px; fill: var(--ink); display: block; }
+  .lockups { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; background: #dcd9d2;
+             border: 2px solid #dcd9d2; border-top: 0; }
+  .lockup { padding: 56px; display: flex; align-items: center; gap: 18px; }
+  .lockup svg { width: 54px; height: 54px; }
+  .lockup.on-light { background: var(--paper); } .lockup.on-light svg { fill: var(--ink); }
+  .lockup.on-dark { background: var(--ink); color: var(--paper); } .lockup.on-dark svg { fill: var(--paper); }
+  .wm-sans { font-size: 52px; font-weight: 600; letter-spacing: -0.045em; }
+  .wm-serif { font-family: "New York", ui-serif, Georgia, serif; font-size: 54px; font-weight: 500; letter-spacing: -0.02em; }
+</style>
+</head>
+<body>
+<div class="grid" id="grid"></div>
+<div class="lockups" id="lockups"></div>
+
+<script>
+const marks = {
+  Gateway: `<path fill-rule="evenodd" d="M10 92 V50 A40 40 0 0 1 90 50 V92 Z M36 92 V64 A14 14 0 0 1 64 64 V92 Z"/>`,
+
+  Oculus: `<path fill-rule="evenodd" d="M50 8 A42 42 0 1 1 49.99 8 Z M50 22 A18 18 0 1 0 50.01 22 Z"/>`,
+
+  Courtyard: `<defs><mask id="m-court"><rect width="100" height="100" fill="#fff"/><circle cx="50" cy="50" r="17" fill="#000"/></mask></defs>
+    <g mask="url(#m-court)"><rect x="8" y="8" width="39" height="39" rx="5"/><rect x="53" y="8" width="39" height="39" rx="5"/>
+    <rect x="8" y="53" width="39" height="39" rx="5"/><rect x="53" y="53" width="39" height="39" rx="5"/></g>`,
+
+  Threshold: `<path d="M12 92 V50 A38 38 0 0 1 46.5 12.16 V92 Z"/><path d="M88 92 V50 A38 38 0 0 0 53.5 12.16 V92 Z"/>`,
+
+  Arcade: `<g fill="none" stroke="currentColor" stroke-width="8">
+    <path d="M10 92 V50 A40 40 0 0 1 90 50 V92"/><path d="M27 92 V58 A23 23 0 0 1 73 58 V92"/></g>
+    <path d="M44 92 V66 A6 6 0 0 1 56 66 V92 Z"/>`,
+
+  Daybreak: `<path fill="none" stroke="currentColor" stroke-width="9" d="M16 92 V50 A34 34 0 0 1 84 50 V92"/>
+    <path d="M30 92 A20 20 0 0 1 70 92 Z"/>`,
+};
+const svg = (name) => `<svg viewBox="0 0 100 100" style="color:inherit">${marks[name]}</svg>`;
+
+const grid = document.getElementById("grid");
+for (const name of Object.keys(marks)) {
+  grid.insertAdjacentHTML("beforeend", `
+    <div class="tile">
+      <div class="stage">${svg(name)}</div>
+      <div class="meta">
+        <div class="label"><b>${name}</b></div>
+        <div class="uses">
+          <div class="icon dark">${svg(name)}</div>
+          <div class="icon light">${svg(name)}</div>
+          <div class="tiny">${svg(name)}</div>
+        </div>
+      </div>
+    </div>`);
+}
+document.getElementById("lockups").innerHTML = `
+  <div class="lockup on-light">${svg("Gateway")}<span class="wm-sans">atrium</span></div>
+  <div class="lockup on-dark">${svg("Oculus")}<span class="wm-serif">Atrium</span></div>`;
+
+// stroke-based marks inherit fill color via currentColor
+for (const el of document.querySelectorAll("svg")) el.style.color = getComputedStyle(el).fill;
+</script>
+</body>
+</html>

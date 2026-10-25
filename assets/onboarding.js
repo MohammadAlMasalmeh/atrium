@@ -18,6 +18,7 @@ const G = {
   agent: '<rect x="3" y="4.5" width="18" height="15" rx="3"/><path d="m7.5 10 3 2.5-3 2.5M13 15.5h3.5"/>',
 };
 const CHROME = `<svg viewBox="0 0 24 24"><path fill="#EA4335" d="M12 6h10.39A12 12 0 0 0 1.61 6L6.8 15A6 6 0 0 1 12 6Z"/><path fill="#FBBC04" d="M17.2 15 12 24A12 12 0 0 0 22.39 6H12a6 6 0 0 1 5.2 9Z"/><path fill="#34A853" d="M6.8 15 1.61 6A12 12 0 0 0 12 24l5.2-9a6 6 0 0 1-10.4 0Z"/><circle cx="12" cy="12" r="6" fill="#fff"/><circle cx="12" cy="12" r="4.7" fill="#4285F4"/></svg>`;
+const MARK = '<svg viewBox="10 10 80 82"><path fill-rule="evenodd" d="M10 92V50a40 40 0 0 1 80 0v42ZM36 92V64a14 14 0 0 1 28 0v28Z"/></svg>';
 const INSTALL_CMD = 'curl -fsSL https://opencode.ai/install | bash';
 
 const STEPS = ['welcome', 'import', 'assistant'];
@@ -44,7 +45,7 @@ const title = (t, sub) => `<h1 class="ob-title" id="ob-title">${t}</h1>${sub ? `
 // Each returns { html, primary: [label, handler, {busy, disabled}], skip: label|null, bind? }.
 const screens = {
   welcome: () => ({
-    html: title('Welcome to Atrium') + `<div class="ob-body"><div class="ob-features">
+    html: `<div class="ob-hero app">${MARK}</div>` + title('Welcome to Atrium') + `<div class="ob-body"><div class="ob-features">
       <div class="ob-feature">${svg(G.page)}<div><b>Ask about any page</b><p>Get summaries and answers from the pages you have open.</p></div></div>
       <div class="ob-feature">${svg(G.cursor)}<div><b>Let the assistant do the clicking</b><p>It can search, fill in forms and gather details in its own tab while you keep browsing.</p></div></div>
       <div class="ob-feature">${svg(G.sidebar)}<div><b>Keep tabs organized</b><p>Group tabs into spaces in the sidebar. Tabs you haven’t used in a while sleep to save memory.</p></div></div>

@@ -28,7 +28,7 @@ fn main() -> anyhow::Result<()> {
             &target.join(profile),
             brand::EXECUTABLE,
             "atrium_helper",
-            None,
+            Some(root.join("branding")),
             info,
         )?;
         let plutil = |args: &[&str], plist: &std::path::Path| -> anyhow::Result<()> {
@@ -116,8 +116,9 @@ fn main() -> anyhow::Result<()> {
             .arg(&path)
             .status()?;
         anyhow::ensure!(status.success(), "App signing or signature verification failed");
-        let final_path = output.join(format!("{}.app", brand::EXECUTABLE));
-        let backup = output.join(format!(".previous-{}.app", brand::EXECUTABLE));
+        // Finder, the Dock, and ⌘-Tab show the bundle's folder name, so it carries the product name.
+        let final_path = output.join(format!("{}.app", brand::PRODUCT_NAME));
+        let backup = output.join(format!(".previous-{}.app", brand::PRODUCT_NAME));
         if backup.exists() {
             std::fs::remove_dir_all(&backup)?;
         }
@@ -131,6 +132,16 @@ fn main() -> anyhow::Result<()> {
             return Err(error.into());
         }
         let _ = std::fs::remove_dir(&staging);
+        // Scripts and docs address the build as `<EXECUTABLE>.app`.
+        let alias = output.join(format!("{}.app", brand::EXECUTABLE));
+        if alias != final_path {
+            if alias.is_symlink() || alias.is_file() {
+                std::fs::remove_file(&alias)?;
+            } else if alias.exists() {
+                std::fs::remove_dir_all(&alias)?;
+            }
+            std::os::unix::fs::symlink(final_path.file_name().unwrap(), &alias)?;
+        }
         std::fs::write(output.join("profile.txt"), profile)?;
         println!("{}", final_path.display());
     }

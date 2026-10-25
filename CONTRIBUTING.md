@@ -98,7 +98,7 @@ on purpose, together:
 | Identifier | Where | Effect of changing |
 | --- | --- | --- |
 | `.atrium-rs` data directory | `brand::DATA_DIR` | Existing profiles are no longer found (migrate them) |
-| `atrium` executable and `atrium.app` | `brand::EXECUTABLE`, `[[bin]]` in `Cargo.toml`, `tools/*.py` defaults, docs | Build and script paths change |
+| `atrium` executable and `atrium.app` | `brand::EXECUTABLE`, `[[bin]]` in `Cargo.toml`, `tools/*.py` defaults, docs | Build and script paths change. The bundle itself is `<PRODUCT_NAME>.app`; `target/bundle/atrium.app` is a symlink to it |
 | `atrium_helper` helper binary | `Cargo.toml`, `src/bin/atrium_bundle.rs` | Bundle layout |
 | `ATRIUM_*` environment variables, `x-atrium-token` header | `src/main.rs`, `src/chromium/mac.rs`, `src/app_cef.rs`, `tools/atrium_api.py` | Test tooling and clients |
 | `atrium_*` MCP tool names, `atrium` MCP server name | `src/agent.rs`, `src/main.rs` | OpenCode sessions and prompts |

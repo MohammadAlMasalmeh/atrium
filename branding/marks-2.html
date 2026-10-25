@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Atrium marks, round 2</title>
+<style>
+  :root { --paper: #F3F1EC; --ink: #141414; --line: #dcd9d2; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 48px 56px; background: var(--paper); color: var(--ink);
+         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; }
+  h2 { font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #7a776f; margin: 0 0 14px; }
+  h2:not(:first-child) { margin-top: 40px; }
+  .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; background: var(--line); border: 2px solid var(--line); }
+  .tile { background: var(--paper); padding: 22px 18px 14px; }
+  .stage { height: 150px; display: grid; place-items: center; }
+  .stage svg { width: 104px; height: 104px; }
+  .meta { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+  .label { font-size: 12px; font-weight: 600; }
+  .uses { display: flex; gap: 6px; align-items: center; }
+  .icon { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; background: var(--ink); }
+  .icon svg { width: 17px; height: 17px; fill: var(--paper); color: var(--paper); }
+  .tiny svg { width: 16px; height: 16px; display: block; }
+  svg { fill: var(--ink); color: var(--ink); }
+</style>
+</head>
+<body>
+<h2>Gateway variations</h2>
+<div class="grid" id="gateway"></div>
+<h2>New directions</h2>
+<div class="grid" id="fresh"></div>
+
+<script>
+const door = (x1, x2, top, bottom = 100) => {
+  const r = (x2 - x1) / 2;
+  return `M${x1} ${bottom} V${top + r} A${r} ${r} 0 0 1 ${x2} ${top + r} V${bottom} Z`;
+};
+const gate = "M10 92 V50 A40 40 0 0 1 90 50 V92 Z";
+
+const gateway = {
+  Gateway: () => `<path fill-rule="evenodd" d="${gate} M36 92 V64 A14 14 0 0 1 64 64 V92 Z"/>`,
+  Tall: () => `<path fill-rule="evenodd" d="M16 92 V44 A34 34 0 0 1 84 44 V92 Z M38 92 V60 A12 12 0 0 1 62 60 V92 Z"/>`,
+  "Wide door": () => `<path fill-rule="evenodd" d="${gate} M30 92 V56 A20 20 0 0 1 70 56 V92 Z"/>`,
+  Offset: () => `<path fill-rule="evenodd" d="${gate} M52 92 V66 A12 12 0 0 1 76 66 V92 Z"/>`,
+  Pointed: () => `<path fill-rule="evenodd" d="M12 92 V62 A50 50 0 0 1 50 13.5 A50 50 0 0 1 88 62 V92 Z M38 92 V70 A16 16 0 0 1 50 54.5 A16 16 0 0 1 62 70 V92 Z"/>`,
+  Horseshoe: () => `<path fill-rule="evenodd" d="${gate} M38 92 V72.6 A16 16 0 1 1 62 72.6 V92 Z"/>`,
+  "A-frame": () => `<path fill-rule="evenodd" d="${gate} M36 92 V60 A14 14 0 0 1 64 60 V92 Z"/><rect x="36" y="68" width="28" height="7"/>`,
+  Chapel: () => `<path fill-rule="evenodd" d="${gate} M38 92 V68 A12 12 0 0 1 62 68 V92 Z M57 34 A7 7 0 1 1 43 34 A7 7 0 1 1 57 34 Z"/>`,
+  Rotunda: (id) => `<defs><mask id="${id}"><rect width="100" height="100" fill="#fff"/><path d="${door(37, 63, 52)}" fill="#000"/></mask></defs>
+    <circle cx="50" cy="50" r="42" mask="url(#${id})"/>`,
+  Block: (id) => `<defs><mask id="${id}"><rect width="100" height="100" fill="#fff"/><path d="${door(36, 64, 46)}" fill="#000"/></mask></defs>
+    <rect x="10" y="10" width="80" height="80" rx="12" mask="url(#${id})"/>`,
+  Aqueduct: () => `<path fill-rule="evenodd" d="M8 22 H92 V90 H8 Z ${door(15, 33, 46, 90)} ${door(41, 59, 46, 90)} ${door(67, 85, 46, 90)}"/>`,
+  Corridor: () => `<path fill-rule="evenodd" d="${gate} M26 92 V58 A24 24 0 0 1 74 58 V92 Z M39 92 V69 A11 11 0 0 1 61 69 V92 Z"/>`,
+};
+
+const fresh = {
+  Outline: () => `<path fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round" d="M13 89 V50 A37 37 0 0 1 87 50 V89 H64 V64 A14 14 0 0 0 36 64 V89 Z"/>`,
+  Grounded: () => `<path fill-rule="evenodd" d="M16 80 V48 A34 34 0 0 1 84 48 V80 Z M38 80 V62 A12 12 0 0 1 62 62 V80 Z"/><rect x="8" y="86" width="84" height="6" rx="3"/>`,
+  "Moon gate": () => `<path fill-rule="evenodd" d="M8 8 H92 V92 H8 Z M78 52 A28 28 0 1 1 22 52 A28 28 0 1 1 78 52 Z"/>`,
+  Alcove: () => `<path fill-rule="evenodd" d="M8 8 H92 V92 H8 Z M34 92 V61.1 A22 22 0 1 1 66 61.1 V92 Z"/>`,
+  Window: (id) => `<defs><mask id="${id}"><rect width="100" height="100" fill="#fff"/><rect x="47.5" y="0" width="5" height="100" fill="#000"/><rect x="0" y="54" width="100" height="5" fill="#000"/></mask></defs>
+    <path d="${door(20, 80, 10, 90)}" mask="url(#${id})"/>`,
+  Pantheon: (id) => `<defs><mask id="${id}"><rect width="100" height="100" fill="#fff"/><circle cx="50" cy="20" r="5" fill="#000"/></mask></defs>
+    <path d="M16 54 A34 34 0 0 1 84 54 Z" mask="url(#${id})"/><rect x="10" y="58" width="80" height="6"/>
+    <rect x="17" y="67" width="7" height="16"/><rect x="33" y="67" width="7" height="16"/><rect x="60" y="67" width="7" height="16"/><rect x="76" y="67" width="7" height="16"/>
+    <rect x="10" y="86" width="80" height="6"/>`,
+  Lightwell: () => `<path fill-rule="evenodd" d="M22 8 H78 A14 14 0 0 1 92 22 V78 A14 14 0 0 1 78 92 H22 A14 14 0 0 1 8 78 V22 A14 14 0 0 1 22 8 Z M34 22 H66 A4 4 0 0 1 70 26 V56 A4 4 0 0 1 66 60 H34 A4 4 0 0 1 30 56 V26 A4 4 0 0 1 34 22 Z"/>`,
+  Peristyle: () => `<circle cx="50" cy="50" r="15"/>` + Array.from({ length: 8 }, (_, i) => {
+      const a = (i / 8) * Math.PI * 2;
+      return `<circle cx="${50 + 37 * Math.cos(a)}" cy="${50 + 37 * Math.sin(a)}" r="7"/>`;
+    }).join(""),
+  Cloister: (id) => `<defs><mask id="${id}"><rect width="100" height="100" fill="#fff"/><rect x="31" y="31" width="38" height="38" rx="3" fill="#000"/><rect x="44" y="60" width="12" height="40" fill="#000"/></mask></defs>
+    <rect x="10" y="10" width="80" height="80" rx="8" mask="url(#${id})"/>`,
+  Crossroads: () => [0, 90, 180, 270].map(r => `<path transform="rotate(${r} 50 50)" d="M38 42 V20 A12 12 0 0 1 62 20 V42 Z"/>`).join(""),
+  Stoa: () => `<rect x="8" y="12" width="84" height="12" rx="2"/>` + [14, 34, 54, 74].map(x => `<rect x="${x}" y="30" width="12" height="50" rx="1"/>`).join("") + `<rect x="8" y="84" width="84" height="8" rx="2"/>`,
+  Keystone: () => `<path fill-rule="evenodd" d="${gate} M36 92 V64 A14 14 0 0 1 64 64 V92 Z M47 10 H53 V22 H47 Z"/>`,
+};
+
+function fill(el, set, prefix) {
+  Object.entries(set).forEach(([name, make], i) => {
+    const svg = (k) => `<svg viewBox="0 0 100 100">${make(`${prefix}${i}-${k}`)}</svg>`;
+    el.insertAdjacentHTML("beforeend", `
+      <div class="tile">
+        <div class="stage">${svg("a")}</div>
+        <div class="meta"><div class="label">${name}</div>
+          <div class="uses"><div class="icon">${svg("b")}</div><div class="tiny">${svg("c")}</div></div></div>
+      </div>`);
+  });
+}
+fill(document.getElementById("gateway"), gateway, "g");
+fill(document.getElementById("fresh"), fresh, "f");
+</script>
+</body>
+</html>

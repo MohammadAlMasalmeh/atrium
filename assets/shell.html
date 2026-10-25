@@ -137,7 +137,9 @@ body.is-frozen .frozen { display: block; }
 
 /* Start page */
 #ntp { background: var(--card); }
-.start { max-width: 680px; margin: 0 auto; padding: 20vh 32px 64px; }
+.start { max-width: 680px; margin: 0 auto; padding: max(40px, calc(20vh - 76px)) 32px 64px; }
+.brand { display: flex; align-items: baseline; justify-content: center; gap: .26em; margin-bottom: 28px; color: var(--fg); font: 700 48px/1 -apple-system, "SF Pro Display", var(--font); letter-spacing: -.05em; user-select: none; }
+.brand svg { width: .66em; height: .68em; fill: currentColor; flex: none; }
 .omni { border-radius: 16px; background: var(--field); padding: 10px 10px 10px 14px; display: flex; align-items: flex-start; gap: 10px; }
 .omni:focus-within { background: var(--card); box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-soft), 0 14px 34px -14px rgb(0 0 0 / .3); }
 .omni svg.i { color: var(--fg-3); margin-top: 5px; }
@@ -247,6 +249,7 @@ body.side-open #side { display: flex; }
 .pw button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .empty { padding: 32px 8px; color: var(--fg-3); line-height: 1.55; }
 .empty b { display: block; color: var(--fg-2); font-weight: 600; margin-bottom: 4px; }
+.empty .mark { display: block; width: 22px; height: 22px; margin-bottom: 12px; fill: var(--fg-3); }
 .composer { flex: none; padding: 4px 10px 10px; position: relative; }
 #side .composer { padding: 4px 4px 4px 0; }
 .box { background: var(--card); border-radius: 12px; padding: 8px 8px 6px 10px; display: flex; flex-direction: column; gap: 4px;
@@ -434,6 +437,7 @@ body.finding #findbar { display: flex; }
         <img class="frozen" id="frozen-main" alt="">
         <div class="page" id="ntp">
           <div class="start">
+            <div class="brand" aria-label="Atrium"><svg viewBox="10 10 80 82" aria-hidden="true"><path fill-rule="evenodd" d="M10 92V50a40 40 0 0 1 80 0v42ZM36 92V64a14 14 0 0 1 28 0v28Z"/></svg>atrium</div>
             <label class="omni">
               <svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
               <textarea id="ob" rows="1" spellcheck="false" placeholder="Search or enter address" aria-label="Search or enter address"></textarea>
@@ -1579,7 +1583,7 @@ const chat = {
   reset() {
     this.id = null; this.title = ''; this.roles.clear(); this.parts.clear(); this.act = null; this.mentions = []; this.lastText = '';
     pip.loadedFor = null;
-    this.q('.inner').innerHTML = `<div class="empty"><b>Assistant</b>It can read and operate your pages, research in the background without touching your tabs, and work while you browse. Type @ to include tabs, / for shortcuts.</div>`;
+    this.q('.inner').innerHTML = `<div class="empty"><svg class="mark" viewBox="10 10 80 82" aria-hidden="true"><path fill-rule="evenodd" d="M10 92V50a40 40 0 0 1 80 0v42ZM36 92V64a14 14 0 0 1 28 0v28Z"/></svg><b>Assistant</b>It can read and operate your pages, research in the background without touching your tabs, and work while you browse. Type @ to include tabs, / for shortcuts.</div>`;
     this.setBusy(false);
   },
   add(cls, html) {

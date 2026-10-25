@@ -12,7 +12,7 @@
 #   ATRIUM_UPDATE_SECRET_KEY    path to the Ed25519 secret key, or
 #   ATRIUM_UPDATE_SECRET_KEY_B64  the key itself (CI secret).
 # Build:
-#   ATRIUM_SKIP_BUILD=1         package the existing target/bundle/atrium.app.
+#   ATRIUM_SKIP_BUILD=1         package the existing target/bundle/Atrium.app.
 #   Any other arguments go to tools/build-chromium.sh (e.g. --offline).
 set -eu
 cd "$(dirname "$0")/.."
@@ -21,7 +21,7 @@ ROOT=$PWD
 if [ "${ATRIUM_SKIP_BUILD:-0}" != "1" ]; then
     ./tools/build-chromium.sh --release "$@"
 fi
-APP_SRC=target/bundle/atrium.app
+APP_SRC=target/bundle/Atrium.app
 [ -d "$APP_SRC" ] || { echo "missing $APP_SRC" >&2; exit 1; }
 VERSION=$(/usr/bin/plutil -extract CFBundleVersion raw "$APP_SRC/Contents/Info.plist")
 case "$(uname -m)" in arm64) ARCH=arm64 ;; *) ARCH=x86_64 ;; esac
