@@ -371,10 +371,13 @@ struct CdpReq {
 }
 
 async fn debug_cdp(State(app): Shared, Json(req): Json<CdpReq>) -> Json<Value> {
-    if !debug_api() {
+    // Passkey tests drive Chromium's virtual authenticator; only test instances may.
+    let webauthn = crate::migration::mock_keychain()
+        && (req.method.starts_with("WebAuthn.") || req.method == "Page.captureScreenshot");
+    if !webauthn && !debug_api() {
         return Json(json!({"error":"Debug DevTools access is disabled; start with ASIDE_DEBUG_API=1"}));
     }
-    if !DEBUG_CDP_METHODS.contains(&req.method.as_str()) {
+    if !webauthn && !DEBUG_CDP_METHODS.contains(&req.method.as_str()) {
         return Json(json!({"error":format!("{} is not an allowed debug method", req.method)}));
     }
     let tab = match &req.tab {

@@ -826,7 +826,6 @@ mod api {
             .route("/api/passwords/export", post(export))
             .route("/api/passwords/import-chrome", post(import_chrome))
             .route("/api/passwords/offers", get(offers))
-            .route("/api/debug/cdp", post(cdp))
     }
 
     fn reply(result: Result<Value>) -> Json<Value> {
@@ -906,17 +905,4 @@ mod api {
         reply(app.agent.browser.op(Op::PasswordOffers).await)
     }
 
-    /// For automated WebAuthn tests (virtual authenticators) and shell screenshots; nothing else.
-    async fn cdp(State(app): State<Arc<App>>, Json(req): Json<Value>) -> Json<Value> {
-        let method = req["method"].as_str().unwrap_or("").to_string();
-        if !(method.starts_with("WebAuthn.") || method == "Page.captureScreenshot") {
-            return Json(json!({ "error": "This DevTools method is not available" }));
-        }
-        let tab = if req["tab"] == "shell" { Some(crate::app::SHELL) } else { req["tab"].as_u64() };
-        let params = if req["params"].is_object() { req["params"].clone() } else { json!({}) };
-        reply(match app.agent.browser.op(|reply| Op::Cdp { tab, method, params, reply }).await {
-            Ok(r) => r.map(|data| json!({ "result": data })).map_err(|e| anyhow!(e)),
-            Err(e) => Err(e),
-        })
-    }
 }
