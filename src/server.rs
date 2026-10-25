@@ -40,6 +40,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/browser/command", post(browser_command))
         .route("/api/browser/memory", get(browser_memory))
         .route("/api/browser/tabs", get(browser_tabs))
+        .route("/api/browser/devtools", post(browser_devtools))
         .route("/api/sessions", get(sessions))
         .route("/api/session/:id/messages", get(messages))
         .route("/api/chat", post(chat))
@@ -278,6 +279,29 @@ async fn browser_command(State(app): Shared, Json(body): Json<Value>) -> Json<Va
 }
 async fn browser_memory(State(app): Shared) -> Json<Value> {
     Json(app.agent.browser.op(Op::Memory).await.unwrap_or_else(|e|json!({"error":e.to_string()})))
+}
+
+/// Performance measurement methods only; arbitrary DevTools access would bypass the agent tools.
+const DEVTOOLS_METHODS: &[&str] = &["Performance.enable", "Performance.disable", "Performance.getMetrics", "Input.synthesizeScrollGesture"];
+
+#[derive(Deserialize)]
+struct DevToolsReq {
+    tab: Option<u64>,
+    method: String,
+    #[serde(default)]
+    params: Value,
+}
+
+async fn browser_devtools(State(app): Shared, Json(req): Json<DevToolsReq>) -> Json<Value> {
+    if !DEVTOOLS_METHODS.contains(&req.method.as_str()) {
+        return Json(json!({"error": format!("{} is not an allowed DevTools method", req.method)}));
+    }
+    let params = if req.params.is_object() { req.params } else { json!({}) };
+    Json(match app.agent.browser.op(|reply| Op::DevTools { tab: req.tab, method: req.method, params, reply }).await {
+        Ok(Ok(v)) => json!({"result": v}),
+        Ok(Err(e)) => json!({"error": e}),
+        Err(e) => json!({"error": e.to_string()}),
+    })
 }
 
 async fn browser_extensions() -> Json<Value> {

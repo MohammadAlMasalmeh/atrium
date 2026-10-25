@@ -80,6 +80,12 @@ pub enum Op {
         reply: Reply<()>,
     },
     Memory(Reply<Json>),
+    DevTools {
+        tab: Option<u64>,
+        method: String,
+        params: Json,
+        reply: Reply<Result<Json, String>>,
+    },
 }
 #[derive(Clone)]
 pub struct Handle(Bridge);
@@ -189,6 +195,7 @@ enum Pending {
     Screenshot(Reply<Result<String, String>>),
     Frozen(&'static str),
     Probe(u64),
+    Raw(Reply<Result<Json, String>>),
 }
 struct Manager {
     rx: mpsc::Receiver<Event>,
@@ -453,6 +460,9 @@ impl Manager {
                 Pending::Screenshot(r) => {
                     let _ = r.send(Err("The tab is not ready to capture".into()));
                 }
+                Pending::Raw(r) => {
+                    let _ = r.send(Err("The tab has no live page".into()));
+                }
                 _ => {}
             }
             return;
@@ -546,6 +556,9 @@ impl Manager {
                     }
                 }
             }
+            Pending::Raw(reply) => {
+                let _ = reply.send(error.map_or_else(|| Ok(data), Err));
+            }
             Pending::Probe(id) => {
                 if error.is_some() || data["result"]["value"] != true {
                     if let Some(tab) = self.tab_mut(id) {
@@ -578,6 +591,11 @@ impl Manager {
             Op::InspectGoogle { tab, reply } => self.evaluate(tab, "return location.hostname === 'mail.google.com' && location.pathname.startsWith('/mail/u/') && !!document.querySelector('[gh=cm],[role=navigation]')".into(), reply),
             Op::Screenshot { tab, reply } => { if let Some(tab) = tab.or(self.active) { self.cdp(tab, "Page.captureScreenshot", json!({ "format": "jpeg", "quality": 80 }), Pending::Screenshot(reply)); } else { let _ = reply.send(Err("No page is open".into())); } }
             Op::Shell { body, reply } => { self.command(body); let _ = reply.send(()); }
+            // Measurements must not wake a sleeping tab, so only live pages are reachable.
+            Op::DevTools { tab, method, params, reply } => match tab.or(self.active).filter(|id| *id != SHELL && self.tab(*id).is_some_and(|t| t.browser.is_some())) {
+                Some(tab) => self.cdp(tab, &method, params, Pending::Raw(reply)),
+                None => { let _ = reply.send(Err("The tab has no live page".into())); }
+            },
             Op::Memory(reply) => { let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": self.tab(SHELL).is_some_and(|t|t.browser.is_some()), "shell_view": self.tab(SHELL).is_some_and(|t|t.view.is_some()), "shell_record": self.tab(SHELL).is_some(), "live_renderers": self.tabs.iter().filter(|t|t.view.is_some()).count(), "tabs": self.tabs.iter().filter(|t| t.id != SHELL).map(|t| json!({"id":t.id,"live":t.view.is_some(),"suspended":t.suspended})).collect::<Vec<_>>() })); }
         }
     }
@@ -985,8 +1003,13 @@ wrap_resource_request_handler! {struct ShellResources {base:String} impl Resourc
         ReturnValue::CONTINUE
     }
 }}
+wrap_request_handler! {struct TabRequests {id:u64} impl RequestHandler {
+    fn on_render_process_terminated(&self, _unused50:Option<&mut Browser>, status:TerminationStatus, error_code:i32, _unused51:Option<&CefString>){
+        eprintln!("[aside] renderer terminated: tab {} {status:?} code {error_code}", self.id);
+    }
+}}
 wrap_client! {struct HostClient {bridge:Bridge,id:u64,base:String} impl Client {
-    fn request_handler(&self)->Option<RequestHandler>{(self.id==SHELL).then(|| ShellRequests::new(self.base.clone()))}
+    fn request_handler(&self)->Option<RequestHandler>{Some(if self.id==SHELL {ShellRequests::new(self.base.clone())} else {TabRequests::new(self.id)})}
     fn life_span_handler(&self)->Option<LifeSpanHandler>{Some(HostLife::new(self.bridge.clone(),self.id))}
     fn display_handler(&self)->Option<DisplayHandler>{Some(HostDisplay::new(self.bridge.clone(),self.id))}
     fn load_handler(&self)->Option<LoadHandler>{Some(HostLoad::new(self.bridge.clone(),self.id))}
