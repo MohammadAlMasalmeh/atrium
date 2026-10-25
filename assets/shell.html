@@ -290,6 +290,22 @@ body.glance #glance { display: flex; }
 .gbtn { height: 24px; padding: 0 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px; color: var(--fg-2); font-size: 12px; }
 .gbtn:hover { background: var(--hover); color: var(--fg); }
 #glance-frame { flex: 1; margin: 0 5px 5px; border-radius: 8px; background: var(--card); }
+/* Find bar: a strip above the page; the page view is laid out below it. */
+#findbar { position: absolute; left: 0; right: 0; top: 0; height: 38px; display: none; align-items: center; gap: 2px; padding: 0 6px 0 12px;
+  border-bottom: .5px solid var(--line); background: var(--card); z-index: 3; }
+body.finding #findbar { display: flex; }
+#findbar svg.i { color: var(--fg-3); width: 14px; height: 14px; }
+#find-input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; padding: 0 6px; user-select: text; }
+#find-input::placeholder { color: var(--fg-3); }
+#find-count { color: var(--fg-3); font-size: 12px; padding: 0 6px; white-space: nowrap; }
+#findbar .ib { width: 24px; height: 24px; }
+#findbar .ib svg.i { color: currentColor; }
+#url .zoom { font-size: 11px; color: var(--fg-2); padding: 0 5px; height: 18px; line-height: 18px; border-radius: 5px; background: var(--field); display: none; }
+#url .zoom.on { display: inline-block; }
+#url .zoom:hover { background: var(--press); color: var(--fg); }
+#downloads .row .s { font-size: 11px; color: var(--fg-3); white-space: nowrap; }
+#downloads .row .prog { position: absolute; left: 8px; right: 8px; bottom: 3px; height: 2px; border-radius: 1px; background: var(--line); overflow: hidden; }
+#downloads .row .prog i { display: block; height: 100%; background: var(--accent); }
 #toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 10px); opacity: 0; transition: .2s; z-index: 20; pointer-events: none;
   background: var(--menu); padding: 7px 12px; border-radius: 8px; box-shadow: 0 0 0 .5px var(--menu-ring), var(--shadow); font-size: 12px; }
 #toast.on { transform: translate(-50%, 0); opacity: 1; }
@@ -300,13 +316,14 @@ body.glance #glance { display: flex; }
   <aside id="sidebar">
     <div class="sb-top" data-drag>
       <span class="grow" data-drag></span>
-      <button class="ib" id="sb-toggle" title="Hide Sidebar (⌘S)"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M9 4.5v15"/></svg></button>
+      <button class="ib" id="sb-toggle" title="Hide Sidebar (⇧⌘S)"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M9 4.5v15"/></svg></button>
       <button class="ib" id="back" title="Back (⌘[)"><svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
       <button class="ib" id="fwd" title="Forward (⌘])"><svg class="i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
       <button class="ib" id="reload" title="Reload (⌘R)"><svg class="i" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5"/><path d="M20 4v4.5h-4.5"/></svg></button>
     </div>
     <div id="url" title="Edit address (⌘L)">
       <span class="lead" id="url-lead"></span><span class="h empty" id="url-host">Search or enter address</span>
+      <button class="zoom" id="url-zoom" title="Reset Zoom (⌘0)"></button>
       <button class="act" id="url-copy" title="Copy link (⇧⌘C)"><svg class="i" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg></button>
       <button class="act" id="url-pin" title="Pin to this space (⌘D)"><svg class="i" viewBox="0 0 24 24"><path d="M12 17v4M9 3h6l-1 6 3 3v2H7v-2l3-3Z"/></svg></button>
       <span class="bar"></span>
@@ -320,6 +337,10 @@ body.glance #glance { display: flex; }
       <div id="tabs"></div>
       <div class="label">Chats<button class="ib" id="new-chat" title="New Chat (⌘N)"><svg class="i" viewBox="0 0 24 24"><path d="M12 20h8"/><path d="M16.5 4.5a2 2 0 0 1 3 3L8 19l-4 1 1-4Z"/></svg></button></div>
       <div id="chats"></div>
+      <div id="downloads-sec" style="display:none">
+        <div class="label">Downloads<button class="ib" id="downloads-clear" title="Clear Finished"><svg class="i" viewBox="0 0 24 24"><path d="M17 7 7 17M7 7l10 10"/></svg></button></div>
+        <div id="downloads"></div>
+      </div>
     </div>
     <div class="sb-bottom">
       <button class="ib" id="cmd-btn" title="Command Bar (⌘K)"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg></button>
@@ -332,6 +353,14 @@ body.glance #glance { display: flex; }
   <section id="main">
     <div id="panes">
       <div class="pane" id="pane-main">
+        <div id="findbar">
+          <svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+          <input id="find-input" spellcheck="false" autocomplete="off" placeholder="Find in page">
+          <span id="find-count"></span>
+          <button class="ib" id="find-prev" title="Previous (⇧⌘G)"><svg class="i" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg></button>
+          <button class="ib" id="find-next" title="Next (⌘G)"><svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+          <button class="ib" id="find-close" title="Done (Esc)"><svg class="i" viewBox="0 0 24 24"><path d="M17 7 7 17M7 7l10 10"/></svg></button>
+        </div>
         <img class="frozen" id="frozen-main" alt="">
         <div class="page" id="ntp">
           <div class="start">
@@ -498,10 +527,20 @@ window.asideShell = {
     if (st.reveal && S.active !== prev && S.view === 'chat' && activeTab()?.kind === 'web') { S.view = 'tab'; S.side = true; }
     const t = activeTab(); if (t && t.kind === 'web' && !t.loading && t.title) remember(t);
     if (S.overlay === 'glance' && !S.glance) S.overlay = null;
+    if (S.find && (S.active !== prev || !onWeb())) find.close();
     render();
   },
   cmd(name) {
+    const tab = /^tab-(\d|last)$/.exec(name);
+    if (tab) { selectTab(tab[1]); reportUi(); return; }
     switch (name) {
+      case 'find': find.open(); break;
+      case 'findClose': if (S.overlay) closeOverlay(); else find.close(); break;
+      case 'findNext': if (S.find) find.run(true, true); else find.open(); break;
+      case 'findPrev': if (S.find) find.run(true, false); else find.open(); break;
+      case 'next-tab': cycleTab(1); break;
+      case 'prev-tab': cycleTab(-1); break;
+      case 'focusStart': S.view = 'tab'; setNtpMode('search'); render(); setTimeout(() => ob.focus(), 30); break;
       case 'commandBar': openCmdk(''); break;
       case 'editUrl': openCmdk(onWeb() ? activeTab().url : '', true); break;
       case 'toggleSidebar': document.body.classList.toggle('sb-hidden'); layoutSoon(); break;
@@ -512,6 +551,7 @@ window.asideShell = {
       case 'copyUrl': copyUrl(); break;
       case 'glanceOpened': S.overlay = 'glance'; freeze(); render(); break;
     }
+    reportUi();
   },
   // The agent is working in tab `id`.
   agent(id) {
@@ -523,6 +563,14 @@ window.asideShell = {
     if (slot === 'pip') { pip.show(url); return; }
     $('#frozen-' + slot).src = url; if (slot === 'main') { S.frozenUrl = url; alignBackdrops(); }
   },
+  findResult(r) { find.result(r); },
+  findSet(text) { find.open(); $('#find-input').value = text; find.run(false, true); },
+  zoom({ percent, flash }) {
+    const z = $('#url-zoom'); z.textContent = Math.round(percent) + '%'; z.classList.toggle('on', Math.round(percent) !== 100);
+    if (flash) toast(`Zoom ${Math.round(percent)}%`);
+    reportUi();
+  },
+  downloads(list) { S.downloads = list; renderDownloads(); },
   toast,
 };
 function remember(t) {
@@ -701,6 +749,97 @@ $('#pip').onclick = () => {
   ipc({ cmd: 'activate', id }); render();
 };
 
+/* ── Find in page ─────────────────────────────────── */
+const FIND_H = 38;
+function reportUi() {
+  const z = $('#url-zoom');
+  ipc({
+    cmd: 'uiReport',
+    findOpen: !!S.find,
+    findCount: $('#find-count').textContent,
+    findText: $('#find-input').value,
+    zoom: z.textContent,
+    zoomOn: z.classList.contains('on'),
+    toast: $('#toast').textContent,
+    downloads: $$('#downloads .row').map((r) => ({
+      name: r.querySelector('.t')?.textContent || '',
+      status: r.querySelector('.s')?.textContent || '',
+      cancel: !!r.querySelector('.x'),
+    })),
+    overlay: S.overlay,
+  });
+}
+const find = {
+  open() {
+    if (!onWeb()) return;
+    const was = S.find; S.find = true;
+    document.body.classList.add('finding');
+    if (!was) { layoutNow(); ipc({ cmd: 'findBar', open: true }); }
+    const i = $('#find-input'); setTimeout(() => { i.focus(); i.select(); }, 20);
+    if (i.value && !was) this.run(false, true);
+    reportUi();
+  },
+  close() {
+    if (!S.find) return;
+    S.find = false; document.body.classList.remove('finding'); $('#find-count').textContent = '';
+    layoutNow(); ipc({ cmd: 'findStop' });
+    reportUi();
+  },
+  run(next, forward) {
+    const text = $('#find-input').value;
+    if (!text) $('#find-count').textContent = '';
+    ipc({ cmd: 'find', text, next, forward });
+  },
+  result({ count, active, done, text }) {
+    if (!S.find || text !== $('#find-input').value) return;
+    $('#find-count').textContent = !text ? '' : count ? `${Math.max(active, 1)} of ${count}` : done ? 'No results' : '';
+    reportUi();
+  },
+};
+$('#find-input').addEventListener('input', () => find.run(false, true));
+$('#find-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); find.run(true, !e.shiftKey); }
+  else if (e.key === 'Escape') { e.preventDefault(); find.close(); }
+});
+$('#find-next').onclick = () => find.run(true, true);
+$('#find-prev').onclick = () => find.run(true, false);
+$('#find-close').onclick = () => find.close();
+
+/* ── Tab order shortcuts (⌘1–9, ⌃Tab) follow the sidebar ── */
+function sidebarOrder() {
+  const tabs = spaceTabs();
+  const pinned = pinnedHere().map((p) => tabs.find((x) => x.url === p.url || host(x.url) === host(p.url) && x.url.startsWith(p.url))?.id).filter((id) => id != null);
+  return [...new Set([...pinned, ...tabs.map((t) => t.id)])];
+}
+function selectTab(n) {
+  const ids = sidebarOrder(); const id = n === 'last' ? ids[ids.length - 1] : ids[Number(n) - 1];
+  if (id != null) { S.view = 'tab'; ipc({ cmd: 'activate', id }); }
+}
+function cycleTab(step) {
+  const ids = sidebarOrder(); if (!ids.length) return;
+  const i = ids.indexOf(S.active);
+  S.view = 'tab'; ipc({ cmd: 'activate', id: ids[i < 0 ? 0 : (i + step + ids.length) % ids.length] });
+}
+
+/* ── Downloads ─────────────────────────────────────── */
+const size = (n) => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+function renderDownloads() {
+  const list = (S.downloads || []).slice(0, 6);
+  $('#downloads-sec').style.display = list.length ? '' : 'none';
+  patch($('#downloads'), list.map((d) => {
+    const live = d.state === 'in_progress';
+    const status = live ? (d.total > 0 ? `${d.percent}%` : size(d.received)) : d.state === 'complete' ? size(d.received) : d.state === 'canceled' ? 'Canceled' : 'Failed';
+    return `<div class="row ${live || d.state === 'complete' ? '' : 'dim'}" data-id="${d.id}" title="${esc(d.path || d.url)}"><span class="fv">${icon('file')}</span><span class="t">${esc(d.name || 'Download')}</span><span class="s">${esc(status)}</span>${live ? `<span class="x" title="Cancel">${icon('x')}</span><span class="prog"><i style="width:${Math.max(0, d.percent)}%"></i></span>` : ''}</div>`;
+  }).join(''));
+  $$('#downloads .row').forEach((r) => r.onclick = (e) => {
+    const id = Number(r.dataset.id);
+    if (e.target.closest('.x')) ipc({ cmd: 'downloadCancel', id }); else ipc({ cmd: 'downloadReveal', id });
+  });
+  reportUi();
+}
+$('#downloads-clear').onclick = () => ipc({ cmd: 'downloadsClear' });
+$('#url-zoom').onclick = () => ipc({ cmd: 'menu', name: 'zoom-reset' });
+
 /* ── Layout sync ──────────────────────────────────── */
 let layoutQueued = false, layoutInFlight = false, layoutAgain = false;
 function layoutSoon() {
@@ -713,6 +852,7 @@ function layoutNow() {
   if (layoutInFlight) { layoutAgain = true; return; }
   const r = (el) => { const b = el.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; };
   const msg = { cmd: 'layout', main: r($('#pane-main')) };
+  if (S.find) { msg.main.y += FIND_H; msg.main.h = Math.max(0, msg.main.h - FIND_H); }
   if (document.body.classList.contains('split')) msg.split = r($('#pane-split'));
   if (S.overlay === 'glance') msg.glance = r($('#glance-frame'));
   layoutInFlight = true;
@@ -737,7 +877,7 @@ function openUrl(url, inNewTab = true) {
 $('#back').onclick = () => ipc({ cmd: 'back' });
 $('#fwd').onclick = () => ipc({ cmd: 'forward' });
 $('#reload').onclick = () => ipc({ cmd: 'reload' });
-$('#url').onclick = (e) => { if (!e.target.closest('.act')) asideShell.cmd('editUrl'); };
+$('#url').onclick = (e) => { if (!e.target.closest('.act, .zoom')) asideShell.cmd('editUrl'); };
 $('#url-copy').onclick = copyUrl;
 $('#url-pin').onclick = togglePin;
 $('#new-tab').onclick = () => { S.view = 'tab'; S.ntpMode = 'search'; ipc({ cmd: 'newTab' }); render(); setTimeout(() => $('#ob').focus(), 30); };
@@ -825,6 +965,15 @@ function updateCmdk() {
     { t: 'Pin Tab to Space', k: '⌘D', ic: 'pin', run: togglePin },
     { t: 'Copy Link', k: '⇧⌘C', ic: 'copy', run: copyUrl },
     { t: 'Summarize This Page', ic: 'file', run: () => askAgent(SKILLS[0].p, false) },
+    { t: 'Find in Page', k: '⌘F', ic: 'search', run: () => find.open() },
+    { t: 'Reopen Closed Tab', k: '⇧⌘T', ic: 'tabs', run: () => ipc({ cmd: 'menu', name: 'reopen-tab' }) },
+    { t: 'Zoom In', k: '⌘=', ic: 'plus', run: () => ipc({ cmd: 'menu', name: 'zoom-in' }) },
+    { t: 'Zoom Out', k: '⌘−', ic: 'search', run: () => ipc({ cmd: 'menu', name: 'zoom-out' }) },
+    { t: 'Actual Size', k: '⌘0', ic: 'search', run: () => ipc({ cmd: 'menu', name: 'zoom-reset' }) },
+    { t: 'Print', k: '⌘P', ic: 'file', run: () => ipc({ cmd: 'menu', name: 'print' }) },
+    { t: 'Save Page As', k: '⌘S', ic: 'file', run: () => ipc({ cmd: 'menu', name: 'save-page' }) },
+    { t: 'Export as PDF', ic: 'file', run: () => ipc({ cmd: 'menu', name: 'export-pdf' }) },
+    { t: 'Make Aside the Default Browser', ic: 'globe', run: () => ipc({ cmd: 'menu', name: 'make-default-browser' }) },
   ];
   for (const a of acts.filter((a) => match(a.t)).slice(0, q ? 3 : 6)) items.push({ g: 'Actions', ...a });
   cmdkItems = items; cmdkSel = 0; drawCmdk();

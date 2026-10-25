@@ -47,6 +47,28 @@ fn main() -> anyhow::Result<()> {
             resources.join("Chromium-LICENSE.txt"),
             include_str!("../../docs/licenses/Chromium-LICENSE.txt"),
         )?;
+        // Lets macOS offer Aside as the default browser and open web links and HTML files with it.
+        let info_plist = path.join("Contents/Info.plist");
+        for (key, value) in [
+            (
+                "CFBundleURLTypes",
+                r#"[{"CFBundleURLName":"Web site URL","CFBundleTypeRole":"Viewer","CFBundleURLSchemes":["http","https"]}]"#,
+            ),
+            (
+                "CFBundleDocumentTypes",
+                r#"[{"CFBundleTypeName":"HTML document","CFBundleTypeRole":"Viewer","LSHandlerRank":"Alternate","LSItemContentTypes":["public.html","public.xhtml"],"CFBundleTypeExtensions":["html","htm","xhtml"]}]"#,
+            ),
+        ] {
+            let _ = std::process::Command::new("/usr/bin/plutil")
+                .args(["-remove", key])
+                .arg(&info_plist)
+                .output();
+            let status = std::process::Command::new("/usr/bin/plutil")
+                .args(["-insert", key, "-json", value])
+                .arg(&info_plist)
+                .status()?;
+            anyhow::ensure!(status.success(), "Could not add {key} to Info.plist");
+        }
         let status = std::process::Command::new("/usr/bin/codesign")
             .args(["--force", "--deep", "--sign", "-"])
             .arg(&path)

@@ -16,6 +16,8 @@ use tokio::sync::oneshot;
 mod mac;
 #[path = "chromium/url.rs"]
 mod url;
+#[path = "chromium/commands.rs"]
+mod commands;
 pub use url::normalize_url;
 
 const LIFECYCLE_JS: &str = include_str!("../assets/lifecycle.js");
@@ -80,10 +82,21 @@ pub enum Op {
         reply: Reply<()>,
     },
     Memory(Reply<Json>),
+    /// Find, zoom, printing, downloads, and other browser commands (`/api/browser/action`).
+    Action {
+        body: Json,
+        reply: Reply<Result<Json, String>>,
+    },
 }
 #[derive(Clone)]
 pub struct Handle(Bridge);
 impl Handle {
+    /// Opens pages from the command line or another launch once the window exists.
+    pub fn open_urls(&self, urls: Vec<String>) {
+        if !urls.is_empty() {
+            self.0.send(Event::Commands(commands::Ev::OpenUrls(urls)));
+        }
+    }
     pub async fn op<T>(&self, make: impl FnOnce(Reply<T>) -> Op) -> Result<T> {
         let (tx, rx) = oneshot::channel();
         self.0.send(Event::Operation(make(tx)));
@@ -146,6 +159,7 @@ enum Event {
     Quit,
     DevResult(i32, bool, Json),
     Maintenance,
+    Commands(commands::Ev),
 }
 struct Tab {
     id: u64,
@@ -189,6 +203,8 @@ enum Pending {
     Screenshot(Reply<Result<String, String>>),
     Frozen(&'static str),
     Probe(u64),
+    /// The raw DevTools result, for methods whose answer isn't a script value.
+    Raw(Reply<Result<Json, String>>),
 }
 struct Manager {
     rx: mpsc::Receiver<Event>,
@@ -208,6 +224,7 @@ struct Manager {
     next_call: i32,
     pending: HashMap<i32, (Instant, u64, Pending)>,
     closing: Arc<AtomicBool>,
+    cmds: commands::State,
 }
 impl Manager {
     fn tab(&self, id: u64) -> Option<&Tab> {
@@ -321,6 +338,7 @@ impl Manager {
         self.create_view(id);
         self.layout();
         self.push(true);
+        self.apply_zoom(id);
         // Agent and API tab switches must not pull the window in front of other apps.
         if let Some(view) = self.tab(id).and_then(|t| t.view.as_ref()) {
             view.request_focus();
@@ -330,6 +348,7 @@ impl Manager {
         if id == SHELL {
             return;
         }
+        self.remember_closed(id);
         if let Some(host) = self
             .tab(id)
             .and_then(|t| t.browser.as_ref())
@@ -546,6 +565,9 @@ impl Manager {
                     }
                 }
             }
+            Pending::Raw(reply) => {
+                let _ = reply.send(error.map_or(Ok(data), Err));
+            }
             Pending::Probe(id) => {
                 if error.is_some() || data["result"]["value"] != true {
                     if let Some(tab) = self.tab_mut(id) {
@@ -579,6 +601,7 @@ impl Manager {
             Op::Screenshot { tab, reply } => { if let Some(tab) = tab.or(self.active) { self.cdp(tab, "Page.captureScreenshot", json!({ "format": "jpeg", "quality": 80 }), Pending::Screenshot(reply)); } else { let _ = reply.send(Err("No page is open".into())); } }
             Op::Shell { body, reply } => { self.command(body); let _ = reply.send(()); }
             Op::Memory(reply) => { let _ = reply.send(json!({ "engine": "Chromium / CEF", "pid": std::process::id(), "max_live_tabs": self.policy.max_live_tabs, "idle_after_seconds": self.policy.idle_after.as_secs(), "shell_ready": self.tab(SHELL).is_some_and(|t|t.browser.is_some()), "shell_view": self.tab(SHELL).is_some_and(|t|t.view.is_some()), "shell_record": self.tab(SHELL).is_some(), "live_renderers": self.tabs.iter().filter(|t|t.view.is_some()).count(), "tabs": self.tabs.iter().filter(|t| t.id != SHELL).map(|t| json!({"id":t.id,"live":t.view.is_some(),"suspended":t.suspended})).collect::<Vec<_>>() })); }
+            Op::Action { body, reply } => self.action(body, Some(reply)),
         }
     }
     fn command(&mut self, m: Json) {
@@ -599,10 +622,16 @@ impl Manager {
                         }
                         "new-tab" => {
                             self.new_tab(None, true, false);
+                            if let Some(view) = self.tab(SHELL).and_then(|t| t.view.as_ref()) {
+                                view.request_focus();
+                            }
+                            self.cmd("focusStart");
                         }
                         "open-location" => self.cmd("editUrl"),
                         "command-bar" => self.cmd("commandBar"),
                         "back" | "forward" | "reload" => self.command(json!({"cmd":name})),
+                        // DevTools opens a window, which background test instances must never show.
+                        "devtools" | "devtools-shell" if mac::background() => {}
                         "devtools" | "devtools-shell" => {
                             let id = if name == "devtools-shell" {
                                 Some(SHELL)
@@ -617,7 +646,11 @@ impl Manager {
                                 host.show_dev_tools(None, None, None, None);
                             }
                         }
-                        other => self.cmd(other),
+                        other => {
+                            if !self.named(other) {
+                                self.cmd(other)
+                            }
+                        }
                     }
                 }
             }
@@ -754,7 +787,9 @@ impl Manager {
                     }
                 }
             }
-            _ => {}
+            "drag" => {}
+            "uiReport" => self.cmds.shell = m.clone(),
+            _ => self.action(m.clone(), None),
         }
     }
     fn event(&mut self, event: Event) {
@@ -795,6 +830,11 @@ impl Manager {
                     mac::keep_out_of_sight(window.window_handle());
                 }
                 self.restore_session();
+                self.flush_urls();
+                mac::ensure_delegate();
+                if !mac::delegate_installed() {
+                    eprintln!("URLs opened by other apps will not reach Aside: the app delegate was replaced");
+                }
                 let mut maintenance = Maintenance::new(self.bridge.clone());
                 post_delayed_task(ThreadId::UI, Some(&mut maintenance), 10000);
             }
@@ -865,6 +905,7 @@ impl Manager {
                 if let Some(t) = self.tab_mut(id) {
                     t.url = url;
                 }
+                self.apply_zoom(id);
                 self.push(false);
             }
             Event::Loading(id, loading) => {
@@ -888,6 +929,7 @@ impl Manager {
                             0,
                         );
                     }
+                    self.apply_zoom(id);
                 }
                 self.push(false);
             }
@@ -910,6 +952,7 @@ impl Manager {
             }
             Event::DevResult(id, success, data) => self.finish(id, success, data),
             Event::Quit => {
+                mac::release_test_pasteboard();
                 self.save_session();
                 self.closing.store(true, Ordering::Relaxed);
                 for t in &self.tabs {
@@ -919,6 +962,7 @@ impl Manager {
                 }
             }
             Event::Maintenance => self.maintain(),
+            Event::Commands(event) => self.on_commands(event),
         }
     }
 }
@@ -992,6 +1036,8 @@ wrap_client! {struct HostClient {bridge:Bridge,id:u64,base:String} impl Client {
     fn load_handler(&self)->Option<LoadHandler>{Some(HostLoad::new(self.bridge.clone(),self.id))}
     fn download_handler(&self)->Option<DownloadHandler>{Some(HostDownload::new(self.bridge.clone(),self.id))}
     fn keyboard_handler(&self)->Option<KeyboardHandler>{Some(HostKeyboard::new(self.bridge.clone()))}
+    fn find_handler(&self)->Option<FindHandler>{Some(commands::HostFind::new(self.bridge.clone(),self.id))}
+    fn context_menu_handler(&self)->Option<ContextMenuHandler>{(self.id!=SHELL).then(|| commands::HostMenu::new(self.bridge.clone(),self.id))}
 }}
 wrap_life_span_handler! {struct HostLife {bridge:Bridge,id:u64} impl LifeSpanHandler {
     fn on_after_created(&self,browser:Option<&mut Browser>){if let Some(b)=browser{self.bridge.send(Event::Created(self.id,b.clone()));}}
@@ -1012,10 +1058,21 @@ wrap_dev_tools_message_observer! {struct DevObserver {bridge:Bridge} impl DevToo
     fn on_dev_tools_method_result(&self, _unused27:Option<&mut Browser>,id:i32,success:i32,result:Option<&[u8]>){self.bridge.send(Event::DevResult(id,success!=0,result.and_then(|r|serde_json::from_slice(r).ok()).unwrap_or(Json::Null)));}
 }}
 wrap_keyboard_handler! {struct HostKeyboard {bridge:Bridge} impl KeyboardHandler {
-    fn on_pre_key_event(&self, _unused28:Option<&mut Browser>,event:Option<&KeyEvent>, _unused29:*mut u8, _unused30:Option<&mut i32>)->i32{
-        let Some(e)=event else{return 0}; if e.type_!=KeyEventType::RAWKEYDOWN || e.modifiers & (1<<7)==0 {return 0;}
-        let cmd=match e.windows_key_code {84|75=>Some("commandBar"),76=>Some("editUrl"),69=>Some("toggleAssistant"),78=>Some("newChat"),83=>Some("toggleSidebar"),_=>None};
-        if let Some(cmd)=cmd{self.bridge.send(Event::Command(json!({"cmd":"shellCommand","name":cmd})));1}else{0}
+    fn on_pre_key_event(&self, _unused28:Option<&mut Browser>,event:Option<&KeyEvent>, _unused29:*mut u8, is_shortcut:Option<&mut i32>)->i32{
+        let Some(e)=event else{return 0}; if e.type_!=KeyEventType::RAWKEYDOWN {return 0;}
+        match commands::shortcut(e.windows_key_code, e.modifiers) {
+            Some((name, true)) => {self.bridge.send(Event::Command(json!({"cmd":"menu","name":name})));1}
+            // The page may handle it first; on_key_event runs the command if it doesn't.
+            Some((_, false)) => {if let Some(s)=is_shortcut{*s=1;}0}
+            None => 0,
+        }
+    }
+    fn on_key_event(&self, _unused50:Option<&mut Browser>,event:Option<&KeyEvent>, _unused51:*mut u8)->i32{
+        let Some(e)=event else{return 0}; if e.type_!=KeyEventType::RAWKEYDOWN {return 0;}
+        match commands::shortcut(e.windows_key_code, e.modifiers) {
+            Some((name, false)) => {self.bridge.send(Event::Command(json!({"cmd":"menu","name":name})));1}
+            _ => 0,
+        }
     }
 }}
 
@@ -1061,9 +1118,11 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
             next_call: 0,
             pending: HashMap::new(),
             closing,
+            cmds: Default::default(),
         })
     });
     let bridge = manager.lock().unwrap().bridge.clone();
+    mac::set_bridge(bridge.clone());
     start(Handle(bridge.clone()));
     let args = cef::args::Args::new();
     let root = crate::data_dir().expect("data directory").join("chromium");
@@ -1098,8 +1157,14 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
 
 wrap_download_handler! {struct HostDownload {bridge:Bridge,id:u64} impl DownloadHandler {
     fn can_download(&self,_browser:Option<&mut Browser>,_url:Option<&CefString>,_method:Option<&CefString>)->i32{1}
-    fn on_before_download(&self,_browser:Option<&mut Browser>,item:Option<&mut DownloadItem>,_name:Option<&CefString>,callback:Option<&mut BeforeDownloadCallback>)->i32{if let Some(item)=item{self.bridge.send(Event::Download(self.id,item.id(),true));}if let Some(callback)=callback{callback.cont(None,1);1}else{0}}
-    fn on_download_updated(&self,_browser:Option<&mut Browser>,item:Option<&mut DownloadItem>,_callback:Option<&mut DownloadItemCallback>){if let Some(item)=item{self.bridge.send(Event::Download(self.id,item.id(),item.is_in_progress()!=0));}}
+    // The download list picks the path (no dialog unless the user chose "Save … As").
+    fn on_before_download(&self,_browser:Option<&mut Browser>,item:Option<&mut DownloadItem>,name:Option<&CefString>,callback:Option<&mut BeforeDownloadCallback>)->i32{
+        let (Some(item),Some(callback))=(item,callback) else {return 0};
+        self.bridge.send(Event::Download(self.id,item.id(),true));
+        self.bridge.send(Event::Commands(commands::Ev::BeforeDownload{item:commands::download_info(self.id,item,name),callback:callback.clone()}));
+        1
+    }
+    fn on_download_updated(&self,_browser:Option<&mut Browser>,item:Option<&mut DownloadItem>,callback:Option<&mut DownloadItemCallback>){if let Some(item)=item{self.bridge.send(Event::Download(self.id,item.id(),item.is_in_progress()!=0));self.bridge.send(Event::Commands(commands::Ev::DownloadUpdated{item:commands::download_info(self.id,item,None),control:callback.map(|c|c.clone())}));}}
 }}
 wrap_task! {struct Maintenance {bridge:Bridge} impl Task {fn execute(&self){self.bridge.send(Event::Maintenance);if self.bridge.manager.upgrade().is_some(){let mut next=Self::new(self.bridge.clone());post_delayed_task(ThreadId::UI,Some(&mut next),10000);}}}}
 impl Manager {
