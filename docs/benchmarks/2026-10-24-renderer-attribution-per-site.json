@@ -1,0 +1,668 @@
+[
+  {
+    "phase": "baseline (shell and startup tab)",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 6,
+    "renderers": 2,
+    "kinds": {
+      "renderer": 2,
+      "StorageService": 1,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1
+    },
+    "renderer_rss_mib": 170.3,
+    "footprint_mib": 241.52
+  },
+  {
+    "phase": "Google Search alone",
+    "tabs": 2,
+    "live_views": 2,
+    "processes": 11,
+    "renderers": 5,
+    "kinds": {
+      "renderer": 5,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 504.4,
+    "footprint_mib": 667.03,
+    "frames": {
+      "iframe_origins": [
+        "https://www.youtube.com"
+      ],
+      "service_workers": [],
+      "top_iframes": 1,
+      "url": "https://www.google.com/search"
+    }
+  },
+  {
+    "phase": "Google Search closed",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 9,
+    "renderers": 3,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 3,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 373.7,
+    "footprint_mib": 589.06
+  },
+  {
+    "phase": "Google Search closed, 35 s later",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 9,
+    "renderers": 3,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 3,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 258.7,
+    "footprint_mib": 538.93
+  },
+  {
+    "phase": "YouTube alone",
+    "tabs": 2,
+    "live_views": 2,
+    "processes": 10,
+    "renderers": 4,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 4,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 421.9,
+    "footprint_mib": 887.34,
+    "frames": {
+      "iframe_origins": [
+        "null"
+      ],
+      "service_workers": [
+        "https://www.youtube.com/"
+      ],
+      "top_iframes": 1,
+      "url": "https://www.youtube.com/"
+    }
+  },
+  {
+    "phase": "YouTube closed",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 10,
+    "renderers": 4,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 4,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 454.3,
+    "footprint_mib": 896.43
+  },
+  {
+    "phase": "YouTube closed, 35 s later",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 10,
+    "renderers": 4,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 4,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 164.4,
+    "footprint_mib": 794.53
+  },
+  {
+    "phase": "Gmail (signed out) alone",
+    "tabs": 2,
+    "live_views": 2,
+    "processes": 10,
+    "renderers": 4,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 4,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 467.2,
+    "footprint_mib": 712.14,
+    "frames": {
+      "iframe_origins": [
+        "https://2507573.fls.doubleclick.net",
+        "https://workspace.google.com"
+      ],
+      "service_workers": [],
+      "top_iframes": 2,
+      "url": "https://workspace.google.com/intl/en-US/gmail/"
+    }
+  },
+  {
+    "phase": "Gmail (signed out) closed",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 9,
+    "renderers": 3,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 3,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 377.7,
+    "footprint_mib": 587.06
+  },
+  {
+    "phase": "Gmail (signed out) closed, 35 s later",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 9,
+    "renderers": 3,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 3,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 240.4,
+    "footprint_mib": 544.5
+  },
+  {
+    "phase": "GitHub alone",
+    "tabs": 2,
+    "live_views": 2,
+    "processes": 11,
+    "renderers": 4,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 4,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "OnDeviceModelService": 1
+    },
+    "renderer_rss_mib": 495.8,
+    "footprint_mib": 810.98,
+    "frames": {
+      "iframe_origins": [],
+      "service_workers": [],
+      "top_iframes": 0,
+      "url": "https://github.com/tauri-apps/cef-rs"
+    }
+  },
+  {
+    "phase": "GitHub closed",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 10,
+    "renderers": 3,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 3,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "OnDeviceModelService": 1
+    },
+    "renderer_rss_mib": 261.0,
+    "footprint_mib": 609.04
+  },
+  {
+    "phase": "GitHub closed, 35 s later",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 10,
+    "renderers": 3,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 3,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "OnDeviceModelService": 1
+    },
+    "renderer_rss_mib": 260.1,
+    "footprint_mib": 558.14
+  },
+  {
+    "phase": "Wikipedia alone",
+    "tabs": 2,
+    "live_views": 2,
+    "processes": 11,
+    "renderers": 4,
+    "kinds": {
+      "renderer": 4,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "OnDeviceModelService": 1
+    },
+    "renderer_rss_mib": 498.0,
+    "footprint_mib": 683.61,
+    "frames": {
+      "iframe_origins": [],
+      "service_workers": [],
+      "top_iframes": 0,
+      "url": "https://en.wikipedia.org/wiki/Web_browser"
+    }
+  },
+  {
+    "phase": "Wikipedia closed",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 10,
+    "renderers": 3,
+    "kinds": {
+      "renderer": 3,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "OnDeviceModelService": 1
+    },
+    "renderer_rss_mib": 309.0,
+    "footprint_mib": 604.61
+  },
+  {
+    "phase": "Wikipedia closed, 35 s later",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 10,
+    "renderers": 3,
+    "kinds": {
+      "renderer": 3,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "OnDeviceModelService": 1
+    },
+    "renderer_rss_mib": 309.0,
+    "footprint_mib": 538.78
+  },
+  {
+    "phase": "BBC News alone",
+    "tabs": 2,
+    "live_views": 2,
+    "processes": 13,
+    "renderers": 6,
+    "kinds": {
+      "renderer": 6,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "OnDeviceModelService": 1
+    },
+    "renderer_rss_mib": 722.2,
+    "footprint_mib": 808.77,
+    "frames": {
+      "iframe_origins": [
+        "https://a4621041136.cdn.optimizely.com",
+        "(no src)",
+        "https://cdn.privacy-mgmt.com"
+      ],
+      "service_workers": [],
+      "top_iframes": 4,
+      "url": "https://www.bbc.com/news"
+    }
+  },
+  {
+    "phase": "BBC News closed",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 11,
+    "renderers": 4,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 4,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "OnDeviceModelService": 1
+    },
+    "renderer_rss_mib": 409.5,
+    "footprint_mib": 693.78
+  },
+  {
+    "phase": "BBC News closed, 35 s later",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 10,
+    "renderers": 3,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 3,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "OnDeviceModelService": 1
+    },
+    "renderer_rss_mib": 271.2,
+    "footprint_mib": 543.34
+  },
+  {
+    "phase": "MDN alone",
+    "tabs": 2,
+    "live_views": 2,
+    "processes": 11,
+    "renderers": 4,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 4,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "OnDeviceModelService": 1
+    },
+    "renderer_rss_mib": 482.7,
+    "footprint_mib": 691.08,
+    "frames": {
+      "iframe_origins": [],
+      "service_workers": [],
+      "top_iframes": 0,
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API"
+    }
+  },
+  {
+    "phase": "MDN closed",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 10,
+    "renderers": 3,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 3,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "OnDeviceModelService": 1
+    },
+    "renderer_rss_mib": 246.6,
+    "footprint_mib": 600.07
+  },
+  {
+    "phase": "MDN closed, 35 s later",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 10,
+    "renderers": 3,
+    "kinds": {
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "renderer": 3,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "OnDeviceModelService": 1
+    },
+    "renderer_rss_mib": 207.4,
+    "footprint_mib": 549.07
+  },
+  {
+    "phase": "Stack Overflow alone",
+    "tabs": 2,
+    "live_views": 2,
+    "processes": 24,
+    "renderers": 17,
+    "kinds": {
+      "renderer": 17,
+      "OnDeviceModelService": 1,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "StorageService": 1
+    },
+    "renderer_rss_mib": 1807.9,
+    "footprint_mib": 1323.98,
+    "frames": {
+      "iframe_origins": [
+        "(no src)",
+        "https://a56ebb20de6103b8a0a1042307dbc9d5.safeframe.googlesyndication.com",
+        "null",
+        "https://gum.criteo.com",
+        "https://www.google.com",
+        "https://cm.g.doubleclick.net",
+        "https://u.openx.net",
+        "https://ssum-sec.casalemedia.com",
+        "https://ads.pubmatic.com",
+        "https://acdn.adnxs.com",
+        "https://stackoverflow-d.openx.net",
+        "https://eus.rubiconproject.com",
+        "https://js-sec.indexww.com",
+        "https://hbx.media.net",
+        "https://eb2.3lift.com",
+        "https://apps.smartadserver.com"
+      ],
+      "service_workers": [],
+      "top_iframes": 24,
+      "url": "https://stackoverflow.com/questions/tagged/rust"
+    }
+  },
+  {
+    "phase": "Stack Overflow closed",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 11,
+    "renderers": 3,
+    "kinds": {
+      "renderer": 3,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 2,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1,
+      "OnDeviceModelService": 1
+    },
+    "renderer_rss_mib": 204.1,
+    "footprint_mib": null
+  },
+  {
+    "phase": "Stack Overflow closed, 35 s later",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 9,
+    "renderers": 3,
+    "kinds": {
+      "renderer": 3,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 122.6,
+    "footprint_mib": 531.48
+  },
+  {
+    "phase": "Reddit alone",
+    "tabs": 2,
+    "live_views": 2,
+    "processes": 11,
+    "renderers": 5,
+    "kinds": {
+      "renderer": 5,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 523.0,
+    "footprint_mib": 829.23,
+    "frames": {
+      "iframe_origins": [
+        "https://accounts.google.com",
+        "https://www.google.com",
+        "(no src)"
+      ],
+      "service_workers": [
+        "https://www.reddit.com/"
+      ],
+      "top_iframes": 3,
+      "url": "https://www.reddit.com/r/rust/"
+    }
+  },
+  {
+    "phase": "Reddit closed",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 10,
+    "renderers": 4,
+    "kinds": {
+      "renderer": 4,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 344.5,
+    "footprint_mib": 815.98
+  },
+  {
+    "phase": "Reddit closed, 35 s later",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 10,
+    "renderers": 4,
+    "kinds": {
+      "renderer": 4,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 287.1,
+    "footprint_mib": 748.09
+  },
+  {
+    "phase": "Hacker News alone",
+    "tabs": 2,
+    "live_views": 2,
+    "processes": 9,
+    "renderers": 3,
+    "kinds": {
+      "renderer": 3,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 239.3,
+    "footprint_mib": 543.0,
+    "frames": {
+      "iframe_origins": [],
+      "service_workers": [],
+      "top_iframes": 0,
+      "url": "https://news.ycombinator.com/"
+    }
+  },
+  {
+    "phase": "Hacker News closed",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 8,
+    "renderers": 2,
+    "kinds": {
+      "renderer": 2,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 149.9,
+    "footprint_mib": 410.65
+  },
+  {
+    "phase": "Hacker News closed, 35 s later",
+    "tabs": 1,
+    "live_views": 1,
+    "processes": 8,
+    "renderers": 2,
+    "kinds": {
+      "renderer": 2,
+      "gpu-process": 1,
+      "NetworkService": 1,
+      "browser": 1,
+      "StorageService": 1,
+      "AudioService": 1,
+      "VideoCaptureService": 1
+    },
+    "renderer_rss_mib": 98.0,
+    "footprint_mib": 467.54
+  }
+]
