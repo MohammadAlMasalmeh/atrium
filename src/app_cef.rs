@@ -512,6 +512,7 @@ impl Manager {
                 tab.crashed = false;
                 tab.loading = true;
                 tab.document_loading = true;
+                tab.pending_navigation = None;
             }
             if waking {
                 let mut timeout = WakeTimeout::new(self.bridge.clone(), id);
@@ -636,8 +637,11 @@ impl Manager {
             t.scroll = None;
             t.last_used = Instant::now();
             t.waking = false;
-            if let Some(frame) = t.browser.as_ref().and_then(|b| b.main_frame()) {
+            if let Some(frame) = t.browser.as_ref().filter(|_| !t.suspending).and_then(|b| b.main_frame()) {
                 frame.load_url(Some(&CefString::from(url.as_str())));
+            } else if t.live && !t.suspending {
+                // The view is still being created with the old address; load this once it exists.
+                t.pending_navigation = Some(url);
             }
         }
         self.session_dirty = true;

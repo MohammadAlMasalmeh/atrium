@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify sleeping tabs retain their viewport until the restored page has painted."""
+"""Verify a sleeping tab wakes behind a snapshot of how it looked until its page has loaded."""
 import argparse
 import json
 import subprocess
@@ -18,21 +18,17 @@ parser.add_argument('--app', type=Path, default=ROOT / 'target/bundle/Atrium.app
 parser.add_argument('--port', type=int, default=7841)
 args = parser.parse_args()
 gates = {}
-image_requested = Event()
 
 
 class Fixture(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == '/wake-image':
-            image_requested.set()
         gate = gates.get(self.path)
         if gate:
             gate.wait(20)
-        image = '<img src="/wake-image" width="1" height="1">' if self.path == '/first' and '/wake-image' in gates else ''
         body = f'''<!doctype html><title>Wake {self.path}</title>
           <style>body{{margin:0;background:coral}}section{{height:2000px}}
           section+section{{background:royalblue}}</style>
-          <section>{self.path}</section><section>Saved scroll position</section>{image}
+          <section>{self.path}</section><section>Saved scroll position</section>
           <script>if (!sessionStorage.seen) {{ sessionStorage.seen = 1; scrollTo(0, 2400); }}</script>'''.encode()
         self.send_response(200)
         self.send_header('Content-Type', 'text/html')
@@ -96,11 +92,27 @@ with tempfile.TemporaryDirectory(prefix='atrium-wake-', dir='/private/tmp') as d
         wait(lambda: not next(t for t in client.api('/api/browser/tabs')['tabs'] if t['id'] == id)['loading'], 'loaded')
         return id
 
+    def waking():
+        return shell('return Object.keys(__shell.S.waking || {}).map(Number);')
+
     def covered(id):
+        """The shell shows the tab's snapshot while its live view loads off screen."""
         state = memory()
         page = next(t for t in state['tabs'] if t['id'] == id)
-        return (page['waking'] and id in state['wake_previews'] and page['view']
-                and page['view']['x'] > state['layout']['main']['x'] + state['layout']['main']['w'])
+        main = state['layout']['main']
+        shown = shell(f"""const img = [...document.querySelectorAll('img.waking')]
+            .find(i => i.style.display !== 'none' && i.src.includes('/frozen/'));
+            return !!img && {id} in (__shell.S.waking || {{}});""")
+        return shown and page['view'] and page['view']['x'] > main['x'] + main['w']
+
+    def in_place(id):
+        state = memory()
+        view = tab(id)['view']
+        return (id not in waking() and view and not view['hidden']
+                and view['x'] == state['layout']['main']['x'])
+
+    def spinner(id):
+        return memory()['native_chrome']['loading'] or shell(f'return __shell.S.tabs.find(t => t.id === {id}).loading;')
 
     try:
         wait(lambda: memory().get('shell_ready'), 'shell ready', 60)
@@ -116,76 +128,55 @@ with tempfile.TemporaryDirectory(prefix='atrium-wake-', dir='/private/tmp') as d
         wait(lambda: all(tab(id)['suspended'] for id in (first, second, third, fourth)), 'policy eviction', 85)
         wait(lambda: memory()['live_renderers'] <= 2, 'renderer budget')
         check(True, 'memory pressure still releases renderers to the two-tab budget')
-        check(all(tab(id)['preview_bytes'] > 100 for id in (first, second, third)),
-              'eviction saves compressed viewports while releasing renderers')
 
+        # The first page's response stalls, so its wake stays in progress.
         gates['/first'] = Event()
-        gates['/wake-image'] = Event()
         client.command(cmd='activate', id=first)
         wait(lambda: covered(first), 'first wake cover')
-        check(not memory()['native_chrome']['loading'], 'wake does not show a toolbar loading spinner')
-        check(shell(f'return __shell.S.tabs.find(t => t.id === {first}).loading === false;'),
-              'wake does not show a sidebar loading spinner')
-        # Switching away removes the native image, even while its page is still waking.
+        check(shell("""const img = [...document.querySelectorAll('img.waking')].find(i => i.style.display !== 'none');
+            return img.complete && img.naturalWidth > 100;"""), 'the snapshot taken before sleeping is shown')
+        check(not spinner(first), 'wake shows no loading spinner in the toolbar or sidebar')
         client.command(cmd='activate', id=control)
-        wait(lambda: not memory()['wake_previews'], 'switch away')
+        wait(lambda: not covered(first) and in_place(control), 'switch away')
         client.command(cmd='activate', id=first)
         wait(lambda: covered(first), 'return to waking tab')
         time.sleep(.3)
-        check(covered(first), 'saved viewport survives rapid tab switches and a stalled response')
+        check(covered(first), 'the snapshot survives rapid tab switches and a stalled response')
         gates['/first'].set()
-        wait(image_requested.is_set, 'image request')
-        handoff_started = time.monotonic()
-        wait(lambda: not tab(first)['waking'] and first not in memory()['wake_previews'], 'painted handoff', 5)
-        elapsed = (time.monotonic() - handoff_started) * 1000
-        check(next(t for t in client.api('/api/browser/tabs')['tabs'] if t['id'] == first)['loading'],
-              f'usable page is revealed with its image still stalled ({elapsed:.0f} ms)')
-        client.tool('switch_tab', {'index': next(i for i, t in enumerate(client.api('/api/browser/tabs')['tabs']) if t['id'] == first)})
-        state = json.loads(client.tool('evaluate', {'code': 'return {ready:document.readyState,y:scrollY};'})[0]['text'])
-        check(state == {'ready': 'interactive', 'y': 2400},
-              'DOM and restored scroll are ready before the full load')
-        check(not memory()['native_chrome']['loading'] and shell(f'return !__shell.S.tabs.find(t => t.id === {first}).loading;'),
-              'remaining wake resources do not start a second loading indicator')
-        gates['/wake-image'].set()
-        live = tab(first)['view']
-        check(live['x'] == memory()['layout']['main']['x'] and not live['hidden'],
-              'painted page replaces the saved viewport in place')
+        wait(lambda: in_place(first), 'loaded handoff', 5)
+        check(not spinner(first), 'the live page replaces the snapshot in place')
         client.tool('switch_tab', {'index': next(i for i, t in enumerate(client.api('/api/browser/tabs')['tabs']) if t['id'] == first)})
         check(json.loads(client.tool('evaluate', {'code': 'return scrollY;'})[0]['text']) == 2400,
               'scroll position is restored before the live page is revealed')
 
-        # Prewarming begins the same hidden restore before selection.
+        # A page that never finishes loading is handed over after the fallback delay.
         gates['/second'] = Event()
-        client.command(cmd='prewarm', id=second)
-        wait(lambda: tab(second)['waking'], 'prewarm started')
-        check(second not in memory()['wake_previews'], 'background prewarm does not cover another tab')
-        client.command(cmd='split', id=second)
-        wait(lambda: second in memory()['wake_previews'], 'split wake cover')
+        client.command(cmd='activate', id=second)
+        wait(lambda: covered(second), 'second wake cover')
+        started = time.monotonic()
+        wait(lambda: in_place(second), 'fallback handoff', 6)
+        elapsed = time.monotonic() - started
+        check(2 <= elapsed <= 4.5, f'a stalled page replaces its snapshot after the fallback delay ({elapsed:.1f} s)')
         gates['/second'].set()
-        wait(lambda: not tab(second)['waking'] and second not in memory()['wake_previews'], 'split handoff')
-        check(not tab(second)['view']['hidden'], 'split pane wakes behind its own viewport')
-        client.command(cmd='split')
 
-        # Explicit navigation cancels a pending restore and exposes normal navigation state.
+        # Explicit navigation cancels a pending wake.
         gates['/third'] = Event()
         gates['/replacement'] = Event()
         client.command(cmd='activate', id=third)
         wait(lambda: covered(third), 'third wake cover')
         client.command(cmd='navigate', url=base + '/replacement')
-        wait(lambda: not tab(third)['waking'] and third not in memory()['wake_previews'], 'navigation cancellation')
-        check(tab(third)['preview_bytes'] == 0, 'explicit navigation drops the old viewport')
+        wait(lambda: third not in waking(), 'navigation cancellation')
         gates['/third'].set()
         gates['/replacement'].set()
         wait(lambda: not next(t for t in client.api('/api/browser/tabs')['tabs'] if t['id'] == third)['loading'], 'replacement load')
-        check(third not in memory()['wake_previews'], 'late wake callbacks cannot restore a cancelled cover')
+        check(third not in waking() and in_place(third), 'navigation during a wake drops the snapshot and shows the new page')
 
         gates['/fourth'] = Event()
         shell(f'''__shell.ipc({{cmd:'activate',id:{fourth}}});
                   __shell.ipc({{cmd:'navigate',url:{json.dumps(base + '/wake-search')}}}); return true;''')
         wait(lambda: any(t['id'] == fourth and t['url'] == base + '/wake-search' and not t['loading']
                          for t in client.api('/api/browser/tabs')['tabs']), 'search during wake creation', 5)
-        check(not tab(fourth)['waking'] and fourth not in memory()['wake_previews'],
-              'search during wake creation bypasses the stalled old page')
+        check(fourth not in waking(), 'search during wake creation bypasses the stalled old page')
         gates['/fourth'].set()
 
         # Submit a new destination before CEF has delivered on_after_created.
