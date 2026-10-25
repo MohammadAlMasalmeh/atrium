@@ -179,6 +179,14 @@ struct Tab {
     opener: Option<u64>,
     /// A popup whose BrowserView Chromium is still creating; no view must be made for it.
     opening: bool,
+    /// History from earlier views of this tab, outside the live view's own history:
+    /// oldest first, and nearest first.
+    back: Vec<String>,
+    forward: Vec<String>,
+    /// Document scroll offset to apply when the released page loads again.
+    scroll: Option<(f64, f64)>,
+    /// The view is being replaced to step into `back` or `forward`.
+    reopen: bool,
     downloads: std::collections::HashSet<u32>,
 }
 impl Tab {
@@ -203,6 +211,10 @@ impl Tab {
             crashed: false,
             opener: None,
             opening: false,
+            back: Vec::new(),
+            forward: Vec::new(),
+            scroll: None,
+            reopen: false,
             downloads: Default::default(),
         }
     }
@@ -407,8 +419,13 @@ impl Manager {
             .unwrap_or_else(|| self.new_tab(None, true, false));
         let url = normalize_url(&raw);
         if let Some(t) = self.tab_mut(id) {
+            if t.browser.is_none() && is_web(&t.url) {
+                t.back.push(std::mem::replace(&mut t.url, url.clone()));
+                t.forward.clear();
+            }
             t.url = url.clone();
             t.loading = true;
+            t.scroll = None;
             t.last_used = Instant::now();
             if let Some(frame) = t.browser.as_ref().and_then(|b| b.main_frame()) {
                 frame.load_url(Some(&CefString::from(url.as_str())));
@@ -599,12 +616,17 @@ impl Manager {
                 }
             }
             Pending::Probe(id) => {
-                if error.is_some() || data["result"]["value"] != true {
+                let scroll = &data["result"]["value"];
+                let scroll = error.is_none().then(|| Some((scroll[0].as_f64()?, scroll[1].as_f64()?))).flatten();
+                if scroll.is_none() {
                     if let Some(tab) = self.tab_mut(id) {
                         tab.page_protected_until = Instant::now() + Duration::from_secs(180);
                     }
                 }
-                if error.is_none() && data["result"]["value"] == true && self.can_suspend(id) {
+                if let Some(scroll) = scroll.filter(|_| self.can_suspend(id)) {
+                    if let Some(tab) = self.tab_mut(id) {
+                        tab.scroll = Some(scroll).filter(|s| *s != (0.0, 0.0));
+                    }
                     self.suspend(id);
                 }
             }
@@ -612,12 +634,75 @@ impl Manager {
     }
     /// Closes the page but keeps the tab; selecting it creates a fresh view at its URL.
     fn suspend(&mut self, id: u64) {
-        if let Some(tab) = self.tab_mut(id) {
+        let (back, forward) = self.history(id);
+        if let Some(tab) = self.tab_mut(id).filter(|t| t.browser.is_some() && !t.suspending) {
+            tab.back = back;
+            tab.forward = forward;
+        }
+        self.release(id);
+    }
+    fn release(&mut self, id: u64) {
+        if let Some(tab) = self.tab_mut(id).filter(|t| !t.suspending) {
             if let Some(host) = tab.browser.as_ref().and_then(|b| b.host()) {
                 tab.suspending = true;
                 host.close_browser(0);
             }
         }
+    }
+    /// The tab's back and forward lists, joining the live view's entries with
+    /// history saved from its earlier views.
+    fn history(&self, id: u64) -> (Vec<String>, Vec<String>) {
+        let Some(tab) = self.tab(id) else { return Default::default() };
+        let entries = Entries::default();
+        if let Some(host) = tab.browser.as_ref().filter(|_| !tab.suspending).and_then(|b| b.host()) {
+            host.navigation_entries(Some(&mut HistoryVisitor::new(entries.clone())), 0);
+        }
+        let (live, current) = std::mem::take(&mut *entries.lock().unwrap());
+        let mut back = tab.back.clone();
+        let mut forward = tab.forward.clone();
+        if let Some(current) = (!live.is_empty()).then(|| current.min(live.len() - 1)) {
+            back.extend(live[..current].iter().filter(|u| is_web(u)).cloned());
+            // A view starts with one entry; more entries mean the user navigated
+            // from it, which drops the saved forward list.
+            if live.len() > 1 {
+                forward = live[current + 1..].iter().filter(|u| is_web(u)).cloned().collect();
+            }
+        }
+        back.drain(..back.len().saturating_sub(HISTORY));
+        forward.truncate(HISTORY);
+        (back, forward)
+    }
+    /// Goes back or forward, replacing the view when the step leaves the live view's history.
+    fn go(&mut self, id: u64, back: bool) -> Result<(), String> {
+        let browser = self.tab(id).ok_or("No page is open")?.browser.clone();
+        if let Some(b) = browser.filter(|b| (if back { b.can_go_back() } else { b.can_go_forward() }) != 0) {
+            if back { b.go_back() } else { b.go_forward() }
+            return Ok(());
+        }
+        let (mut older, mut newer) = self.history(id);
+        let target = if back { older.pop() } else { (!newer.is_empty()).then(|| newer.remove(0)) };
+        let target = target.ok_or_else(|| format!("There is no page to go {}", if back { "back" } else { "forward" }))?;
+        let tab = self.tab_mut(id).ok_or("No page is open")?;
+        let current = std::mem::replace(&mut tab.url, target);
+        if is_web(&current) {
+            if back { newer.insert(0, current) } else { older.push(current) }
+        }
+        tab.back = older;
+        tab.forward = newer;
+        tab.scroll = None;
+        tab.loading = true;
+        tab.last_used = Instant::now();
+        tab.reopen = tab.browser.is_some();
+        let live = tab.reopen;
+        self.session_dirty = true;
+        if live {
+            self.release(id);
+        } else {
+            self.create_view(id);
+            self.layout();
+        }
+        self.push(false);
+        Ok(())
     }
     fn crashed(&mut self, id: u64) {
         if self.closing.load(Ordering::Relaxed) {
@@ -669,10 +754,12 @@ impl Manager {
             Op::Navigate { tab, url, reply } => { let id = self.navigate(tab.or(self.active), url); let _ = reply.send(id); }
             Op::History { tab, action, reply } => {
                 let id = tab.or(self.active).filter(|id| self.tab(*id).is_some());
-                let result = match (id, id.and_then(|id| self.tab(id)?.browser.as_ref())) {
-                    (_, Some(b)) => { match action { "back" => b.go_back(), "forward" => b.go_forward(), _ => b.reload() }; Ok(()) },
+                let browser = id.and_then(|id| self.tab(id)?.browser.clone());
+                let result = match (id, browser) {
+                    (Some(id), _) if action != "reload" => self.go(id, action == "back"),
+                    (_, Some(b)) => { b.reload(); Ok(()) },
                     // A released (sleeping or crashed) tab reloads with a fresh view.
-                    (Some(id), None) if action == "reload" => { self.create_view(id); self.layout(); Ok(()) },
+                    (Some(id), None) => { self.create_view(id); self.layout(); Ok(()) },
                     _ => Err("No page is open".into())
                 }; let _ = reply.send(result);
             }
@@ -769,17 +856,18 @@ impl Manager {
                 self.layout();
                 self.push(false);
             }
-            "back" | "forward" | "reload" => {
+            "back" | "forward" => {
+                if let Some(id) = self.active {
+                    let _ = self.go(id, m["cmd"] == "back");
+                }
+            }
+            "reload" => {
                 if let Some(b) = self
                     .active
                     .and_then(|id| self.tab(id))
                     .and_then(|t| t.browser.as_ref())
                 {
-                    match m["cmd"].as_str().unwrap() {
-                        "back" => b.go_back(),
-                        "forward" => b.go_forward(),
-                        _ => b.reload(),
-                    }
+                    b.reload();
                 }
             }
             "freeze" => {
@@ -920,17 +1008,19 @@ impl Manager {
                 if !self.closing.load(Ordering::Relaxed)
                     && self.tab(id).is_some_and(|t| t.suspending)
                 {
+                    let mut reopen = false;
                     let view = self.tab_mut(id).and_then(|t| {
                         t.browser = None;
                         t.registration = None;
                         t.suspended = true;
                         t.suspending = false;
+                        reopen = std::mem::take(&mut t.reopen);
                         t.view.take()
                     });
                     if let (Some(w), Some(v)) = (&self.window, view) {
                         w.remove_child_view(Some(&mut View::from(&v)));
                     }
-                    if self.active == Some(id) || self.split == Some(id) {
+                    if reopen || self.active == Some(id) || self.split == Some(id) {
                         self.create_view(id);
                     }
                     self.push(false);
@@ -965,6 +1055,7 @@ impl Manager {
                 if let Some(t) = self.tab_mut(id) {
                     t.url = url;
                 }
+                self.session_dirty = true;
                 self.push(false);
             }
             Event::Loading(id, loading) => {
@@ -977,6 +1068,11 @@ impl Manager {
             Event::Crashed(id) => self.crashed(id),
             Event::Loaded(id) => {
                 if id != SHELL {
+                    let scroll = self
+                        .tab_mut(id)
+                        .and_then(|t| t.scroll.take())
+                        .map(|(x, y)| format!("\nscrollTo({x}, {y});"))
+                        .unwrap_or_default();
                     if let Some(frame) = self
                         .tab(id)
                         .and_then(|t| t.browser.as_ref())
@@ -984,7 +1080,7 @@ impl Manager {
                     {
                         frame.execute_java_script(
                             Some(&CefString::from(
-                                format!("{LIFECYCLE_JS}\n{PAGE_JS}").as_str(),
+                                format!("{LIFECYCLE_JS}\n{PAGE_JS}{scroll}").as_str(),
                             )),
                             None,
                             0,
@@ -1036,6 +1132,7 @@ impl Manager {
             }
             Event::DevResult(id, success, data) => self.finish(id, success, data),
             Event::Quit => {
+                self.session_dirty = true;
                 self.save_session();
                 self.closing.store(true, Ordering::Relaxed);
                 for t in &self.tabs {
@@ -1302,6 +1399,19 @@ wrap_download_handler! {struct HostDownload {bridge:Bridge,id:u64} impl Download
     fn on_before_download(&self,_browser:Option<&mut Browser>,item:Option<&mut DownloadItem>,_name:Option<&CefString>,callback:Option<&mut BeforeDownloadCallback>)->i32{if let Some(item)=item{self.bridge.send(Event::Download(self.id,item.id(),true));}if let Some(callback)=callback{callback.cont(None,1);1}else{0}}
     fn on_download_updated(&self,_browser:Option<&mut Browser>,item:Option<&mut DownloadItem>,_callback:Option<&mut DownloadItemCallback>){if let Some(item)=item{self.bridge.send(Event::Download(self.id,item.id(),item.is_in_progress()!=0));}}
 }}
+type Entries = Arc<Mutex<(Vec<String>, usize)>>;
+wrap_navigation_entry_visitor! {struct HistoryVisitor {entries:Entries} impl NavigationEntryVisitor {
+    fn visit(&self,entry:Option<&mut NavigationEntry>,current:i32,_index:i32,_total:i32)->i32{
+        let mut entries=self.entries.lock().unwrap();
+        if current!=0{entries.1=entries.0.len();}
+        entries.0.push(entry.map(|e|CefString::from(&e.url()).to_string()).unwrap_or_default());
+        1
+    }
+}}
+const HISTORY: usize = 50;
+fn is_web(url: &str) -> bool {
+    reqwest::Url::parse(url).is_ok_and(|u| matches!(u.scheme(), "http" | "https"))
+}
 wrap_task! {struct Maintenance {bridge:Bridge} impl Task {fn execute(&self){self.bridge.send(Event::Maintenance);if self.bridge.manager.upgrade().is_some(){let mut next=Self::new(self.bridge.clone());post_delayed_task(ThreadId::UI,Some(&mut next),10000);}}}}
 impl Manager {
     /// Chromium may report a popup's BrowserView before or after its browser; pair them
@@ -1384,7 +1494,7 @@ impl Manager {
             if self.pending.values().any(|(_, tab, _)| *tab == id) {
                 continue;
             }
-            self.cdp(id,"Runtime.evaluate",json!({"expression":format!("{LIFECYCLE_JS}; window.__atriumLifecycle.canSuspend()"),"returnByValue":true}),Pending::Probe(id));
+            self.cdp(id,"Runtime.evaluate",json!({"expression":format!("{LIFECYCLE_JS}; window.__atriumLifecycle.canSuspend() && [scrollX, scrollY]"),"returnByValue":true}),Pending::Probe(id));
         }
         let expired = self
             .pending
@@ -1411,11 +1521,13 @@ impl Manager {
                 t.id != SHELL
                     && t.id != GLANCE
                     && !t.scratch
-                    && reqwest::Url::parse(&t.url)
-                        .is_ok_and(|u| matches!(u.scheme(), "http" | "https"))
+                    && is_web(&t.url)
             })
             .take(1000)
-            .map(|t| json!({"url":t.url,"title":t.title,"active":Some(t.id)==self.active}))
+            .map(|t| {
+                let (back, forward) = self.history(t.id);
+                json!({"url":t.url,"title":t.title,"active":Some(t.id)==self.active,"back":back,"forward":forward,"scroll":t.scroll.map(|(x, y)| [x, y])})
+            })
             .collect::<Vec<_>>();
         if let Ok(dir) = crate::data_dir() {
             let path = dir.join("chromium-tabs.json");
@@ -1439,15 +1551,24 @@ impl Manager {
             return;
         };
         for saved in tabs.into_iter().take(1000) {
-            let Some(url) = saved["url"].as_str().filter(|url| {
-                reqwest::Url::parse(url).is_ok_and(|u| matches!(u.scheme(), "http" | "https"))
-            }) else {
+            let Some(url) = saved["url"].as_str().filter(|url| is_web(url)) else {
                 continue;
             };
+            let urls = |key: &str| {
+                let list = saved[key].as_array().map(Vec::as_slice).unwrap_or_default();
+                list.iter().filter_map(Json::as_str).filter(|u| is_web(u)).map(String::from).collect::<Vec<_>>()
+            };
+            let (mut back, mut forward) = (urls("back"), urls("forward"));
+            back.drain(..back.len().saturating_sub(HISTORY));
+            forward.truncate(HISTORY);
+            let scroll = &saved["scroll"];
             self.next_id += 1;
             let id = self.next_id;
             self.tabs.push(Tab {
                 suspended: true,
+                back,
+                forward,
+                scroll: scroll[0].as_f64().zip(scroll[1].as_f64()),
                 ..Tab::new(id, url.into(), saved["title"].as_str().unwrap_or("").into())
             });
             if saved["active"] == true {

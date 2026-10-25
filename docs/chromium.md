@@ -83,8 +83,8 @@ even below the six-page target. A ten-second maintenance task applies the policy
 
 Eviction closes the page's BrowserView while retaining its tab metadata. Selecting
 it creates a fresh view at the saved URL. Cookies and origin storage persist in
-Chromium's profile. In-memory application state, full back/forward history, and
-scroll position are not restored after eviction. Media protection is conservative
+Chromium's profile. In-memory application state is not restored; history and
+scroll are partially restored (see below). Media protection is conservative
 but does not guarantee detection inside every cross-origin frame. Protected tabs
 can exceed the target; the app does not discard unsaved forms to meet a RAM claim.
 
@@ -150,6 +150,25 @@ Session metadata is written with a temporary file and rename. Restart restores
 logical tabs and loads only the active page. Assistant scratch pages are omitted
 and bounded to three simultaneous pages, with cancellation cleanup.
 
+### History and scroll after eviction and restart
+
+CEF cannot give a new view a navigation history, so each tab keeps its own back
+and forward URL lists (up to 50 each, HTTP(S) only) for the history of views it
+no longer has. They are captured from Chromium's navigation entries when a view
+is released and when the session is saved (every ten seconds when changed, and
+at quit), and stored with each tab in `chromium-tabs.json`. Back and forward use
+the live view's history first; stepping past it replaces the view with a fresh
+one at the saved URL. A navigation that adds a history entry drops the saved
+forward list, as in a normal browser. Each step outside the live history is a
+full load in a new view: there is no back/forward cache, form state, or
+`history.state`, and an entry reached this way has no scroll offset.
+
+The eviction probe also records the page's document scroll offset; it is applied
+with `scrollTo` once the page loads again, including after a restart. Pages that
+build their content after load, or scroll an inner element instead of the
+document, may not land at the same place. Tabs still live at quit are saved
+without a scroll offset. Checked with `tools/test_history.py`.
+
 The `/api/browser/memory` endpoint reports logical tabs and live views.
 `live_renderers` is the legacy JSON field name for **BrowserViews**, not a count
 of operating-system renderer processes. Use a process-tree measurement for RAM.
@@ -186,6 +205,7 @@ python3 tools/test_popups.py --api http://127.0.0.1:7791 \
 python3 tools/test_permissions.py --api http://127.0.0.1:7791 \
   --data-dir /private/tmp/atrium-smoke --fixture http://127.0.0.1:7799
 python3 tools/test_profile_persistence.py --port 7792 --fixture http://127.0.0.1:7799
+python3 tools/test_history.py --port 7793 --fixture http://127.0.0.1:7799
 ```
 
 The smoke check covers navigation, page interaction, JavaScript isolation,
@@ -323,7 +343,8 @@ Chrome Sync have not been validated or implemented here.
   permission prompt UI, downloads, printing, accessibility, and broader website compatibility.
 - Password management, passkeys, account migration, and local API isolation
   beyond the same-user token.
-- Per-tab history/scroll restoration and better media-aware eviction coverage.
+- Full session history restoration (form state, `history.state`, per-entry scroll)
+  and better media-aware eviction coverage.
 - Real-world memory, responsiveness, battery, and long-running stability tests.
 
 ## References
