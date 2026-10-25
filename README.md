@@ -98,7 +98,8 @@ Where Atrium is behind:
 - **Startup:** Chrome starts about 0.3 s sooner. Atrium's figure runs until the
   shell and first tab are ready; Chrome's ends when its DevTools port opens.
 - **Idle tabs:** Atrium keeps memory low by evicting idle tabs, so switching back
-  reloads them.
+  reloads them. Resting the pointer on a sleeping tab starts that reload early,
+  which cut the switch from 0.39 s to 0.12 s (median, background-window test).
 
 Page timings are medians over the eight sites where all three browsers received
 the same page. On Google Search and Reddit, Chrome and Aside were served a
@@ -115,6 +116,10 @@ methodology is in [docs/chromium.md](docs/chromium.md).
 - Background tab eviction, with a six-page target and a five-minute idle timeout.
   Active/split pages, drafts, media checks, downloads, capture, and agent work can
   prevent eviction. Selecting an evicted tab reloads it.
+- The command bar searches imported Chrome history and bookmarks as well as recent
+  visits, ranked like an address bar: a site-name prefix first, then word and
+  substring matches, ordered by visits and recency. A lookup over 7,500 imported
+  pages takes about 2.5 ms.
 - Built-in ad blocking: third-party requests to about 60 ad exchanges, ad servers,
   and ID-sync endpoints are refused, so ad frames never get their own renderer
   processes. Top-level navigations and analytics scripts are left alone.

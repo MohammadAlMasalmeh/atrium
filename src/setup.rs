@@ -24,6 +24,7 @@ pub fn routes(_app: Arc<App>) -> Router<Arc<App>> {
         .route("/api/setup/opencode", get(opencode_status))
         .route("/api/setup/opencode/install", post(install))
         .route("/api/setup/google", get(google))
+        .route("/api/setup/suggest", get(suggest))
 }
 
 pub(crate) async fn shell_only(State(app): State<Arc<App>>, req: Request, next: Next) -> Response {
@@ -120,6 +121,22 @@ fn default_history_limit() -> usize {
 
 async fn imported(State(app): State<Arc<App>>, axum::extract::Query(q): axum::extract::Query<LibraryQuery>) -> Json<Value> {
     Json(migration::library(data_dir(&app), q.history.min(20_000)))
+}
+
+#[derive(Deserialize)]
+struct SuggestQuery {
+    q: String,
+    #[serde(default = "default_suggest_limit")]
+    limit: usize,
+}
+fn default_suggest_limit() -> usize {
+    8
+}
+
+async fn suggest(State(app): State<Arc<App>>, axum::extract::Query(q): axum::extract::Query<SuggestQuery>) -> Json<Value> {
+    let dir = data_dir(&app).to_path_buf();
+    let found = tokio::task::spawn_blocking(move || crate::suggest::suggest(&dir, &q.q, q.limit.min(50))).await.unwrap_or_default();
+    Json(json!({ "results": found }))
 }
 
 #[derive(Deserialize)]

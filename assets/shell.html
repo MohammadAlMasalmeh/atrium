@@ -1596,7 +1596,7 @@ function updateCmdk() {
   for (const t of S.tabs.filter((t) => t.kind === 'web' && q && match(t.title, t.url)).slice(0, 5))
     items.push({ g: 'Switch to Tab', t: t.title || t.url, s: host(t.url), img: favicon(t.url, t.icon), page: true, run: () => { S.view = 'tab'; const sp = S.tabSpace.get(t.id); if (sp != null) S.space = sp; ipc({ cmd: 'activate', id: t.id }); } });
   for (const h of S.hist.filter((h) => q && match(h.title, h.url) && !S.tabs.some((t) => t.url === h.url)).slice(0, 6))
-    items.push({ g: 'History', t: h.title || h.url, s: host(h.url), img: favicon(h.url), page: true, run: () => openUrl(h.url, !cmdkUrlMode) });
+    items.push({ g: 'History', url: h.url, t: h.title || h.url, s: host(h.url), img: favicon(h.url), page: true, run: () => openUrl(h.url, !cmdkUrlMode) });
   for (const s of S.sessions.filter((s) => q && match(s.title)).slice(0, 3))
     items.push({ g: 'Chats', t: s.title, s: ago(s.updated), ic: 'chat', run: () => openChat(s.id, true) });
   const acts = [
@@ -1621,6 +1621,30 @@ function updateCmdk() {
   for (const a of acts.filter((a) => match(a.t)).slice(0, q ? 3 : 6)) items.push({ g: 'Actions', ...a });
   cmdkItems = items; cmdkSel = 0; drawCmdk();
   $('#cmdk-icon').innerHTML = icon(q && !q.includes(' ') && /\./.test(q) ? 'globe' : 'search');
+  if (q) lookupCmdk(q);
+}
+// Imported Chrome history and bookmarks, ranked by the backend, join the local results.
+let cmdkLookup = 0;
+async function lookupCmdk(q) {
+  const n = ++cmdkLookup;
+  let found;
+  try { found = (await (await fetch('/api/setup/suggest?limit=8&q=' + encodeURIComponent(q))).json()).results || []; } catch { return; }
+  if (n !== cmdkLookup || S.overlay !== 'cmdk' || $('#cmdk-input').value.trim() !== q) return;
+  const skip = new Set([...cmdkItems.map((it) => it.url), ...S.tabs.map((t) => t.url)]);
+  const fresh = found.filter((x) => !skip.has(x.url) && skip.add(x.url));
+  const room = 6 - cmdkItems.filter((it) => it.g === 'History').length;
+  const add = (x, g) => ({ g, url: x.url, t: x.title || x.url, s: host(x.url), img: favicon(x.url), page: true, run: () => openUrl(x.url, !cmdkUrlMode) });
+  const hist = fresh.filter((x) => x.kind === 'history').slice(0, Math.max(0, room)).map((x) => add(x, 'History'));
+  const marks = fresh.filter((x) => x.kind === 'bookmark').slice(0, 3).map((x) => add(x, 'Bookmarks'));
+  if (!hist.length && !marks.length) return;
+  const sel = cmdkItems[cmdkSel];
+  const at = (g) => { const i = cmdkItems.findIndex((it) => it.g === g); return i < 0 ? cmdkItems.length : i; };
+  const after = Math.min(at('Chats'), at('Actions'));
+  const lastHist = cmdkItems.map((it) => it.g).lastIndexOf('History');
+  const histAt = lastHist < 0 ? after : lastHist + 1;
+  cmdkItems = [...cmdkItems.slice(0, histAt), ...hist, ...cmdkItems.slice(histAt, after), ...marks, ...cmdkItems.slice(after)];
+  cmdkSel = Math.max(0, cmdkItems.indexOf(sel));
+  drawCmdk();
 }
 function drawCmdk() {
   let g, html = '';

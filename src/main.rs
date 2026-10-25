@@ -24,6 +24,7 @@ mod permissions;
 mod passwords;
 mod server;
 mod setup;
+mod suggest;
 mod update_sig;
 mod updater;
 
