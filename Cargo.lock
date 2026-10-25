@@ -84,6 +84,7 @@ dependencies = [
  "cef",
  "clap",
  "dirs 5.0.1",
+ "flate2",
  "futures-util",
  "libc",
  "muda",
