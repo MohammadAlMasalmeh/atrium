@@ -247,13 +247,46 @@ extension updater, or promise of arbitrary extension compatibility. Gmail is a
 normal website in the Chromium profile; actual Google account sign-in and
 Chrome Sync have not been validated or implemented here.
 
+## Browser commands
+
+Find, zoom, saving, the page menu, shortcuts, downloads, and links from other
+apps are implemented on the Chromium engine. The shell shows a find bar (next,
+previous, match count, Escape), a zoom indicator, and a short downloads list
+with progress, cancel, and reveal. Zoom is stored per host in
+`<data dir>/zoom-levels.json`. One process owns each data directory
+(`instance.lock`); a second launch posts its URLs to the running one. The app
+bundle declares `http`/`https` and HTML document types. "Make Atrium the default
+browser" calls `LSSetDefaultHandlerForURLScheme`, and only from a normal window.
+
+`tools/test_browser_commands.py` drives a background instance
+(`ATRIUM_MOCK_KEYCHAIN=1`, `ATRIUM_BACKGROUND_WINDOW=1`, a fresh data directory,
+and the watchdog). On this build it passed: the shortcut map and commands
+(new/close/reopen tab, location bar, reload, back, forward, tab numbers,
+Ctrl+Tab, find, zoom, save), find match counts, per-host zoom restored after
+restart, HTML/MHTML save, print-to-PDF, a PDF URL displayed as
+`application/pdf` instead of a download, the context menu (open/copy/save link,
+copy/save/open image, back/forward/reload, Inspect refused), download progress,
+cancel, and reveal without launching Finder, an unchanged default-browser
+handler, and URLs forwarded by a second launch and by `application:openURLs:`.
+
+The same run did not open the system print dialog, the default-browser dialog,
+or Finder, and it did not deliver real keystrokes. Those need a normal,
+focused window. Context-menu Copy and Search were present and were not invoked.
+PDF tabs use the same Alloy browser views as other pages. CEF rejects a
+Chrome-style browser view once this Chrome-style window already has a browser,
+so the PDF viewer is the Alloy document (`application/pdf` in the test, and the
+file was not downloaded).
+
 ## Work needed before public distribution
 
-- Signed/notarized releases, engine security updates, default-browser registration,
-  and update/rollback infrastructure.
+- Signed/notarized releases, engine security updates, and update/rollback
+  infrastructure. The bundle advertises http/https and HTML documents, and a
+  normal launch can offer to become the default browser; that system dialog is
+  not part of the automated test.
 - Extension permission management and tests against real required extensions.
 - Renderer-crash recovery, complete popup/opener and OAuth behavior, permission
-  prompts, downloads, printing, accessibility, and broader website compatibility.
+  prompts, accessibility, and broader website compatibility. The system print
+  dialog is not part of the automated test.
 - Password management, passkeys, account migration, and local API isolation
   beyond the same-user token.
 - Per-tab history/scroll restoration and better media-aware eviction coverage.
