@@ -49,6 +49,11 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/tool", post(tool))
         .route("/api/debug/shell", post(debug_shell))
         .route("/api/browser/extensions", get(browser_extensions))
+        .route("/api/browser/extensions/install", post(extension_install))
+        .route("/api/browser/extensions/updates", post(extension_updates))
+        .route("/api/browser/extensions/restart", post(extension_restart))
+        .route("/api/browser/extensions/:id/icon", get(extension_icon))
+        .route("/api/browser/extensions/:id/:action", post(extension_action))
         .merge(crate::setup::routes(app.clone()))
         .route_layer(axum::middleware::from_fn(crate::setup::require_token))
         .route_layer(axum::middleware::from_fn_with_state(app.clone(), crate::setup::shell_only))
@@ -281,7 +286,52 @@ async fn browser_memory(State(app): Shared) -> Json<Value> {
 }
 
 async fn browser_extensions() -> Json<Value> {
-    Json(crate::extensions::review(crate::CHROME_EXTENSIONS.get().map(Vec::as_slice).unwrap_or_default()))
+    let mut review = crate::extensions::review(crate::CHROME_EXTENSIONS.get().map(Vec::as_slice).unwrap_or_default());
+    let store = crate::extension_store::list();
+    review["installed"] = store["installed"].clone();
+    review["restart_required"] = store["restart_required"].clone();
+    review["chromium_version"] = json!(crate::extension_store::chromium_version());
+    Json(review)
+}
+
+fn extension_result(result: anyhow::Result<Value>) -> Json<Value> {
+    Json(result.unwrap_or_else(|e| json!({ "error": format!("{e:#}") })))
+}
+
+/// `{"source": "<Web Store link or ID>"}` or `{"crx_url": "<self-hosted CRX>"}`.
+async fn extension_install(Json(body): Json<Value>) -> Json<Value> {
+    extension_result(match (body["source"].as_str(), body["crx_url"].as_str()) {
+        (Some(source), _) => crate::extension_store::install_from_store(source).await,
+        (None, Some(url)) => crate::extension_store::install_from_crx_url(url).await,
+        _ => Err(anyhow::anyhow!("Enter a Chrome Web Store link or extension ID")),
+    })
+}
+
+async fn extension_action(Path((id, action)): Path<(String, String)>) -> Json<Value> {
+    extension_result(crate::extension_store::act(&id, &action))
+}
+
+async fn extension_updates() -> Json<Value> {
+    extension_result(crate::extension_store::check_updates().await)
+}
+
+async fn extension_icon(Path(id): Path<String>) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match crate::extension_store::icon(&id) {
+        Some((bytes, kind)) => ([(axum::http::header::CONTENT_TYPE, kind)], bytes).into_response(),
+        None => axum::http::StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+/// Chromium loads extensions only at startup, so applying changes means relaunching.
+async fn extension_restart(State(app): Shared) -> Json<Value> {
+    if let Err(e) = crate::relaunch() {
+        return Json(json!({ "error": format!("Could not restart Atrium: {e}") }));
+    }
+    Json(match app.agent.browser.op(|reply| Op::Shell { body: json!({ "cmd": "quit" }), reply }).await {
+        Ok(()) => json!({ "ok": true }),
+        Err(e) => json!({ "error": e.to_string() }),
+    })
 }
 
 async fn browser_tabs(State(app): Shared) -> Json<Value> {

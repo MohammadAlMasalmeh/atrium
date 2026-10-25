@@ -66,6 +66,17 @@ Verified on macOS 26 with the smoke, lifecycle, and persistence checks: the
 frontmost application never changed to the test instance, the window reported
 `alpha 0` and not on screen, and screenshots contained the rendered fixture.
 
+The protections cover every window the process creates, not only the main
+one, because extensions can make Chromium open windows of its own. In this
+mode `NSApplication` refuses `activateIgnoringOtherApps:`, `activate`, and
+any activation-policy change, and modal sessions return immediately.
+`NSRunningApplication activateWithOptions:` is refused for the app itself.
+`NSWindow` ordering calls are swizzled so any window that is ordered in is
+first made transparent and moved off screen, then ordered back rather than to
+the front; `makeKeyWindow` and `makeMainWindow` do nothing. A 250 ms sweep also
+re-asserts the policy and conceals any visible window it finds. Each refusal is
+logged to stderr. Outside background mode none of this is installed.
+
 `tools/build-chromium.sh --release` creates a complete development app with the
 CEF framework, sandbox helper executables, Chromium credits, and verified ad hoc
 signatures. CEF updates require changing the pin, rebuilding, and re-running the
@@ -119,6 +130,15 @@ python3 tools/smoke_chromium.py --api http://127.0.0.1:7791 \
 python3 tools/test_tab_lifecycle.py --api http://127.0.0.1:7791 \
   --data-dir /private/tmp/atrium-smoke --fixture http://127.0.0.1:7799
 python3 tools/test_profile_persistence.py --port 7792 --fixture http://127.0.0.1:7799
+```
+
+The extension check starts its own background instances and fixture server.
+It kills and fails on any instance that becomes frontmost, and also runs
+`--watchdog SCRIPT PID` per instance when that script exists. It needs network
+access to the Chrome Web Store and the blocked ad hosts:
+
+```sh
+python3 tools/test_extensions.py --port 7852 --fixture-port 7853
 ```
 
 The smoke check covers navigation, page interaction, JavaScript isolation,
@@ -234,24 +254,125 @@ endpoint and browser tool registration before changing the active connection.
 Only the endpoint address is saved; server credentials remain in memory or come
 from `OPENCODE_SERVER_USERNAME` / `OPENCODE_SERVER_PASSWORD`.
 
-`GET /api/browser/extensions` summarizes each loaded extension's declared API
-permissions, host access, optional permissions, and content-script matches.
-Startup records these in `extension-permissions.json`, marks each extension as
-new, changed, or unchanged since the last launch, and logs new or changed
-broad-access grants. There is no approval step before an extension runs.
+Gmail is a normal website in the Chromium profile; actual Google account
+sign-in and Chrome Sync have not been validated or implemented here.
 
-Unpacked extensions can be loaded with repeated `run --extension` arguments. A
-synthetic Manifest V3 extension with content scripts and `chrome.storage.local`
-has been tested. There is no permission review UI, Chrome Web Store installer,
-extension updater, or promise of arbitrary extension compatibility. Gmail is a
-normal website in the Chromium profile; actual Google account sign-in and
-Chrome Sync have not been validated or implemented here.
+### Installing extensions
+
+The Extensions panel (puzzle button at the bottom of the sidebar, or
+"Extensions" in the command bar) installs from the Chrome Web Store by
+extension ID or store link (`chromewebstore.google.com` or
+`chrome.google.com/webstore`). "Add to Chrome" on the store page is not
+intercepted. The CRX is downloaded from
+`clients2.google.com/service/update2/crx` with `prodversion` set to this
+build's Chromium version (156.0.8078.48).
+
+`src/crx.rs` verifies the package before anything is written to the profile:
+
+- The file must be CRX3 (`Cr24`, version 3) with a well-formed header.
+- Every RSA (PKCS#1 v1.5 SHA-256) and ECDSA (P-256 SHA-256) proof must verify
+  over `"CRX3 SignedData\0"`, the signed header data, and the ZIP archive.
+  Chromium's 1024-bit minimum is used for RSA because older store extensions
+  (such as JSON Formatter) still have 1024-bit developer keys.
+- The signed header's CRX ID must equal the first 16 bytes of SHA-256 of a
+  proof's public key (mapped to `a`–`p`), and that ID must be the one requested.
+- Store installs also need a valid proof from the Chrome Web Store publisher
+  key.
+
+The archive is unpacked (stored and deflate entries; absolute paths, `..`, and
+more than 512 MiB are refused) into
+`<data dir>/extensions/<id>/<version>-<random>`. The `_metadata` folder is
+dropped because Chromium rejects reserved names in unpacked extensions. The
+manifest gets the developer public key as `key`, so the unpacked load keeps the
+store ID and its storage. `extensions/registry.json` records the version,
+directory, enabled state, approved permissions, and update URL.
+
+A new extension is off until its permissions are approved. The review card
+lists API permissions, host access, and content-script sites in plain
+language and highlights broad access. Optional permissions and the localized
+name (`__MSG_…__`) come from the manifest. Approval stores a fingerprint of
+the permissions, hosts, optional permissions, and matches. An extension whose
+files on disk declare anything not in that fingerprint does not load.
+
+### Restart to apply
+
+CEF loads extensions only through `--load-extension` at process start, so
+approve, enable, disable, remove, and updates take effect on the next launch.
+The panel shows "Restart to Apply" when the set to load differs from the set
+running. Restarting quits normally and relaunches the same executable with the
+original arguments, environment, and working directory once the old process
+has exited. Removed and replaced versions are moved to `extensions/.trash` and
+deleted at the next startup. Chromium keeps a removed extension's storage
+(`Local Extension Settings`, `DNR Extension Rules`, and similar folders in the
+Chromium profile); reinstalling the same ID finds it again.
+
+### Updates
+
+"Check for Updates" queries each extension's update URL with the update2 GET
+protocol (`response=updatecheck`, `acceptformat=crx3`, `x=id=…&v=…&uc`). A
+newer version is downloaded, checked against `hash_sha256` when the response
+has one, and verified like an install. If it adds no permissions, hosts, or matches, it replaces the current
+version on the next restart. Otherwise it waits as a pending update, the old
+version keeps running, and the panel asks for approval ("Approve Update" or
+"Keep Current Version"). Self-hosted extensions can declare their own
+`update_url`. There is no periodic background check.
+
+### API
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/browser/extensions` | Installed extensions, `restart_required`, and the developer-load permission summary |
+| `POST /api/browser/extensions/install` | `{"source": id or store link}`; `{"crx_url": …}` for a self-hosted HTTP(S) CRX (no publisher proof) |
+| `POST /api/browser/extensions/updates` | Run an update check |
+| `POST /api/browser/extensions/<id>/<action>` | `approve`, `enable`, `disable`, `reject` (drops a pending update, or removes a never-approved install), `remove` |
+| `GET /api/browser/extensions/<id>/icon` | Extension icon |
+| `POST /api/browser/extensions/restart` | Quit and relaunch |
+
+Developer loads with repeated `run --extension DIR` arguments still work. They
+get every declared permission without approval and are listed read-only.
+Startup records their summaries in `extension-permissions.json`, marks each
+as new, changed, or unchanged, and logs new or changed broad-access grants.
+
+### What extensions can do
+
+Tabs are CEF Alloy-style BrowserViews inside a Chrome-style window, so
+Chromium's extension system does not treat them as browser tabs. Verified with
+CEF 156:
+
+- **Works:** content scripts; MV3 background service workers;
+  `declarativeNetRequest` (uBlock Origin Lite blocks ad and tracker requests);
+  `chrome.storage`; `chrome.runtime`; `chrome.i18n`; extension pages at
+  `chrome-extension://<id>/…`.
+- **Routed:** windows or tabs that Chromium creates for an extension (for
+  example `windows.create` from a service worker) open as normal Atrium tabs.
+  The native window is hidden and closed and never shown.
+- **Popups:** there is no toolbar action button. The panel's "Popup" and
+  "Options" buttons open those pages in Glance. They run with extension APIs,
+  but popups that act on "the current tab" find none. uBlock Origin Lite's
+  popup loads, but its per-site controls stay empty.
+- **Does not work:** `chrome.tabs.query` returns no tabs,
+  `chrome.windows.getAll` returns none, and `chrome.tabs.create` fails with
+  "No current window". Features built on those APIs (per-tab badges, popup
+  state, `tabs.sendMessage` from the worker) are unavailable.
+- **Untested:** `contextMenus` (Atrium has no extension context menu), action
+  badges, and `chrome.identity`.
+- `runtime.onInstalled` fires on every launch because Chromium treats
+  command-line loads as fresh installs. Welcome tabs therefore reopen as Atrium
+  tabs on each start for extensions that open them.
+
+`tools/test_extensions.py` verifies this end to end with uBlock Origin Lite
+(`ddkjiahejlhfcafbddmgiahcphecmpfh`), JSON Formatter
+(`bcjindcccaagfpapjjmafapmmgkkhgoa`), and a synthetic self-hosted extension
+whose second version adds `cookies` and whose service worker calls
+`windows.create`.
 
 ## Work needed before public distribution
 
 - Signed/notarized releases, engine security updates, default-browser registration,
   and update/rollback infrastructure.
-- Extension permission management and tests against real required extensions.
+- Extension tab and window APIs (Chrome-style tabs or a `tabs` shim), a toolbar
+  action button with badges, "Add to Chrome" interception, periodic update
+  checks, loading without a restart, and clearing storage on removal.
 - Renderer-crash recovery, complete popup/opener and OAuth behavior, permission
   prompts, downloads, printing, accessibility, and broader website compatibility.
 - Password management, passkeys, account migration, and local API isolation

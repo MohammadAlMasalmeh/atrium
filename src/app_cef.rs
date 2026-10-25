@@ -966,8 +966,9 @@ fn on_before_command_line_processing(&self, process_type:Option<&CefString>,comm
             command.append_switch_with_value(Some(&CefString::from("disable-features")), Some(&CefString::from("MacWebContentsOcclusion")));
             command.append_switch(Some(&CefString::from("disable-backgrounding-occluded-windows")));
         }
-        if let (Some(paths),Some(command))=(crate::CHROME_EXTENSIONS.get(),command_line) {
-            if !paths.is_empty(){let value=paths.iter().map(|p|p.to_string_lossy()).collect::<Vec<_>>().join(",");command.append_switch_with_value(Some(&CefString::from("load-extension")),Some(&CefString::from(value.as_str())));}
+        let paths: Vec<_> = crate::CHROME_EXTENSIONS.get().into_iter().chain(crate::INSTALLED_EXTENSIONS.get()).flatten().collect();
+        if let (false,Some(command))=(paths.is_empty(),command_line) {
+            let value=paths.iter().map(|p|p.to_string_lossy()).collect::<Vec<_>>().join(",");command.append_switch_with_value(Some(&CefString::from("load-extension")),Some(&CefString::from(value.as_str())));
         }
     }
 }
@@ -1065,6 +1066,10 @@ wrap_keyboard_handler! {struct HostKeyboard {bridge:Bridge} impl KeyboardHandler
         if let Some(cmd)=cmd{self.bridge.send(Event::Command(json!({"cmd":"shellCommand","name":cmd})));1}else{0}
     }
 }}
+
+pub fn chromium_version() -> String {
+    format!("{}.{}.{}.{}", sys::CHROME_VERSION_MAJOR, sys::CHROME_VERSION_MINOR, sys::CHROME_VERSION_BUILD, sys::CHROME_VERSION_PATCH)
+}
 
 pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 'static) -> ! {
     let loader = library_loader::LibraryLoader::new(
