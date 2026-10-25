@@ -1622,11 +1622,21 @@ wrap_resource_request_handler! {struct ShellResources {base:String} impl Resourc
 fn is_local_api(url: &str, base: &str) -> bool {
     url.strip_prefix(base).is_some_and(|rest| rest.is_empty() || rest.starts_with(['/', '?', '#']))
 }
+/// The About pages are static and sandboxed, so they may open in a tab.
+fn is_about(url: &str, base: &str) -> bool {
+    url.strip_prefix(base).is_some_and(|rest| {
+        let path = rest.split(['?', '#']).next().unwrap_or_default();
+        path == crate::about::PATH || path == crate::about::CREDITS_PATH
+    })
+}
 // Tabs never load the API origin, so no page shares the shell's origin and storage.
 wrap_request_handler! {struct TabRequests {bridge:Bridge,id:u64,base:String} impl RequestHandler {
     fn on_render_process_terminated(&self, _unused50:Option<&mut Browser>, _unused51:TerminationStatus, _unused52:i32, _unused53:Option<&CefString>){self.bridge.send(Event::Crashed(self.id));}
     fn on_before_browse(&self, _browser:Option<&mut Browser>, _frame:Option<&mut Frame>, request:Option<&mut Request>, _user_gesture:i32, _is_redirect:i32)->i32{
-        request.is_some_and(|r| is_local_api(&CefString::from(&r.url()).to_string(), &self.base)).into()
+        request.is_some_and(|r| {
+            let url = CefString::from(&r.url()).to_string();
+            is_local_api(&url, &self.base) && !is_about(&url, &self.base)
+        }).into()
     }
 }}
 type Popups = Arc<Mutex<HashMap<i32, u64>>>;
