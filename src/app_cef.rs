@@ -241,6 +241,8 @@ enum Event {
     Quit,
     DevResult(i32, bool, Json),
     Binding(u64, Json),
+    /// A frame of this tab has media Chromium can't play: its URL.
+    Media(u64, String),
     Password(PwEvent),
     Maintenance,
     Assistive(String, bool),
@@ -1572,6 +1574,11 @@ impl Manager {
                 }
             }
             Event::Password(event) => self.pw_event(event),
+            Event::Media(id, src) => {
+                if let Some(origin) = self.tab(id).and_then(|t| crate::passwords::origin_of(&t.url)) {
+                    self.media_unsupported(id, origin, &src);
+                }
+            }
             Event::Detach(id) => {
                 if let Some(t) = self.tab_mut(id).filter(|t| !t.detached) {
                     t.detached = true;
@@ -1644,6 +1651,9 @@ impl Manager {
             }
             Event::WakeTimeout(id) => self.woken(id),
             Event::Document(id, loading) => {
+                if loading && self.pw_offers.get(&id).is_some_and(|o| o["kind"] == "media") {
+                    self.pw_offer(id, None);
+                }
                 if let Some(t) = self.tab_mut(id) {
                     t.document_loading = loading;
                 }
@@ -1667,7 +1677,7 @@ impl Manager {
                         self.isolated(id, format!("{LIFECYCLE_JS}\n{PAGE_JS}{scroll}"), false, Pending::Inject);
                     }
                     self.pw_forms.remove(&id);
-                    if self.pw_offers.get(&id).is_some_and(|o| matches!(o["kind"].as_str(), Some("fill" | "generate" | "media"))) {
+                    if self.pw_offers.get(&id).is_some_and(|o| matches!(o["kind"].as_str(), Some("fill" | "generate"))) {
                         self.pw_offer(id, None);
                     }
                     self.cdp(id, "Page.getFrameTree", json!({}), Pending::Pw(id, PwStep::Tree));
@@ -1891,7 +1901,13 @@ wrap_client! {struct HostClient {bridge:Bridge,id:u64,base:String,popups:Popups}
     // The shell is a WKWebView, so a Chromium renderer claiming to send shell commands is a website.
     fn on_process_message_received(&self, _browser:Option<&mut Browser>, _frame:Option<&mut Frame>, _source_process:ProcessId, message:Option<&mut ProcessMessage>)->i32{
         let Some(message) = message else { return 0 };
-        if CefString::from(&message.name()).to_string() != shell_ipc::MESSAGE { return 0; }
+        let name = CefString::from(&message.name()).to_string();
+        if name == shell_ipc::MEDIA_MESSAGE && self.id != SHELL {
+            let src = message.argument_list().map(|a| CefString::from(&a.string(0)).to_string()).unwrap_or_default();
+            self.bridge.send(Event::Media(self.id, src.chars().take(300).collect()));
+            return 1;
+        }
+        if name != shell_ipc::MESSAGE { return 0; }
         REJECTED_MESSAGES.fetch_add(1, Ordering::Relaxed);
         eprintln!("ignored a shell command from a Chromium renderer");
         1
@@ -2460,7 +2476,7 @@ impl Manager {
             }
             PwStep::World => {
                 if let Some(ctx) = data["executionContextId"].as_i64() {
-                    self.cdp(tab, "Runtime.evaluate", json!({ "expression": format!("{PASSWORDS_JS}\n{}", media::JS), "contextId": ctx }), Pending::Pw(tab, PwStep::Done));
+                    self.cdp(tab, "Runtime.evaluate", json!({ "expression": PASSWORDS_JS, "contextId": ctx }), Pending::Pw(tab, PwStep::Done));
                 }
             }
             PwStep::Done => {}
@@ -2493,7 +2509,6 @@ impl Manager {
                 }
                 self.pw_store(move || Ok(PwEvent::Found { tab, ctx, login, signup, accounts: crate::passwords::with(|s| s.for_origin(&origin))? }));
             }
-            Some("media") => self.media_unsupported(tab, origin, msg["src"].as_str().unwrap_or("")),
             Some("submit") => {
                 let username = msg["username"].as_str().unwrap_or("").chars().take(1024).collect::<String>();
                 let Some(password) = msg["password"].as_str().filter(|p| !p.is_empty() && p.len() <= 4096).map(str::to_string) else { return };

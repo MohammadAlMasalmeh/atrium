@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """A page whose H.264 video Chromium rejects is offered in WebKit, and plays there.
 
-Serves a local page with an H.264 <video> whose <source> names its codec, which the stock
-CEF runtime rejects. (A background test window defers media loading, so Chromium never
-reaches the decode error an untyped source gets in a visible window.) The shell should offer "Play in WebKit"; accepting it opens a WKWebView over the tab, where the
+Serves a local page whose cross-origin iframe holds a player that, like hls.js players,
+shows its own error when there's neither MediaSource H.264 nor native HLS. The stock CEF
+runtime has neither, so the shell should offer "Play in WebKit"; accepting it opens a WKWebView over the tab, where the
 same page reports to this server that WebKit decoded the H.264 track. No external sites.
 """
 import argparse
@@ -20,14 +20,28 @@ import background_app
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / 'tools/fixtures/media'
-PAGE = b'''<!doctype html><title>H.264 fallback</title>
-<video id="v" muted playsinline autoplay><source src="/h264.mp4" type='video/mp4; codecs="avc1.42C01E"'></video>
+# The player sits in a cross-origin iframe and decides up front, like hls.js players do:
+# MediaSource with H.264 or native HLS, else its own error without touching the video.
+PAGE = '''<!doctype html><title>H.264 fallback</title>
+<iframe src="http://localhost:{port}/player" width="400" height="300" allow="autoplay"></iframe>'''
+# Probes H.264 like YouTube does, is refused, and plays VP9: no offer.
+FALLBACK = b'''<!doctype html><title>VP9</title><video id="v" muted playsinline autoplay></video>
 <script>
 const v = document.getElementById('v');
-const note = (e) => fetch('/event?' + new URLSearchParams({ e, w: v.videoWidth, t: v.currentTime.toFixed(2),
+MediaSource.isTypeSupported('video/mp4; codecs="avc1.4d401f"');
+v.src = '/vp9.webm';
+v.addEventListener('loadeddata', () => fetch('/event?' + new URLSearchParams({ e: 'vp9', ua: navigator.userAgent })));
+</script>'''
+PLAYER = b'''<!doctype html><title>Player</title>
+<video id="v" muted playsinline autoplay></video><p id="msg"></p>
+<script>
+const v = document.getElementById('v');
+const note = (e) => fetch('/event?' + new URLSearchParams({ e, w: v.videoWidth,
   can: v.canPlayType('video/mp4; codecs="avc1.42C01E"'), ua: navigator.userAgent }), { cache: 'no-store' });
 for (const e of ['loadedmetadata', 'canplay', 'playing', 'error']) v.addEventListener(e, () => note(e));
-note('start');
+const mse = window.MediaSource && MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E,mp4a.40.2"');
+if (mse || v.canPlayType('application/vnd.apple.mpegurl')) { v.src = '/h264.mp4'; note('start'); }
+else { document.getElementById('msg').textContent = 'Your browser does not support the playback of this video.'; note('refused'); }
 </script>'''
 played = []
 requests = []
@@ -37,7 +51,13 @@ class Fixture(BaseHTTPRequestHandler):
     def do_GET(self):
         requests.append((self.path, self.headers.get('User-Agent', '')))
         if self.path == '/':
-            body, mime = PAGE, 'text/html'
+            body, mime = PAGE.format(port=self.server.server_port).encode(), 'text/html'
+        elif self.path == '/vp9':
+            body, mime = FALLBACK, 'text/html'
+        elif self.path == '/vp9.webm':
+            body, mime = (FIXTURES / 'vp9.webm').read_bytes(), 'video/webm'
+        elif self.path == '/player':
+            body, mime = PLAYER, 'text/html'
         elif self.path == '/h264.mp4':
             body, mime = (FIXTURES / 'h264.mp4').read_bytes(), 'video/mp4'
         elif self.path.startswith('/event'):
@@ -102,15 +122,25 @@ def main():
 
             card = "const c = document.querySelector('#pw-card'); return c.hidden ? '' : c.textContent;"
             shell('window.atriumOnboarding && window.atriumOnboarding.close(); return 1')
-            url = f'http://127.0.0.1:{server.server_port}/'
-            client.tool('open_tab', {'url': url})
-            # The agent opens tabs in the background; the offer shows for the active tab.
-            tab = wait(lambda: next((t['id'] for t in client.api('/api/browser/tabs')['tabs'] if t['url'] == url), None), 'the tab')
-            client.api('/api/browser/command', {'cmd': 'activate', 'id': tab})
+
+            def show(url):
+                client.tool('open_tab', {'url': url})
+                # The agent opens tabs in the background; the offer shows for the active tab.
+                tab = wait(lambda: next((t['id'] for t in client.api('/api/browser/tabs')['tabs'] if t['url'] == url), None), 'the tab')
+                client.api('/api/browser/command', {'cmd': 'activate', 'id': tab})
+
+            show(f'http://127.0.0.1:{server.server_port}/vp9')
+            wait(lambda: any(e['e'] == 'vp9' for e in played), 'Chromium playing VP9')
+            time.sleep(4)  # past the watcher's settling delay
+            assert not shell(card), f'offered WebKit for a page that plays: {shell(card)}'
+            played.clear()
+            print('No offer for a page that falls back to VP9', flush=True)
+
+            show(f'http://127.0.0.1:{server.server_port}/')
             offer = wait(lambda: 'Play in WebKit' in shell(card) and shell(card), 'the WebKit offer')
             print('Offer:', offer, flush=True)
             chromium = [e for e in played if 'Chrome/' in e['ua']]
-            assert all(e['e'] in ('start', 'error') for e in chromium), f'Chromium decoded H.264: {chromium}'
+            assert [e['e'] for e in chromium] == ['refused'], f'Chromium accepted H.264: {chromium}'
 
             shell("document.querySelector('#pw-card [data-a=webkit]').click(); return 1")
             webkit = lambda: [e for e in played if 'Chrome/' not in e['ua']]

@@ -1,5 +1,6 @@
 //! Sandboxed CEF subprocess entry point. See cef-rs's MIT/Apache-2.0 cefsimple helper.
-//! In renderer processes it exposes `window.ipc` to the Atrium shell's main frame only.
+//! In renderer processes it exposes `window.ipc` to the Atrium shell's main frame only,
+//! and watches website frames for media this Chromium build can't play.
 use cef::{args::Args, *};
 use std::{
     collections::HashMap,
@@ -7,6 +8,8 @@ use std::{
 };
 #[path = "../chromium/shell_ipc.rs"]
 mod shell_ipc;
+
+const MEDIA_JS: &str = include_str!("../../assets/media.js");
 
 /// Shell browsers hosted by this renderer process: browser id to shell URL. Only the
 /// browser process can mark a browser as the shell, through its creation extra info.
@@ -52,12 +55,13 @@ wrap_render_process_handler! {
         }
         fn on_context_created(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>, context: Option<&mut V8Context>) {
             let (Some(frame), Some(context)) = (frame, context) else { return };
-            if !is_shell_frame(frame) {
-                return;
-            }
             // The page's main world only; extension content scripts run in other worlds.
             let Some(mut main) = frame.v8_context() else { return };
             if context.is_same(Some(&mut main)) == 0 {
+                return;
+            }
+            if !is_shell_frame(frame) {
+                watch_media(context);
                 return;
             }
             let Some(global) = context.global() else { return };
@@ -74,6 +78,48 @@ wrap_render_process_handler! {
             ));
             ipc.set_value_bykey(Some(&CefString::from("postMessage")), Some(&mut post), fixed);
             global.set_value_bykey(Some(&CefString::from("ipc")), Some(&mut ipc), fixed);
+        }
+    }
+}
+
+/// Runs assets/media.js with a native `report`, so the page never sees the callback.
+fn watch_media(context: &mut V8Context) {
+    let mut handler = MediaHandler::new();
+    let Some(report) = v8_value_create_function(Some(&CefString::from("report")), Some(&mut handler)) else { return };
+    context.enter();
+    let (mut watch, mut exception) = (None, None);
+    if context.eval(Some(&CefString::from(MEDIA_JS)), None, 0, Some(&mut watch), Some(&mut exception)) != 0 {
+        if let Some(watch) = watch.filter(|w| w.is_function() != 0) {
+            watch.execute_function(None, Some(&[Some(report)]));
+        }
+    } else if let Some(e) = exception {
+        eprintln!("[media] watcher failed: {}", CefString::from(&e.message()));
+    }
+    context.exit();
+}
+
+wrap_v8_handler! {
+    struct MediaHandler;
+    impl V8Handler {
+        fn execute(
+            &self,
+            _name: Option<&CefString>,
+            _object: Option<&mut V8Value>,
+            arguments: Option<&[Option<V8Value>]>,
+            _retval: Option<&mut Option<V8Value>>,
+            _exception: Option<&mut CefString>,
+        ) -> i32 {
+            let Some(frame) = v8_context_get_current_context().and_then(|c| c.frame()) else { return 1 };
+            let src = match arguments {
+                Some([Some(value), ..]) if value.is_string() != 0 => CefString::from(&value.string_value()).to_string(),
+                _ => String::new(),
+            };
+            let Some(mut message) = process_message_create(Some(&CefString::from(shell_ipc::MEDIA_MESSAGE))) else { return 1 };
+            if let Some(args) = message.argument_list() {
+                args.set_string(0, Some(&CefString::from(src.chars().take(300).collect::<String>().as_str())));
+            }
+            frame.send_process_message(ProcessId::BROWSER, Some(&mut message));
+            1
         }
     }
 }

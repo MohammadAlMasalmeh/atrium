@@ -30,6 +30,7 @@ const COPY_IMAGE_URL: i32 = 26506;
 const SEARCH: i32 = 26507;
 const SAVE_PAGE: i32 = 26508;
 const INSPECT: i32 = 26509;
+const WEBKIT: i32 = 26510;
 
 // cef_event_flags_t
 const SHIFT: u32 = 1 << 1;
@@ -337,6 +338,8 @@ fn build_menu(browser: Option<&Browser>, c: &Context, model: &mut MenuModel) {
         }
         model.add_separator();
         add(SAVE_PAGE, "Save Page As…");
+        // For players Atrium doesn't recognise as failing; see media.rs.
+        add(WEBKIT, "Open Page in WebKit");
         add(builtin(MenuId::PRINT), "Print…");
         model.add_separator();
     }
@@ -412,7 +415,7 @@ wrap_context_menu_handler! {
         }
         fn on_context_menu_command(&self, _browser: Option<&mut Browser>, _frame: Option<&mut Frame>, params: Option<&mut ContextMenuParams>, command_id: i32, _flags: EventFlags) -> i32 {
             match params {
-                Some(params) if (OPEN_LINK..=INSPECT).contains(&command_id) => {
+                Some(params) if (OPEN_LINK..=WEBKIT).contains(&command_id) => {
                     self.bridge.send(Event::Commands(Ev::MenuCommand(context(self.id, params), command_id)));
                     1
                 }
@@ -956,6 +959,10 @@ impl Manager {
                 Ok(json!({ "command": id, "tab": tab }))
             }
             SAVE_PAGE => self.save_prompt(false),
+            WEBKIT => {
+                self.media_command(menu.tab, true);
+                done
+            }
             INSPECT => {
                 if mac::background() {
                     return Err("Developer tools open a window, so they are off in background test instances".into());

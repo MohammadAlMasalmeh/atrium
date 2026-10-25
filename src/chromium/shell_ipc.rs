@@ -9,6 +9,9 @@ pub const MESSAGE: &str = "atrium.shell.command";
 #[allow(dead_code)] // Read by atrium_helper only.
 pub const EXTRA_INFO_KEY: &str = "atrium_shell_url";
 pub const MAX_MESSAGE_BYTES: usize = 256 * 1024;
+/// Process message from a website frame: media there that this Chromium build can't play.
+/// Its only argument is the media URL. See assets/media.js.
+pub const MEDIA_MESSAGE: &str = "atrium.media.unsupported";
 
 /// The shell document itself, not another path or origin that merely starts the same way.
 pub fn is_shell_url(url: &str, shell: &str) -> bool {

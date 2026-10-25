@@ -15,6 +15,7 @@ ffmpeg -f lavfi -i anullsrc=r=48000:cl=stereo -t 1 -vn -c:a aac -b:a 64k \
   -movflags +frag_keyframe+empty_moov+default_base_moof aac.mp4
 ffmpeg -i h264.mp4 -i aac.mp4 -c copy \
   -movflags +frag_keyframe+empty_moov+default_base_moof h264-aac.mp4
+ffmpeg -f lavfi -i testsrc2=size=128x96:rate=10 -t 1 -an -c:v libvpx-vp9 -b:v 100k vp9.webm
 ```
 
 `python3 tools/test_media_playback.py` uses the committed files directly; it

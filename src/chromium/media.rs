@@ -9,8 +9,6 @@ use wry::{
     WebView, WebViewBuilder, WebViewExtMacOS,
 };
 
-pub(super) const JS: &str = include_str!("../../assets/media.js");
-
 /// Sites tailor their players to the browser, so WebKit says it is Safari.
 const SAFARI: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15";
 
