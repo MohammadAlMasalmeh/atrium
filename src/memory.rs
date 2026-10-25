@@ -27,6 +27,14 @@ impl Default for Policy {
     }
 }
 impl Policy {
+    /// When the system is short of memory, keep fewer background pages and release them sooner.
+    pub fn under_pressure(&self) -> Self {
+        Self {
+            max_live_tabs: self.max_live_tabs.min(2),
+            idle_after: self.idle_after.min(Duration::from_secs(60)),
+            minimum_idle: self.minimum_idle,
+        }
+    }
     pub fn candidates(&self, tabs: &[Candidate]) -> Vec<u64> {
         let mut eligible: Vec<_> = tabs
             .iter()
@@ -43,6 +51,15 @@ impl Policy {
             .map(|(_, t)| t.id)
             .collect()
     }
+}
+/// Whether macOS reports memory pressure (warning or critical).
+pub fn system_pressure() -> bool {
+    let mut level: libc::c_int = 0;
+    let mut size = std::mem::size_of::<libc::c_int>();
+    let name = c"kern.memorystatus_vm_pressure_level";
+    // SAFETY: `level` and `size` describe a writable c_int, as the sysctl expects.
+    let ok = unsafe { libc::sysctlbyname(name.as_ptr(), (&mut level as *mut libc::c_int).cast(), &mut size, std::ptr::null_mut(), 0) } == 0;
+    ok && level >= 2
 }
 #[cfg(test)]
 mod tests {
@@ -102,6 +119,11 @@ mod tests {
             Policy::default().candidates(&[tab(1, 301), tab(2, 299)]),
             vec![1]
         );
+    }
+    #[test]
+    fn memory_pressure_shrinks_the_budget_and_idle_timeout() {
+        let p = Policy::default().under_pressure();
+        assert_eq!(p.candidates(&[tab(1, 61), tab(2, 40), tab(3, 35), tab(4, 50)]), vec![1, 4]);
     }
     #[test]
     fn recently_used_tabs_are_not_thrashed_under_pressure() {

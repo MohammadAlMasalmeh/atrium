@@ -2108,7 +2108,8 @@ impl Manager {
                     || t.suspending,
             })
             .collect::<Vec<_>>();
-        for id in self.policy.candidates(&candidates) {
+        let policy = if crate::memory::system_pressure() { self.policy.under_pressure() } else { self.policy.clone() };
+        for id in policy.candidates(&candidates) {
             if self.pending.values().any(|(_, tab, _)| *tab == id) {
                 continue;
             }
