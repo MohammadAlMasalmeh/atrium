@@ -228,8 +228,9 @@ Run benchmark instances with `ASIDE_MOCK_KEYCHAIN=1`.
 
 Backend setup routes remain available under `/api/setup`. They discover Chrome
 profile names, explicitly import HTTP(S) bookmarks and optional recent history
-read-only, and inventory installed extension names. They do not copy passwords,
-cookies, passkeys, or Google sessions. OpenCode connection checks validate the
+read-only, and inventory installed extension names. They do not copy cookies,
+passkeys, or Google sessions; passwords are imported separately (see Passwords
+and passkeys). OpenCode connection checks validate the
 endpoint and browser tool registration before changing the active connection.
 Only the endpoint address is saved; server credentials remain in memory or come
 from `OPENCODE_SERVER_USERNAME` / `OPENCODE_SERVER_PASSWORD`.
@@ -247,6 +248,172 @@ extension updater, or promise of arbitrary extension compatibility. Gmail is a
 normal website in the Chromium profile; actual Google account sign-in and
 Chrome Sync have not been validated or implemented here.
 
+## Passwords and passkeys
+
+Alloy-style browsers do not get Chrome's password manager, so Aside has its own
+(`src/passwords.rs`, `assets/passwords.js`).
+
+### Detection and filling
+
+For every top-level page load the engine creates a CDP isolated world named
+`aside-passwords` and runs `assets/passwords.js` in it. The script finds
+password fields, classifies each form as login, signup (`new-password` or a
+confirmation field), or password change, and reports through a
+`Runtime.addBinding` binding that exists only in that world. It reports
+submissions from `submit` events, from clicks on submit-like buttons in
+formless pages, and from Enter in a password field. Page scripts share the DOM
+but not the isolated world's globals, so they cannot call the binding or the
+fill function; the E2E test checks that both are `undefined` in the main world.
+`Runtime.enable` is sent to every page tab, because binding calls are only
+reported while the Runtime domain is enabled.
+
+Stored passwords stay in the browser process until the user fills. On a page
+with a login form, the shell shows a card that lists only the origin and the
+saved usernames. A password is sent into the page only when the user clicks
+"Fill" on that card (or through the token-protected `passwordFill` shell
+command). Before filling, the origin is checked three times: the reported origin
+must equal the origin of the tab's committed URL, the store returns only
+entries whose origin is exactly equal, and the script checks `location.origin`
+again before it writes the fields. Origins are compared as scheme, host, and
+port (`url::Origin`, with punycode for international hosts), so
+`http://localhost:7831` matches neither `http://127.0.0.1:7831` nor
+`http://localhost:7832`. Subdomains, the public-suffix list, and lookalike
+domains are never matched. Only `http` and `https` are accepted. Plain
+`http` origins are allowed, so a saved password can be filled into an
+unencrypted page if the user saved it there.
+
+After a submit, the card offers Save, Update (same username with a new
+password), or Never for the origin. Submitting an unchanged password shows
+nothing. On signup forms the card offers a generated 20-character password that
+mixes upper case, lower case, digits, and symbols without look-alike
+characters. "Use password" fills every new-password field, and the normal save
+offer follows on submit.
+
+Limits:
+
+- Only the top frame is handled. Login forms inside iframes, including
+  cross-origin identity provider frames, are not detected.
+- Nothing fills on page load. Every fill needs a click on the card.
+- Once filled, the password is in the page's DOM, so page JavaScript can read it,
+  just as it would after typing. The isolation only protects stored passwords
+  that were not filled.
+- Detection is heuristic (autocomplete attributes, field order, and button
+  text), so unusual multi-step sign-in pages may not be detected.
+- There is no management UI yet. Saved logins are managed through the API.
+
+### Storage
+
+In normal use each login is a macOS Keychain generic password under the service
+`Aside Passwords`. The account is a random id, the secret is the password, and
+non-secret metadata (origin, username, timestamps) is kept in `kSecAttrGeneric`,
+so listing logins never reads a secret. These items are in the login keychain,
+whose access list is tied to the app's code signature. Ad hoc builds change
+signature on every rebuild, so macOS asks again before reading saved passwords
+after a rebuild, just like the "Chromium Safe Storage" prompt above. A stable
+signing identity avoids this.
+
+With `ASIDE_MOCK_KEYCHAIN=1` the Keychain is never touched. Logins go to
+`passwords-test.vault` in the data directory, encrypted with AES-256-CBC and
+authenticated with HMAC-SHA256 (CommonCrypto). The key is in
+`passwords-test.key`, next to the vault (mode 0600), so the vault only keeps
+the file unreadable to casual inspection. It is for tests only. The
+"Never" list is `password-never.json` in the data directory in both modes.
+
+The management API is behind the same per-launch token and Host/Origin checks
+as the rest of the local API:
+
+- `GET /api/passwords` lists the store kind, logins without passwords, and the
+  Never list.
+- `POST /api/passwords/reveal {id}` returns one password.
+- `POST /api/passwords/edit {id, username?, password?}` and
+  `POST /api/passwords/delete {id}` change one login.
+- `POST /api/passwords/never {origin, never}` edits the Never list.
+- `POST /api/passwords/export` returns a Chrome-compatible CSV. Cells that
+  start with `=`, `+`, `-`, or `@` get a leading `'` so spreadsheet apps do not
+  run them as formulas.
+
+Any process of the same user that can read the token can reveal or export
+every password. That is the same trust boundary as the rest of the local API.
+It is not separate protection.
+
+### Chrome import
+
+`POST /api/passwords/import-chrome {profile}` imports one Chrome profile
+(`Default`, `Profile 1`, ...). It copies `Login Data` into a private temporary
+directory and reads the copy with `/usr/bin/sqlite3 -readonly`, so Chrome's
+file is never opened for writing. It then reads "Chrome Safe Storage" from the
+Keychain and decrypts `v10` values (AES-128-CBC; PBKDF2-HMAC-SHA1 key with
+salt `saltysalt` and 1003 rounds). Reading that key always shows a macOS
+prompt, so the import only runs when the user asks for it. Blacklisted
+("never saved") sites go to the Never list. Rows that cannot be decrypted or
+that have a non-web origin are counted as `skipped`. Existing logins with the
+same origin and username are updated.
+
+Tests use `{profile_path, safe_storage}` with a generated profile and key
+instead. The API accepts these only when `ASIDE_MOCK_KEYCHAIN=1`.
+Cookies and bookmarks are imported elsewhere.
+
+### Passkeys
+
+WebAuthn works in CEF's Alloy runtime. On a local fixture page,
+`navigator.credentials.create` and `get` complete against the CDP virtual
+authenticator (`WebAuthn.enable` with `enableUI: false`, then a CTAP2 internal
+authenticator with resident keys and user verification). The fixture checks
+the ES256 assertion signature, challenge, user handle, and UV flag with
+WebCrypto, and the sign count increases. Tests reach CDP through
+`POST /api/debug/cdp {tab, method, params}`, which needs the API token and only
+allows `WebAuthn.*` methods and `Page.captureScreenshot`.
+
+In the current ad hoc signed build,
+`PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()` returns
+`false` and `isConditionalMediationAvailable()` returns `true`. Without the
+virtual authenticator, real sites cannot use a platform passkey. What platform
+passkeys would need, from the strings in the CEF 156 framework and Apple's
+documentation (none of it tested here):
+
+- Chromium's own Touch ID passkeys (stored in the Keychain by Chromium) need the
+  app signed with a Developer ID team, a provisioning profile embedded in the
+  bundle, and the keychain access group `<TEAMID>.org.chromium.Chromium.webauthn`
+  in `keychain-access-groups`. The framework looks up this group name
+  (with `.org.chromium.Chromium.webauthn-uvk` for its key). Ad hoc signing
+  cannot carry restricted entitlements, so this is unavailable today.
+- iCloud Keychain passkeys need Apple's managed entitlement
+  `com.apple.developer.web-browser.public-key-credential`. Apple grants it to
+  browsers on request to the Account Holder of an organization developer account. With it,
+  Chromium uses `ASAuthorizationWebBrowserPublicKeyCredentialManager`, and macOS
+  shows its own prompt asking the user to allow the browser to use their
+  passkeys.
+- Hybrid sign-in with a phone and USB/NFC security keys were not tested,
+  because they may open Bluetooth or other system dialogs. Google Password
+  Manager passkeys depend on Chrome Sync and are not available.
+
+### Verification
+
+`tools/test_passwords.py` starts the fixture (`tools/password_fixture.py`) on
+two ports and a background instance with `ASIDE_MOCK_KEYCHAIN=1`. It checks:
+
+- the isolation globals are absent in the main world;
+- save on submit, and explicit fill on revisit with fields empty before the fill;
+- no offer and no fill on another port or on `127.0.0.1` vs `localhost`;
+- Never, silent unchanged submits, and Update;
+- capture on a formless page;
+- generation on a signup form;
+- synthetic Chrome import (wrong key rejected, Chrome profile unchanged,
+  imported login fills);
+- export, edit, delete, and the debug CDP allowlist;
+- virtual-authenticator passkey registration and login;
+- that the vault file has no plaintext password, and that the instance never
+  became the frontmost app.
+
+Recorded on October 24, 2026 (macOS 26, CEF 156): `python3
+tools/test_passwords.py` passed. `cargo test --release --locked --offline` passed
+19 tests. `ASIDE_TEST_REAL_KEYCHAIN=1 cargo test --release --locked --offline
+keychain_round_trip` also passed. That test round-trips the real Keychain under
+a unique test service, with user interaction disabled so it fails instead of
+prompting, and deletes its item. The smoke, tab lifecycle, and persistence
+checks still pass. One persistence run hit the existing teardown watchdog on
+exit and the next three passed.
+
 ## Work needed before public distribution
 
 - Signed/notarized releases, engine security updates, default-browser registration,
@@ -254,8 +421,8 @@ Chrome Sync have not been validated or implemented here.
 - Extension permission management and tests against real required extensions.
 - Renderer-crash recovery, complete popup/opener and OAuth behavior, permission
   prompts, downloads, printing, accessibility, and broader website compatibility.
-- Password management, passkeys, account migration, and local API isolation
-  beyond the same-user token.
+- A password management UI, platform passkeys (signing and entitlements), account
+  migration, and local API isolation beyond the same-user token.
 - Per-tab history/scroll restoration and better media-aware eviction coverage.
 - Real-world memory, responsiveness, battery, and long-running stability tests.
 
