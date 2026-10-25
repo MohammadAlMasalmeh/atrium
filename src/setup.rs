@@ -154,7 +154,7 @@ async fn start(State(app): State<Arc<App>>) -> Json<Value> {
     response(
         async {
             let _lock = app.setup_lock.lock().await;
-            let local = OpenCode::new(format!("http://127.0.0.1:{}", app.opencode_port));
+            let local = OpenCode::local(app.opencode_port);
             if !local.healthy().await {
                 // Release an exited child before trying again; never kill a user's server.
                 {

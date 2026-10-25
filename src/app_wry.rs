@@ -101,6 +101,8 @@ pub enum Op {
     /// `js` is a function body; its (awaited) return value comes back as JSON.
     /// Runs in `tab`, or the active tab.
     Eval { tab: Option<u64>, js: String, reply: Reply<Result<Value, String>> },
+    /// Like `Eval`, for an agent action that should count as user activation.
+    Act { tab: Option<u64>, js: String, reply: Reply<Result<Value, String>> },
     /// Setup checks sign-in without marking a tab as agent-controlled.
     InspectGoogle { tab: u64, reply: Reply<Result<Value, String>> },
     Screenshot { tab: Option<u64>, reply: Reply<Result<String, String>> },
@@ -546,7 +548,7 @@ impl Browser {
         // Tell the shell which tab the agent is touching so it can show it.
         let touched = match &op {
             Op::Tabs(_) | Op::InspectGoogle { .. } | Op::Shell { .. } | Op::Memory(_) => None,
-            Op::Eval { tab, .. } | Op::Navigate { tab, .. } | Op::History { tab, .. } | Op::Screenshot { tab, .. } => Some(tab.or(self.active)),
+            Op::Eval { tab, .. } | Op::Act { tab, .. } | Op::Navigate { tab, .. } | Op::History { tab, .. } | Op::Screenshot { tab, .. } => Some(tab.or(self.active)),
             _ => Some(None),
         };
         match op {
@@ -574,7 +576,7 @@ impl Browser {
                 let r = self.history_in(tab.or(self.active), action);
                 let _ = reply.send(r);
             }
-            Op::Eval { tab, js, reply } => self.eval(tab, js, reply),
+            Op::Eval { tab, js, reply } | Op::Act { tab, js, reply } => self.eval(tab, js, reply),
             Op::InspectGoogle { tab, reply } => self.eval(Some(tab),
                 "return location.hostname === 'mail.google.com' && location.pathname.startsWith('/mail/u/') && !!document.querySelector('[gh=cm], [role=navigation], a[href*=\"#inbox\"]')".into(), reply),
             Op::Screenshot { tab, reply } => match tab.or(self.active).and_then(|id| self.view_of(id)) {
