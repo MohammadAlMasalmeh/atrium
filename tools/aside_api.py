@@ -69,7 +69,8 @@ class Client:
         assert not (isinstance(result, dict) and 'error' in result), result
         return result
 
-    def tool(self, name, arguments, timeout=35):
+    def tool(self, name, arguments, timeout=90):
+        """Agent tools wait for loads and page snapshots, which can exceed half a minute on a loaded machine."""
         result = self.request('/api/tool', {'name': name, 'args': arguments}, timeout)
         assert not result.get('isError'), result
         return result['content']

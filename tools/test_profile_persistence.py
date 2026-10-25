@@ -44,7 +44,7 @@ with tempfile.TemporaryDirectory(prefix='aside-persistence-', dir='/private/tmp'
     client = aside_api.Client(f'http://127.0.0.1:{args.port}', data_dir=profile)
     api, tool = client.api, client.tool
     with (profile / 'launch.log').open('w') as log:
-        command = [str(args.app.resolve()), '--data-dir', str(profile), 'run', '--port', str(args.port),
+        command = [str(args.app.resolve()), 'run', '--data-dir', str(profile), '--port', str(args.port),
                    '--opencode-url', 'http://127.0.0.1:1']
         launch = lambda: subprocess.Popen(command, stdout=log, stderr=log, env=aside_api.instance_env())
         process = launch()
