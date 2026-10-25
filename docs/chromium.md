@@ -206,6 +206,8 @@ python3 tools/test_permissions.py --api http://127.0.0.1:7791 \
   --data-dir /private/tmp/atrium-smoke --fixture http://127.0.0.1:7799
 python3 tools/test_profile_persistence.py --port 7792 --fixture http://127.0.0.1:7799
 python3 tools/test_history.py --port 7793 --fixture http://127.0.0.1:7799
+python3 tools/investigate_renderers.py --port 7794 --fixture-port 7799 \
+  [--real-sites tools/real_sites.json [--per-site] [--skip-fixtures]]
 ```
 
 The smoke check covers navigation, page interaction, JavaScript isolation,
@@ -304,11 +306,53 @@ also differ (Aside 1.0.1022.1 on Chromium 154 with its own built-in features
 against a minimal CEF 156 shell), so the result is not a per-engine
 comparison. Process counts were 89 against 56 when live.
 
-Profiling lead: with eight pages live, this build ran roughly 45 renderer
-processes, most idle at about 38 MiB RSS each. That pattern matches
-cross-site subframes (ads and embeds) receiving their own process under site
-isolation. Its process count also stayed at 56 after two pages were evicted,
-which should be checked for renderers outliving their closed BrowserViews.
+With eight pages live, that run had roughly 45 renderer processes, most idle at
+about 38 MiB RSS each, and its process count stayed at 56 after two pages were
+evicted.
+
+### Where renderer processes come from
+
+`tools/investigate_renderers.py` starts a background instance, drives it
+through the shell command API, and counts its child processes by Chromium type
+after each step. Recorded runs:
+[fixtures and real sites together](benchmarks/2026-10-24-renderer-attribution.json)
+and [each real site alone](benchmarks/2026-10-24-renderer-attribution-per-site.json)
+(query strings removed). With fixture sites on `site-N.localhost`:
+
+- An idle instance has two renderers: the shell and one more, consistent with
+  Chromium's spare renderer.
+- Each tab has its own renderer, including several tabs on the same site.
+- Closing tabs or evicting views released their renderers within four seconds:
+  10 views over budget went from 12 renderers to 8 when 4 views were evicted.
+  No renderer outlived its BrowserView.
+- Cross-site iframes get one process per iframe site, shared across tabs.
+  Three tabs embedding the same three iframe sites used 3 + 3 renderers, and
+  closing one tab freed only its own page's process.
+- Navigating one tab across six sites left one renderer for it; the
+  back/forward cache did not keep earlier pages' processes.
+
+On real sites, almost all of the extra processes are cross-site subframes on
+live pages. With each page as the only open tab, the instance ran 17 renderers
+for Stack Overflow, whose page had 24 iframes from 15 ad-auction origins (Google
+ad frames, Criteo, OpenX, PubMatic, Index Exchange, Rubicon, TripleLift, and
+others); 6 for BBC News (Optimizely and a consent manager); 5 for Google Search
+(a YouTube embed) and Reddit; 4 for YouTube, Gmail's signed-out page, GitHub,
+Wikipedia, and MDN; and 3 for Hacker News. Just before each page opened, 2 to 4
+renderers were already running (see below). Ad frames load
+and rotate after the page reports loaded, so counts keep changing while such a
+page is live. After closing a page, one or two renderers sometimes stayed for
+over 35 seconds (after YouTube, which registers a service worker, for example);
+the next page reused them and the count returned to the idle two when the last
+page closed. In the mixed run, closing the two oldest of 12 tabs changed
+nothing because eviction had already released them.
+
+So the 45 renderers came from live pages' subframes, not from closed views.
+The unchanged count after eviction is consistent with this: evicting a page
+frees its subframe processes only when no other live page uses those sites,
+and ad pages keep adding frames. That run's exact sequence was not reproduced.
+Site isolation is left on. Reducing these processes needs fewer subframes
+(for example content blocking) or evicting ad-heavy background pages sooner;
+neither is implemented.
 Run benchmark instances with `ATRIUM_MOCK_KEYCHAIN=1`.
 
 ## Migration and extensions

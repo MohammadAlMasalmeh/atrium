@@ -15,10 +15,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         draft = 'draft' in path
+        # /frames/a.localhost,b.localhost embeds a page from each host, for cross-site subframes.
+        hosts = path.split('/')[2].split(',') if path.startswith('/frames/') else []
+        frames = ''.join(f'<iframe src="http://{host}:{self.server.server_port}/page/frame"></iframe>' for host in hosts)
         body = f'''<!doctype html><meta charset="utf-8"><title>Fixture {path}</title>
         <h1>Chromium fixture</h1><button id="increment">Increment</button><output id="count">0</output>
         <label>Draft<textarea id="draft"></textarea></label><a href="/next">Next page</a>
-        {'<div style="height:6000px"></div>' if path.startswith('/tall') else ''}
+        {'<div style="height:6000px"></div>' if path.startswith('/tall') else ''}{frames}
         <script>
         window.fixtureMemory = new Uint8Array(12 * 1024 * 1024).fill(42);
         let count = 0; document.querySelector('#increment').onclick = () => document.querySelector('#count').value = ++count;
