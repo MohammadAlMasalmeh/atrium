@@ -4,7 +4,7 @@ use super::{Bridge, Event};
 use cef::application_mac::{CefAppProtocol, CrAppControlProtocol, CrAppProtocol};
 use muda::{
     accelerator::{Accelerator, Code, Modifiers},
-    AboutMetadata, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu,
+    Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu,
 };
 use objc2::{
     class, define_class, extern_methods, msg_send,
@@ -194,17 +194,12 @@ fn build_menu() -> Menu {
     let cmd_shift = Modifiers::META | Modifiers::SHIFT;
     let cmd_alt = Modifiers::META | Modifiers::ALT;
     let menu = Menu::new();
+    let name = crate::brand::PRODUCT_NAME;
     let app = Submenu::with_items(
-        "Atrium",
+        name,
         true,
         &[
-            &PredefinedMenuItem::about(
-                Some("About Atrium"),
-                Some(AboutMetadata {
-                    name: Some("Atrium".into()),
-                    ..Default::default()
-                }),
-            ),
+            &MenuItem::with_id("about", format!("About {name}"), true, None),
             &PredefinedMenuItem::separator(),
             &PredefinedMenuItem::services(None),
             &PredefinedMenuItem::separator(),

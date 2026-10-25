@@ -504,7 +504,11 @@ impl Agent {
                 let body = if code.contains("return") { code } else { format!("return ({code})") };
                 let v = self.eval_in(tab, &body).await?;
                 let mut out = serde_json::to_string_pretty(&v)?;
-                out.truncate(20_000);
+                let mut end = out.len().min(20_000);
+                while !out.is_char_boundary(end) {
+                    end -= 1;
+                }
+                out.truncate(end);
                 Ok(text(out))
             }
             "wait" => {

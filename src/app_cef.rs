@@ -196,6 +196,8 @@ enum Event {
     Maintenance,
     Assistive(String, bool),
     TakeFocus(u64, bool),
+    Favicon(u64, String),
+    FaviconSaved(u64, String),
 }
 struct Tab {
     id: u64,
@@ -432,6 +434,15 @@ impl Manager {
         // Agent and API tab switches must not pull the window in front of other apps.
         if let Some(view) = self.tab(id).and_then(|t| t.view.as_ref()) {
             view.request_focus();
+        }
+    }
+    fn open_about(&mut self) {
+        let url = format!("{}{}", self.base, crate::about::PATH);
+        match self.tabs.iter().find(|t| t.url == url).map(|t| t.id) {
+            Some(id) => self.activate(id),
+            None => {
+                self.new_tab(Some(url), true, false);
+            }
         }
     }
     fn close(&mut self, id: u64) {
@@ -1006,6 +1017,7 @@ impl Manager {
                         "new-tab" => {
                             self.new_tab(None, true, false);
                         }
+                        "about" => self.open_about(),
                         "open-location" => self.cmd("editUrl"),
                         "command-bar" => self.cmd("commandBar"),
                         "back" | "forward" | "reload" => self.command(json!({"cmd":name})),
@@ -1206,11 +1218,11 @@ impl Manager {
                 window_create_top_level(Some(&mut delegate));
             }
             Event::Window(window) => {
-                window.set_title(Some(&CefString::from("Atrium")));
+                window.set_title(Some(&CefString::from(crate::brand::PRODUCT_NAME)));
                 self.window = Some(window.clone());
                 self.tabs.push(Tab {
                     loading: true,
-                    ..Tab::new(SHELL, format!("{}/shell", self.base), "Atrium".into())
+                    ..Tab::new(SHELL, format!("{}/shell", self.base), crate::brand::PRODUCT_NAME.into())
                 });
                 self.create_view(SHELL);
                 self.layout();
@@ -1299,6 +1311,9 @@ impl Manager {
             }
             Event::Address(id, url) => {
                 if let Some(t) = self.tab_mut(id) {
+                    if crate::favicons::key(&t.url) != crate::favicons::key(&url) {
+                        t.icon = None;
+                    }
                     t.url = url;
                 }
                 self.session_dirty = true;
@@ -1374,6 +1389,21 @@ impl Manager {
                 self.update_accessibility();
             }
             Event::TakeFocus(id, next) => self.take_focus(id, next),
+            Event::Favicon(id, icon_url) => {
+                let Some(tab) = self.tab(id) else { return };
+                let (Some(key), true) = (crate::favicons::key(&tab.url), crate::favicons::fetchable(&icon_url)) else { return };
+                if let Some(host) = tab.browser.as_ref().and_then(|b| b.host()) {
+                    // As a favicon request, Chromium sends and stores no cookies for it.
+                    let mut done = FaviconDownload::new(self.bridge.clone(), id, key);
+                    host.download_image(Some(&CefString::from(icon_url.as_str())), 1, 64, 0, Some(&mut done));
+                }
+            }
+            Event::FaviconSaved(id, key) => {
+                if let Some(t) = self.tab_mut(id).filter(|t| crate::favicons::key(&t.url).as_ref() == Some(&key)) {
+                    t.icon = Some(format!("/favicon/{key}?v={}", uuid::Uuid::new_v4().simple()));
+                    self.push(false);
+                }
+            }
             Event::Quit => {
                 self.session_dirty = true;
                 self.save_session();
@@ -1579,6 +1609,19 @@ fn content_settings(permission:&str)->&'static [ContentSettingTypes]{
 wrap_display_handler! {struct HostDisplay {bridge:Bridge,id:u64} impl DisplayHandler {
     fn on_title_change(&self, _unused19:Option<&mut Browser>,title:Option<&CefString>){self.bridge.send(Event::Title(self.id,title.map(ToString::to_string).unwrap_or_default()));}
     fn on_address_change(&self, _unused20:Option<&mut Browser>,frame:Option<&mut Frame>,url:Option<&CefString>){if frame.is_some_and(|f|f.is_main()!=0){self.bridge.send(Event::Address(self.id,url.map(ToString::to_string).unwrap_or_default()));}}
+    fn on_favicon_urlchange(&self, _unused50:Option<&mut Browser>,icon_urls:Option<&mut CefStringList>){
+        let Some(list)=icon_urls else{return};
+        let list:*mut sys::_cef_string_list_t=list.into();
+        // The output string must be owned storage; a default CefString wraps a null pointer.
+        let first=unsafe{
+            let mut value:sys::cef_string_t=std::mem::zeroed();
+            let found=sys::cef_string_list_size(list)>0&&sys::cef_string_list_value(list,0,&mut value)!=0;
+            let url=found.then(||CefString::from(std::ptr::from_ref(&value)).to_string());
+            sys::cef_string_utf16_clear(&mut value);
+            url
+        };
+        if let Some(url)=first{self.bridge.send(Event::Favicon(self.id,url));}
+    }
     fn on_media_access_change(&self, _unused21:Option<&mut Browser>,video:i32,audio:i32){self.bridge.send(Event::Capture(self.id,video!=0||audio!=0));}
 }}
 wrap_load_handler! {struct HostLoad {bridge:Bridge,id:u64} impl LoadHandler {
@@ -1614,7 +1657,8 @@ pub fn run(base: String, start: impl FnOnce(Handle), on_exit: impl FnOnce() + 's
     );
     assert!(
         loader.load(),
-        "Run the bundled Atrium.app; the Chromium framework must be next to the application"
+        "Run the bundled {}.app; the Chromium framework must be next to the application",
+        crate::brand::EXECUTABLE
     );
     let _ = api_hash(sys::CEF_API_VERSION_LAST, 0);
     mac::setup();
@@ -1708,6 +1752,15 @@ const HISTORY: usize = 50;
 fn is_web(url: &str) -> bool {
     reqwest::Url::parse(url).is_ok_and(|u| matches!(u.scheme(), "http" | "https"))
 }
+wrap_download_image_callback! {struct FaviconDownload {bridge:Bridge,id:u64,key:String} impl DownloadImageCallback {
+    fn on_download_image_finished(&self,_url:Option<&CefString>,_status:i32,image:Option<&mut Image>){
+        let (mut width,mut height)=(0,0);
+        let Some(png)=image.filter(|i|i.is_empty()==0).and_then(|i|i.as_png(1.0,1,Some(&mut width),Some(&mut height))) else{return};
+        let mut bytes=vec![0;png.size()];
+        if bytes.is_empty()||bytes.len()>crate::favicons::MAX_BYTES||png.data(Some(&mut bytes),0)!=bytes.len(){return}
+        if crate::favicons::store(&self.key,&bytes).is_ok(){self.bridge.send(Event::FaviconSaved(self.id,self.key.clone()));}
+    }
+}}
 wrap_task! {struct Maintenance {bridge:Bridge} impl Task {fn execute(&self){self.bridge.send(Event::Maintenance);if self.bridge.manager.upgrade().is_some(){let mut next=Self::new(self.bridge.clone());post_delayed_task(ThreadId::UI,Some(&mut next),10000);}}}}
 impl Manager {
     /// Chromium may report a popup's BrowserView before or after its browser; pair them
@@ -1820,6 +1873,7 @@ impl Manager {
                     && t.id != GLANCE
                     && !t.scratch
                     && is_web(&t.url)
+                    && !t.url.starts_with(&format!("{}/", self.base))
             })
             .take(1000)
             .map(|t| {

@@ -2,7 +2,7 @@
 name = "atrium"
 version = "0.1.0"
 edition = "2021"
-description = "A small Rust re-take on the Aside AI browser, powered by the opencode server API"
+description = "An experimental macOS developer browser in Rust, embedding Chromium through CEF"
 
 [features]
 default = ["chromium"]
