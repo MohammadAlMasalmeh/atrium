@@ -11,6 +11,7 @@ mod mcp;
 mod migration;
 mod memory;
 mod opencode;
+mod passwords;
 mod server;
 mod setup;
 

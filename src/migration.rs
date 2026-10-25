@@ -27,7 +27,7 @@ pub struct Bookmark {
     folder: String,
 }
 
-fn chrome_root() -> Result<PathBuf> {
+pub(crate) fn chrome_root() -> Result<PathBuf> {
     Ok(dirs::home_dir()
         .context("No home directory")?
         .join("Library/Application Support/Google/Chrome"))
@@ -40,7 +40,7 @@ fn valid_profile(id: &str) -> bool {
             .is_some_and(|n| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()))
 }
 
-fn profile_at(root: &Path, id: &str) -> Result<PathBuf> {
+pub(crate) fn profile_at(root: &Path, id: &str) -> Result<PathBuf> {
     if !valid_profile(id) {
         bail!("Choose a detected Chrome profile.");
     }

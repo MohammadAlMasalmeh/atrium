@@ -50,6 +50,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/debug/shell", post(debug_shell))
         .route("/api/browser/extensions", get(browser_extensions))
         .merge(crate::setup::routes(app.clone()))
+        .merge(crate::passwords::routes())
         .route_layer(axum::middleware::from_fn(crate::setup::require_token))
         .route_layer(axum::middleware::from_fn_with_state(app.clone(), crate::setup::shell_only))
         .with_state(app)
