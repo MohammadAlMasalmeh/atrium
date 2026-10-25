@@ -60,14 +60,14 @@ await evaluate("document.fonts.ready.then(() => true)");
 const duration = await evaluate("DURATION");
 
 const shot = async t => {
-  await evaluate(`seek(${t}); new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`);
+  await evaluate(`Promise.resolve(seek(${t})).then(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))))`);
   const { data } = await send("Page.captureScreenshot", { format: "png", optimizeForSpeed: true });
   return Buffer.from(data, "base64");
 };
 
 if (stills) {
   for (const t of stills.split(",").map(Number)) {
-    const file = join(dirname(out), `frame-${t.toFixed(2)}.png`);
+    const file = join(dirname(out), `frame-${t.toFixed(2).padStart(5, "0")}.png`);
     writeFileSync(file, await shot(t));
     console.log(file);
   }
