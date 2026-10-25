@@ -1218,7 +1218,11 @@ function selectTab(n) {
 function cycleTab(step) {
   const ids = sidebarOrder(); if (!ids.length) return;
   const i = ids.indexOf(S.active);
-  S.view = 'tab'; ipc({ cmd: 'activate', id: ids[i < 0 ? 0 : (i + step + ids.length) % ids.length] });
+  const at = i < 0 ? 0 : (i + step + ids.length) % ids.length;
+  S.view = 'tab'; ipc({ cmd: 'activate', id: ids[at] });
+  // Cycling usually continues, so the next tab in that direction starts loading if it sleeps.
+  const next = tabById(ids[(at + step + ids.length) % ids.length]);
+  if (next?.suspended) ipc({ cmd: 'prewarm', id: next.id });
 }
 
 /* ── Downloads ─────────────────────────────────────── */
