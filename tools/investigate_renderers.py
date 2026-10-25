@@ -19,7 +19,7 @@ import atrium_api
 from memory_benchmark import physical_footprint_mib
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--app', type=Path, default=Path('target/bundle/atrium.app/Contents/MacOS/atrium'))
+parser.add_argument('--app', type=Path, default=Path('target/bundle/Atrium.app/Contents/MacOS/atrium'))
 parser.add_argument('--port', type=int, default=7794)
 parser.add_argument('--fixture-port', type=int, default=7789)
 parser.add_argument('--real-sites', type=Path, help='also open these sites (real_sites.json format) and count their subframes')

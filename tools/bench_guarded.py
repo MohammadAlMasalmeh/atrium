@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--workload', choices=['fixture', 'fixture-distinct', 'real'], required=True)
 parser.add_argument('--runs', type=int, default=3)
-parser.add_argument('--app', type=Path, default=ROOT.parent / 'target/bundle/atrium.app/Contents/MacOS/atrium')
+parser.add_argument('--app', type=Path, default=ROOT.parent / 'target/bundle/Atrium.app/Contents/MacOS/atrium')
 parser.add_argument('--port', type=int, default=7871)
 parser.add_argument('--fixture-port', type=int, default=7870)
 parser.add_argument('--sites', type=Path, default=ROOT / 'real_sites.json')

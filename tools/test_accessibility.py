@@ -22,7 +22,7 @@ import atrium_api
 
 ROOT = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument('--app', type=Path, default=ROOT / 'target/bundle/atrium.app/Contents/MacOS/atrium')
+parser.add_argument('--app', type=Path, default=ROOT / 'target/bundle/Atrium.app/Contents/MacOS/atrium')
 parser.add_argument('--port', type=int, default=7820)
 parser.add_argument('--fixture-port', type=int, default=7821)
 parser.add_argument('--watchdog', type=Path, default=ROOT.parent / 'watchdog.sh')

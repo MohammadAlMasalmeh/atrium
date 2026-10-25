@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parent.parent
 WATCHDOG = Path('/Users/mohammadalmasalmeh/Desktop/atrium-rs-wt/watchdog.sh')
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument('--app', type=Path, default=ROOT / 'target/bundle/atrium.app')
+parser.add_argument('--app', type=Path, default=ROOT / 'target/bundle/Atrium.app')
 parser.add_argument('--port', type=int, default=7891)
 parser.add_argument('--fixture-port', type=int, default=7892)
 parser.add_argument('--data-dir', type=Path, default=Path(f'/private/tmp/atrium-legal-{int(time.time())}'))

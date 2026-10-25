@@ -2,7 +2,7 @@
 """Sample whole browser process trees using the same RSS metric on macOS/Linux.
 
 Example: --browser 'Aside=/Applications/Aside.app/Contents/'
-         --browser 'This build=/absolute/path/target/bundle/atrium.app/Contents/'
+         --browser 'This build=/absolute/path/target/bundle/Atrium.app/Contents/'
 Use equivalent fresh profiles, pages, extensions, and warm-up time. Aggregate RSS
 includes shared pages more than once; it is not macOS physical memory footprint.
 """

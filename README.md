@@ -26,18 +26,18 @@ build has been exercised on Apple Silicon.
 python3 -m pip install --target target/build-tools ninja
 
 ./tools/build-chromium.sh --release
-./target/bundle/atrium.app/Contents/MacOS/atrium
+./target/bundle/Atrium.app/Contents/MacOS/atrium
 ```
 
 Run the **bundled executable**, which includes Chromium's framework and sandboxed
 helper applications. Running `target/release/atrium` directly cannot find that
 runtime. The script stages and verifies an ad hoc signed app before replacing
-`target/bundle/atrium.app`. This is not a notarized public release.
+`target/bundle/Atrium.app`. This is not a notarized public release.
 
 For an isolated profile and an existing OpenCode server:
 
 ```sh
-./target/bundle/atrium.app/Contents/MacOS/atrium \
+./target/bundle/Atrium.app/Contents/MacOS/atrium \
   --data-dir /tmp/atrium-test run --port 7782 \
   --opencode-url http://127.0.0.1:4097
 ```
@@ -93,7 +93,7 @@ While the app is running, the terminal client can use its assistant (it reads th
 API token from the data directory, or `ATRIUM_API_TOKEN`):
 
 ```sh
-./target/bundle/atrium.app/Contents/MacOS/atrium ask "summarize this page"
+./target/bundle/Atrium.app/Contents/MacOS/atrium ask "summarize this page"
 ```
 
 The previous WKWebView backend remains available for development with

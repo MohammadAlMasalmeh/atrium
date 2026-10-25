@@ -22,7 +22,7 @@ from pathlib import Path
 import background_app
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--app', type=Path, default=Path('target/bundle/atrium.app'))
+parser.add_argument('--app', type=Path, default=Path('target/bundle/Atrium.app'))
 parser.add_argument('--private-key', type=Path, required=True, help='Ed25519 private key matching the build')
 parser.add_argument('--sign-tool', type=Path, default=Path('target/release/atrium_sign_update'))
 parser.add_argument('--port', type=int, default=7802)

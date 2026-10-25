@@ -24,7 +24,7 @@ from bench_common import CefInstance, FixtureServer, system_state
 
 ROOT = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument('--app', type=Path, default=ROOT.parent / 'target/bundle/atrium.app/Contents/MacOS/atrium')
+parser.add_argument('--app', type=Path, default=ROOT.parent / 'target/bundle/Atrium.app/Contents/MacOS/atrium')
 parser.add_argument('--port', type=int, default=7875)
 parser.add_argument('--fixture-port', type=int, default=7874)
 parser.add_argument('--switches', type=int, default=30)

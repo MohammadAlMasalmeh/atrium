@@ -26,7 +26,7 @@ import uuid
 V = {name: f'{name}-{uuid.uuid4().hex[:8]}' for name in ('login-one', 'login-two', 'import-one', 'import-two', 'edited', 'storage')}
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--app', type=Path, default=ROOT.parent / 'target/bundle/atrium.app/Contents/MacOS/atrium')
+parser.add_argument('--app', type=Path, default=ROOT.parent / 'target/bundle/Atrium.app/Contents/MacOS/atrium')
 parser.add_argument('--port', type=int, default=7830)
 parser.add_argument('--fixture-ports', type=int, nargs=2, default=[7831, 7832])
 parser.add_argument('--watchdog', type=Path, default=ROOT.parent.parent / 'watchdog.sh')

@@ -132,15 +132,15 @@ fn main() -> anyhow::Result<()> {
             return Err(error.into());
         }
         let _ = std::fs::remove_dir(&staging);
-        // Scripts and docs address the build as `<EXECUTABLE>.app`.
-        let alias = output.join(format!("{}.app", brand::EXECUTABLE));
-        if alias != final_path {
-            if alias.is_symlink() || alias.is_file() {
-                std::fs::remove_file(&alias)?;
-            } else if alias.exists() {
-                std::fs::remove_dir_all(&alias)?;
+        // A bundle launched through another path is named after that path, so drop the old one.
+        // macOS file systems are usually case-insensitive, so `atrium.app` would be the bundle itself.
+        let stale = output.join(format!("{}.app", brand::EXECUTABLE));
+        if !brand::EXECUTABLE.eq_ignore_ascii_case(brand::PRODUCT_NAME) {
+            if stale.is_symlink() || stale.is_file() {
+                std::fs::remove_file(&stale)?;
+            } else if stale.exists() {
+                std::fs::remove_dir_all(&stale)?;
             }
-            std::os::unix::fs::symlink(final_path.file_name().unwrap(), &alias)?;
         }
         std::fs::write(output.join("profile.txt"), profile)?;
         println!("{}", final_path.display());

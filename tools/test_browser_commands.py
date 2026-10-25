@@ -21,8 +21,8 @@ from urllib.parse import urlparse
 import atrium_api
 
 ROOT = Path(__file__).resolve().parents[1]
-APP = ROOT / 'target/bundle/atrium.app/Contents/MacOS/atrium'
-PLIST = ROOT / 'target/bundle/atrium.app/Contents/Info.plist'
+APP = ROOT / 'target/bundle/Atrium.app/Contents/MacOS/atrium'
+PLIST = ROOT / 'target/bundle/Atrium.app/Contents/Info.plist'
 WATCHDOG = Path('/Users/mohammadalmasalmeh/Desktop/atrium-rs-wt/watchdog.sh')
 PORT = 7810
 PAGE_PORT = 7811

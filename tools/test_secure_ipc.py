@@ -22,7 +22,7 @@ from pathlib import Path
 import atrium_api
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--app', type=Path, default=Path('target/bundle/atrium.app/Contents/MacOS/atrium'))
+parser.add_argument('--app', type=Path, default=Path('target/bundle/Atrium.app/Contents/MacOS/atrium'))
 parser.add_argument('--port', type=int, default=7880)
 parser.add_argument('--opencode-port', type=int, default=7885)
 parser.add_argument('--fixture', default='http://127.0.0.1:7881')

@@ -17,8 +17,8 @@ python3 -m pip install --target target/build-tools ninja   # if Ninja is missing
 ./tools/build-chromium.sh --release
 ```
 
-The app is `target/bundle/atrium.app`. Always run the bundled executable
-(`target/bundle/atrium.app/Contents/MacOS/atrium`); `target/release/atrium` cannot
+The app is `target/bundle/Atrium.app`. Always run the bundled executable
+(`target/bundle/Atrium.app/Contents/MacOS/atrium`); `target/release/atrium` cannot
 find the Chromium framework. Set `CEF_PATH` to share one CEF download between
 checkouts.
 
@@ -36,7 +36,7 @@ show a window, or prompt for the keychain:
 
 ```sh
 ATRIUM_MOCK_KEYCHAIN=1 ATRIUM_BACKGROUND_WINDOW=1 \
-  ./target/bundle/atrium.app/Contents/MacOS/atrium \
+  ./target/bundle/Atrium.app/Contents/MacOS/atrium \
   --data-dir /private/tmp/atrium-test-1 run --port 7791 \
   --opencode-url http://127.0.0.1:1
 ```
@@ -98,7 +98,7 @@ on purpose, together:
 | Identifier | Where | Effect of changing |
 | --- | --- | --- |
 | `.atrium-rs` data directory | `brand::DATA_DIR` | Existing profiles are no longer found (migrate them) |
-| `atrium` executable and `atrium.app` | `brand::EXECUTABLE`, `[[bin]]` in `Cargo.toml`, `tools/*.py` defaults, docs | Build and script paths change. The bundle itself is `<PRODUCT_NAME>.app`; `target/bundle/atrium.app` is a symlink to it |
+| `atrium` executable | `brand::EXECUTABLE`, `[[bin]]` in `Cargo.toml`, `tools/*.py` defaults, docs | Build and script paths change. The bundle is named after `brand::PRODUCT_NAME` (`Atrium.app`) because macOS shows its folder name |
 | `atrium_helper` helper binary | `Cargo.toml`, `src/bin/atrium_bundle.rs` | Bundle layout |
 | `ATRIUM_*` environment variables, `x-atrium-token` header | `src/main.rs`, `src/chromium/mac.rs`, `src/app_cef.rs`, `tools/atrium_api.py` | Test tooling and clients |
 | `atrium_*` MCP tool names, `atrium` MCP server name | `src/agent.rs`, `src/main.rs` | OpenCode sessions and prompts |

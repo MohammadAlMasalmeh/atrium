@@ -26,7 +26,7 @@ PASSWORD = 'atrium-test-safe-storage'
 CHROME_EPOCH_US = 11_644_473_600_000_000
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument('--app', type=Path, default=Path('target/bundle/atrium.app/Contents/MacOS/atrium'))
+parser.add_argument('--app', type=Path, default=Path('target/bundle/Atrium.app/Contents/MacOS/atrium'))
 parser.add_argument('--port', type=int, default=7860)
 parser.add_argument('--fixture-port', type=int, default=7861)
 args = parser.parse_args()

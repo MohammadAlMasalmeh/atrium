@@ -433,7 +433,7 @@ def expected_chromium():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--app', type=Path, default=ROOT / 'target/bundle/atrium.app/Contents/MacOS/atrium')
+    parser.add_argument('--app', type=Path, default=ROOT / 'target/bundle/Atrium.app/Contents/MacOS/atrium')
     parser.add_argument('--port', type=int, default=7840, help='browser API port')
     parser.add_argument('--fixture-port', type=int, default=7841)
     parser.add_argument('--watchdog', type=Path, default=ROOT.parent / 'watchdog.sh',

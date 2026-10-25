@@ -43,7 +43,7 @@ ALLOWED = 'https://www.gstatic.com/generate_204'
 parser = argparse.ArgumentParser()
 parser.add_argument('--port', type=int, default=7852)
 parser.add_argument('--fixture-port', type=int, default=7853)
-parser.add_argument('--app', type=Path, default=ROOT / 'target/bundle/atrium.app/Contents/MacOS/atrium')
+parser.add_argument('--app', type=Path, default=ROOT / 'target/bundle/Atrium.app/Contents/MacOS/atrium')
 parser.add_argument('--data-dir', type=Path, default=Path(f'/private/tmp/atrium-extensions-e2e-{os.getpid()}'))
 parser.add_argument('--watchdog', type=Path, default=ROOT.parent / 'watchdog.sh',
                     help='script run with each instance PID to kill it if frontmost (skipped if missing; a built-in guard always runs)')

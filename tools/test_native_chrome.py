@@ -18,7 +18,7 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-APP = ROOT / 'target/bundle/atrium.app/Contents/MacOS/atrium'
+APP = ROOT / 'target/bundle/Atrium.app/Contents/MacOS/atrium'
 WATCHDOG = Path.home() / 'Desktop/atrium-rs-wt/watchdog.sh'
 
 parser = argparse.ArgumentParser()

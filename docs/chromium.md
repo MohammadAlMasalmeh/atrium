@@ -315,7 +315,7 @@ Run the fixture server and an isolated background browser in separate terminals:
 ```sh
 python3 tools/fixture_server.py --port 7799
 ATRIUM_MOCK_KEYCHAIN=1 ATRIUM_BACKGROUND_WINDOW=1 \
-  ./target/bundle/atrium.app/Contents/MacOS/atrium \
+  ./target/bundle/Atrium.app/Contents/MacOS/atrium \
   --data-dir /private/tmp/atrium-smoke run --port 7791 \
   --opencode-url http://127.0.0.1:1
 python3 tools/smoke_chromium.py --api http://127.0.0.1:7791 \

@@ -9,7 +9,7 @@ from pathlib import Path
 import background_app
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--app', type=Path, default=Path('target/bundle/atrium.app'))
+parser.add_argument('--app', type=Path, default=Path('target/bundle/Atrium.app'))
 parser.add_argument('--port', type=int, default=7804)
 parser.add_argument('--fixture', default='http://127.0.0.1:7801')
 parser.add_argument('--root', type=Path, default=Path('/private/tmp/atrium-release-crash'))

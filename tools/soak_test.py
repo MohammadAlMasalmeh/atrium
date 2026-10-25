@@ -29,7 +29,7 @@ from bench_common import CefInstance, FixtureServer, SleepDetector, snapshot, sy
 ROOT = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--minutes', type=float, default=30)
-parser.add_argument('--app', type=Path, default=ROOT.parent / 'target/bundle/atrium.app/Contents/MacOS/atrium')
+parser.add_argument('--app', type=Path, default=ROOT.parent / 'target/bundle/Atrium.app/Contents/MacOS/atrium')
 parser.add_argument('--port', type=int, default=7873)
 parser.add_argument('--fixture-port', type=int, default=7872)
 parser.add_argument('--data-dir', default='/private/tmp/atrium-perf-soak')
