@@ -10,6 +10,30 @@
 | **Name** | **Atrium**, set in `src/brand.rs` (see [CONTRIBUTING.md](CONTRIBUTING.md#renaming-the-product)). It is not affiliated with the commercial Aside browser. |
 | **License** | [Apache License 2.0](LICENSE). Contributions and forks are welcome. Third-party components keep their own licenses; see [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). |
 
+## Download
+
+Builds are for Apple Silicon Macs. Install the latest release with one command:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/MohammadAlMasalmeh/atrium/main/tools/install.sh | sh
+```
+
+[`tools/install.sh`](tools/install.sh) downloads the release zip, checks it against
+`SHA256SUMS` and its code signature, copies `Atrium.app` into `/Applications`, and
+clears the quarantine flag so macOS will open the unnotarized app.
+
+Or download the `.dmg` from the [latest release](https://github.com/MohammadAlMasalmeh/atrium/releases/latest)
+and drag Atrium into Applications. Because the app is not notarized, macOS blocks the
+first launch: open **System Settings → Privacy & Security** and click **Open Anyway**,
+or run `xattr -dr com.apple.quarantine /Applications/Atrium.app`.
+
+## Contributing
+
+Fork the repository, make a branch, and open a pull request against `main`. CI runs
+the Rust tests on every pull request. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+code layout, conventions, and contribution license, and [SECURITY.md](SECURITY.md)
+for reporting vulnerabilities privately.
+
 ## License
 
 Atrium's original code is licensed under the [Apache License, Version 2.0](LICENSE).
