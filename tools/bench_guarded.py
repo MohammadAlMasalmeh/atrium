@@ -39,6 +39,7 @@ parser.add_argument('--cef-only', action='store_true', help='skip the Aside base
 parser.add_argument('--max-load', type=float, default=12.0, help='wait for this 1-minute load average before each browser')
 parser.add_argument('--quiet-timeout', type=int, default=600)
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--summarize', type=Path, help='only rebuild the report from this partial report')
 args = parser.parse_args()
 
 REAL = args.workload == 'real'
@@ -189,11 +190,21 @@ def inspect_cef(inst, tab_id):
                 if info.get('ready') in ('interactive', 'complete') and info.get('textLength', 0) > 80:
                     return info
             except (AssertionError, RuntimeError, urllib.error.URLError, json.JSONDecodeError) as error:
+                if 'timed out' in str(error):
+                    raise Unresponsive(f'the browser stopped responding while inspecting tab {tab_id}') from error
                 last = str(error)
             time.sleep(1)
         return last
+    except Unresponsive:
+        raise
+    except TimeoutError as error:
+        raise Unresponsive(f'the browser stopped responding while inspecting tab {tab_id}') from error
     except Exception as error:  # a site that breaks inspection is excluded, not fatal
         return str(error)
+
+
+class Unresponsive(Exception):
+    pass
 
 
 def run_baseline(run):
@@ -275,10 +286,13 @@ def aggregate(runs):
     return summary
 
 
-fixture = None if REAL else FixtureServer(args.fixture_port)
-runs = []
+runs, failed = [], []
+if args.summarize:
+    partial = json.loads(args.summarize.read_text())
+    runs, failed = partial['runs'], partial.get('failed_runs', [])
+fixture = None if REAL or args.summarize else FixtureServer(args.fixture_port)
 try:
-    for run in range(args.runs):
+    for run in range(0 if args.summarize else args.runs):
         # Real sites run the baseline first so the CEF run can drop the same failed sites.
         order = ['cef'] if args.cef_only else ['aside', 'cef'] if REAL or run % 2 else ['cef', 'aside']
         record = {'run': run + 1, 'order': order}
@@ -287,7 +301,12 @@ try:
             log(f'run {run + 1}: {which}; system {quiet}')
             baseline_failed = {e['name'] for e in record.get('Aside (headless)', {}).get('excluded', [])}
             sleep = SleepDetector()
-            outcome = run_cef(run, baseline_failed) if which == 'cef' else run_baseline(run)
+            try:
+                outcome = run_cef(run, baseline_failed) if which == 'cef' else run_baseline(run)
+            except Unresponsive as error:
+                record['failure'] = {'browser': which, 'error': str(error), 'system': system_state()}
+                log(f'run {run + 1} failed:', error)
+                break
             outcome['system_before'], outcome['system_after'] = quiet, system_state()
             outcome['system_slept_seconds'] = sleep.slept_seconds()
             record[outcome['browser']] = outcome
@@ -301,6 +320,11 @@ try:
                 log(outcome['browser'], phase, 'footprint', outcome[phase]['footprint_mib'], 'rss', outcome[phase]['rss_mib'],
                     'processes', outcome[phase]['process_count'],
                     {k: v.get('count') for k, v in outcome[phase]['by_type'].items()}, outcome[phase].get('cef_live_views', ''))
+        if 'failure' in record:
+            failed.append(record)
+            record = None
+            args.output.write_text(json.dumps({'partial': True, 'runs': runs, 'failed_runs': failed}, indent=2) + '\n')
+            continue
         if args.cef_only:
             record['comparable'] = False
         else:
@@ -308,10 +332,11 @@ try:
             record['comparable'] = names('CEF build') == names('Aside (headless)')
         runs.append(record)
         record = None
-        args.output.write_text(json.dumps({'partial': True, 'runs': runs}, indent=2) + '\n')
+        args.output.write_text(json.dumps({'partial': True, 'runs': runs, 'failed_runs': failed}, indent=2) + '\n')
 except BaseException as error:
     unfinished = [record] if globals().get('record') else []
-    args.output.write_text(json.dumps({'partial': True, 'error': repr(error)[:500], 'runs': runs + unfinished}, indent=2) + '\n')
+    args.output.write_text(json.dumps({'partial': True, 'error': repr(error)[:500], 'runs': runs, 'failed_runs': failed + unfinished},
+                                      indent=2) + '\n')
     raise
 finally:
     if fixture:
@@ -339,7 +364,7 @@ report = {
                     'Background CEF pages report visibilityState hidden; headless targets report visible.',
                     'The system was shared with other agents and builds; load is recorded per browser run.'],
     },
-    'runs': runs, 'summary': aggregate(runs),
+    'runs': runs, 'failed_runs': failed, 'summary': aggregate(runs),
 }
 args.output.write_text(json.dumps(report, indent=2) + '\n')
 log('saved', args.output)
