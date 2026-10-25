@@ -321,6 +321,7 @@ body.glance #glance { display: flex; }
       <div class="label">Chats<button class="ib" id="new-chat" title="New Chat (⌘N)"><svg class="i" viewBox="0 0 24 24"><path d="M12 20h8"/><path d="M16.5 4.5a2 2 0 0 1 3 3L8 19l-4 1 1-4Z"/></svg></button></div>
       <div id="chats"></div>
     </div>
+    <div class="row" id="update-ready" style="display:none" title="Restart to install the update"><span class="fv"><svg class="i" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5"/><path d="M20 4v4.5h-4.5"/></svg></span><span class="t">Update ready · Restart</span></div>
     <div class="sb-bottom">
       <button class="ib" id="cmd-btn" title="Command Bar (⌘K)"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg></button>
       <div class="spaces" id="spaces"></div>
@@ -1224,6 +1225,7 @@ function onEvent(ev) {
   const p = ev.properties || {};
   switch (ev.type) {
     case 'atrium.connection.ready': refreshModels(); break;
+    case 'atrium.update.ready': showUpdate(ev.version); break;
     case 'message.updated':
       chat.roles.set(p.info.id, p.info.role);
       if (p.info.sessionID === chat.id && p.info.error && p.info.error.name !== 'MessageAbortedError') chat.add('err', esc(errText(p.info.error)));
@@ -1251,6 +1253,17 @@ function onEvent(ev) {
     }
   }
 }
+
+function showUpdate(version) {
+  const row = $('#update-ready');
+  row.title = `Restart to install Atrium ${version}`;
+  row.style.display = '';
+}
+$('#update-ready').onclick = async () => {
+  const r = await post('/api/update/restart', {});
+  if (r && r.error) toast(r.error);
+};
+fetch('/api/update/status').then((r) => r.json()).then((s) => { if (s.staged) showUpdate(s.staged.version); }).catch(() => {});
 
 // Handle for poking at the UI from /api/debug/shell.
 window.__shell = { S, chat, render, fillModels, askAgent, openCmdk, openChat, newChat, md };
