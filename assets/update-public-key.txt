@@ -1,0 +1,4 @@
+# Ed25519 public key (base64) that release archives must be signed with.
+# Generate a pair with `aside_sign_update keygen` and put the public key on the line below.
+# While this file has no key, the updater stays disabled. ASIDE_UPDATE_PUBLIC_KEY at build
+# time overrides this file.
