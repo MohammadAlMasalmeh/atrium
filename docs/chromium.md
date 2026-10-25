@@ -247,6 +247,122 @@ extension updater, or promise of arbitrary extension compatibility. Gmail is a
 normal website in the Chromium profile; actual Google account sign-in and
 Chrome Sync have not been validated or implemented here.
 
+## Product identity, About page, and notices
+
+`src/brand.rs` holds the product name (`PRODUCT_NAME`, currently the placeholder
+"Aside") and bundle identifier (`BUNDLE_ID`). `aside_bundle` writes them to
+`Info.plist` (`CFBundleName`, `CFBundleDisplayName`, `CFBundleIdentifier`); the
+window title, app menu, shell `<title>`, About page, and user-facing errors read
+them too. The executable name, data directory (`~/.aside-rs`), `ASIDE_*`
+variables, token header, and MCP tool names are separate constants that stay
+fixed on rename; CONTRIBUTING.md lists them. Existing profile paths are
+unchanged.
+
+App menu > **About** opens `/about` from the local server in a tab (or selects
+the existing one). It shows the app version, the Chromium and CEF versions the
+binary was built against (`cef::sys::CEF_VERSION`), the project license
+placeholder (`brand::PROJECT_LICENSE`, empty until chosen), the CEF and Chromium
+licenses, the full `THIRD-PARTY-NOTICES.txt` (embedded at compile time), and a
+link to `/about/chromium-credits`, which serves the `Chromium-CREDITS.html`
+shipped in the bundle (without its `chrome://` stylesheets, so every license is
+expanded). These pages are the only routes besides `/shell` that skip the API
+token. They contain no user data, still require the expected Host and Origin,
+run no script, and forbid framing.
+
+`tools/gen_third_party_notices.py` regenerates `THIRD-PARTY-NOTICES.txt` from
+`cargo metadata` for both macOS targets with default features: 168 crates are
+compiled in and 50 are build-time only. Each crate's license and notice files are
+copied verbatim, identical texts printed once. `--check` fails if the file is
+stale. Review flags:
+
+- `option-ext` 0.2.0 (MPL-2.0, file-level copyleft), compiled in through
+  `dirs` → `dirs-sys`. Allowed unmodified in a differently licensed app; its
+  source is on crates.io. Replacing `dirs::home_dir()` with `$HOME` would remove
+  it.
+- `webpki-roots` (CDLA-Permissive-2.0, Mozilla's root certificate data) and 19
+  Unicode-3.0 crates (ICU4X and `unicode-ident`; 4 of them build time only):
+  permissive data licenses whose texts are included.
+- `libbz2-rs-sys` (bzip2-1.0.6), build time only (CEF download).
+- 18 crates (`objc2` family, `block2`, `dispatch2`, `cef`, `cef-dll-sys`,
+  `download-cef`) publish no license file; their MIT text is reconstructed from
+  the license field and authors and should be checked against upstream.
+
+No GPL, LGPL, or AGPL crate is present.
+
+### Favicons
+
+The shell no longer requests `google.com/s2/favicons` or Gmail's icon from
+`ssl.gstatic.com`. CEF reports each page's declared favicon
+(`on_favicon_urlchange`); the tab's browser downloads it as a favicon request
+(no cookies), stores a PNG of at most 64×64 at `<data dir>/favicons/<host>.png`,
+and sets the tab's `icon` to `/favicon/<host>?v=…`. The shell loads every icon from
+`/favicon/<host>` (token-protected); hosts without a cached icon get a generic
+SVG. Hosts are keyed like the shell's `host()` (lowercase, without `www.`), so
+history, favorites, and pinned rows reuse icons of visited sites. Sites never
+visited, and the WebKit backend, show the generic icon. Icons are not expired.
+
+### Chromium background networking
+
+A fresh profile showing only local pages still connects to Google: within a
+minute, `lsof` showed TLS, QUIC, and HTTP connections from the network service
+to Google address ranges, and `Local State` recorded a component updater check
+(`updateclientdata`) and a network time fetch (`network_time`). Empty component
+directories (CRLSet, PKI metadata, Widevine, Safe Browsing lists, optimization
+hints, and others) appear under `chromium/`. This is Chromium behavior, not this
+project's code. Appending `--disable-background-networking` and
+`--disable-component-update` in `on_before_command_line_processing` did not
+change it: both switches showed in `chrome://version`, yet the same connections
+and Local State records appeared, so the switch was not kept. Stopping these
+services needs further work (feature flags such as network time querying, or
+policies), and doing so also stops Widevine and certificate revocation list
+updates, which is a product decision.
+
+In background mode, the `--disable-features=MacWebContentsOcclusion` switch
+appears after CEF's own `--disable-features=…` list in `chrome://version`. Which
+of the two lists Chromium honors was not checked.
+
+Profile data (cookies, history, local storage) is written to `chromium/Default`;
+the configured `chromium/profile` cache path stays empty under CEF 156's Chrome
+bootstrap. Persistence works either way (`test_profile_persistence.py`).
+
+### Verification
+
+`tools/test_about.py` starts the built bundle in background mode
+(`ASIDE_MOCK_KEYCHAIN=1 ASIDE_BACKGROUND_WINDOW=1`, fresh `--data-dir`, assistant
+disconnected) with the watchdog, plus its own fixture server whose page declares
+a PNG favicon:
+
+```sh
+python3 tools/test_about.py --port 7891 --fixture-port 7892 \
+  --data-dir /private/tmp/aside-about-1
+```
+
+It checks `Info.plist` (name, display name, identifier, usage strings) against
+`src/brand.rs`; that `/about` is public but Host/Origin-checked, framing-denied,
+and script-free, while `/favicon/*` needs the token; that the shell's title is
+the product name and it has no Google favicon URLs; that App menu > About (sent
+as the `menu` command) opens one reused tab showing the Cargo version, the CEF
+version, and a Chromium version equal to the running engine's
+`navigator.userAgentData` full version; that the page's notices and both
+licenses match the repository files by SHA-256; that the credits link returns
+the bundle's 5.3 MB `Chromium-CREDITS.html`; that a page's declared favicon is
+fetched from that page's server, cached under `favicons/`, exposed as the tab's
+`icon`, and served as a ≤64 px PNG; that unknown hosts get the local generic
+icon. It also prints, without failing, the instance's non-loopback connections
+and whether Local State recorded a component update or network time fetch.
+
+Result (2026-10-24, `/private/tmp/aside-legal-10`): all 21 checks passed; the
+watchdog reported no frontmost or visible window. Five connections to Google
+addresses were open, all from the browser process, and Local State recorded
+both background services.
+
+Not covered: the real menu click (background instances have no menu bar), the
+sidebar's rendered icons (shell evaluation is disabled in release builds), icon
+refresh when a site changes its favicon, and the WebKit backend.
+
+PRIVACY.md lists every network destination found in the code; SECURITY.md
+describes the local API's trust model.
+
 ## Work needed before public distribution
 
 - Signed/notarized releases, engine security updates, default-browser registration,

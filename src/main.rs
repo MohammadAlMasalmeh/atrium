@@ -4,9 +4,12 @@
 //! assistant is an `opencode serve` session that drives the
 //! tabs through the browser tools exposed by `aside mcp`.
 
+mod about;
 mod agent;
 mod app;
+mod brand;
 mod extensions;
+mod favicons;
 mod mcp;
 mod migration;
 mod memory;
@@ -124,7 +127,7 @@ fn main() -> Result<()> {
 }
 
 fn data_dir() -> Result<PathBuf> {
-    let dir = match DATA_ROOT.get() { Some(root) => root.clone(), None => dirs::home_dir().context("no home directory")?.join(".aside-rs") };
+    let dir = match DATA_ROOT.get() { Some(root) => root.clone(), None => dirs::home_dir().context("no home directory")?.join(brand::DATA_DIR) };
     std::fs::create_dir_all(dir.join("workspace"))?;
     Ok(dir.canonicalize()?)
 }
@@ -145,7 +148,7 @@ fn run(rt: tokio::runtime::Runtime, args: RunArgs) -> Result<()> {
 
     // The UI server must be listening before the window loads the shell.
     let listener = std::net::TcpListener::bind(("127.0.0.1", args.port))
-        .with_context(|| format!("port {} is busy (is Aside already running?)", args.port))?;
+        .with_context(|| format!("port {} is busy (is {} already running?)", args.port, brand::PRODUCT_NAME))?;
     listener.set_nonblocking(true)?;
     let _ = API_TOKEN.set(write_api_token(&dir).context("could not write the local API token")?);
     let token_dir = dir.clone();
